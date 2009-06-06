@@ -1,0 +1,32 @@
+#!/bin/sh
+
+LIBDIR=$(grep "^ROOTDIR" $(which erl)| awk -F '=' '{ print $2; }')/lib/
+
+VSNS=
+for path in $(find $LIBDIR -maxdepth 1 -type d -name "ssl-*"); do
+	ssldir=$(basename $path)
+	vsn=$(echo $ssldir | awk -F '-' '{ print $2; }')
+	if [ -n $VSNS ]; then
+		VSNS=$vsn
+	else
+		VSNS="$VSNS"$'\n'"$vsn"
+	fi
+done
+VSN=$(echo "$VSNS" | sort -t '.' -k 1,1nr  -k 2,2nr | head -n 1)
+REL=$(echo $VSN | awk -F '.' '{ print $1; }')
+if [ "$REL" -gt 3 ]; then
+	echo $VSN
+	echo NEW_SSL
+else
+	MAJOR=$(echo $VSN | awk -F '.' '{ print $2; }')
+	if [ $MAJOR -gt 10 ]; then
+		echo NEW_SSL
+	else
+		MINOR=$(echo $VSN | awk -F '.' '{ print $3; }')
+		if [ $MINOR -gt 0 ]; then
+			echo NEW_SSL
+		else
+			echo OLD_SSL
+		fi
+	fi
+fi

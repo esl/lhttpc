@@ -15,6 +15,8 @@ TEST_BEAMS := $(patsubst %.erl,%.beam, $(TEST_SOURCES))
 
 include vsn.mk
 
+SSL_VERSION=$(shell ./ssl_version)
+
 .PHONY: all clean dialyzer
 
 all: $(APPLICATION) doc
@@ -35,7 +37,7 @@ $(APP_FILE): src/$(APPLICATION).app.src
 
 ebin/%.beam: src/%.erl $(HEADERS) $(filter-out $(wildcard ebin), ebin)
 	@echo Compiling $<
-	@erlc -o ebin/ $<
+	@erlc -D$(SSL_VERSION) -o ebin/ $<
 
 ebin:
 	@echo Creating ebin/
