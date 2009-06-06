@@ -1,0 +1,6 @@
+Dependencies:
+* Erlang/OTP R12-B or newer (compiler to build, kernel and stdlib to run)
+* GNU Make (might actually build with some other make as well)
+
+To bulid the application simply run 'make'. This should build .beam, .app
+files and documentation.

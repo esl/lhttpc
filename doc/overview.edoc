@@ -1,0 +1,5 @@
+@author Oscar Hellström <oscar@erlang-consulting.com>
+@doc A lightweight HTTP client.
+The only functions of much interest right now are {@link
+lhttpc:request/4} and {@link lhttpc:request/5}.
+@end

@@ -1,0 +1,48 @@
+
+
+APPLICATION := lhttpc
+APP_FILE:=ebin/$(APPLICATION).app
+SOURCES:=$(wildcard src/*.erl)
+HEADERS:=$(wildcard src/*.hrl)
+MODULES:=$(patsubst src/%.erl,%,$(SOURCES))
+BEAMS:=$(patsubst %,ebin/%.beam,$(MODULES))
+
+comma := ,
+e :=
+space := $(e) $(e)
+MODULELIST := $(subst $(space),$(comma),$(MODULES))
+
+
+include vsn.mk
+
+.PHONY: all clean dialyzer
+
+all: $(APPLICATION) doc
+
+$(APPLICATION): $(BEAMS) $(APP_FILE)
+
+$(APP_FILE): src/$(APPLICATION).app.src
+	@echo Generating $@
+	@sed -e 's/@MODULES@/$(MODULELIST)/' -e 's/@VSN@/$(VSN)/' $< > $@
+
+ebin/%.beam: src/%.erl $(HEADERS) $(filter-out $(wildcard ebin), ebin)
+	@echo Compiling $<
+	@erlc -o ebin/ $<
+
+ebin:
+	@echo Creating ebin/
+	@mkdir ebin/
+
+doc: doc/edoc-info
+
+dialyzer:
+	@echo Running dialyzer on sources
+	@dialyzer --src -r src/
+
+doc/edoc-info: doc/overview.edoc $(SOURCES) 
+	@echo Generating documentation from edoc
+	@erl -noinput -eval 'edoc:application(gen_httpd, "./", [{doc, "doc/"}])' -s erlang halt
+
+clean:
+	@echo Cleaning
+	@rm -f ebin/*.{beam,app} doc/*.{html,css,png} doc/edoc-info
