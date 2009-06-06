@@ -137,8 +137,6 @@ read_response(Host, Port, Ssl, Request, Acc, Socket, Attempt) ->
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             case read_body(Vsn, Hdrs, Ssl, Socket) of
-                {ok, NewBody} ->
-                    {ok, {Status, Hdrs, NewBody}, Socket};
                 {ok, NewBody, NewSocket} ->
                     {ok, {Status, Hdrs, NewBody}, NewSocket};
                 {error, Reason} ->
@@ -175,8 +173,7 @@ read_body(Vsn, Hdrs, Ssl, Socket) ->
     end.
 
 read_length(Hdrs, Ssl, Socket, Length) ->
-    Response = lhttpc_sock:read(Socket, Length, Ssl),
-    case Response of
+    case lhttpc_sock:read(Socket, Length, Ssl) of
         {ok, Data} ->
             NewSocket = case lhttpc_lib:header_value("connection", Hdrs) of
                 "close" ->
