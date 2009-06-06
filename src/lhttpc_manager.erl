@@ -34,7 +34,12 @@
 %%% @end
 -module(lhttpc_manager).
 
--export([start_link/0, connection_count/0, connection_count/1]).
+-export([
+        start_link/0,
+        connection_count/0,
+        connection_count/1,
+        update_connection_timeout/1
+    ]).
 -export([
         init/1,
         handle_call/3,
@@ -46,7 +51,11 @@
 
 -behaviour(gen_server).
 
--record(httpc_man, {destinations = dict:new(), sockets = dict:new()}).
+-record(httpc_man, {
+        destinations = dict:new(),
+        sockets = dict:new(),
+        timeout = 300000 :: non_neg_integer()
+    }).
 
 %% @spec () -> Count
 %%    Count = integer()
@@ -72,6 +81,16 @@ connection_count({Host, Port, Ssl}) ->
     Destination = {string:to_lower(Host), Port, Ssl},
     gen_server:call(?MODULE, {connection_count, Destination}).
 
+%% @spec (Timeout) -> ok
+%%    Timeout = intetger()
+%% @doc Updates the timeout for persistent connections.
+%% This will only affect future sockets handed to the manager. The sockets
+%% already managed will keep their timers.
+%% @end
+-spec update_connection_timeout(non_neg_integer()) -> ok.
+update_connection_timeout(Milliseconds) ->
+    gen_server:cast(?MODULE, {update_timeout, Milliseconds}).
+
 %% @spec () -> {ok, pid()}
 %% @doc Starts and link to the gen server.
 %% This is normally called by a supervisor.
@@ -84,7 +103,11 @@ start_link() ->
 -spec init(any()) -> {ok, #httpc_man{}}.
 init(_) ->
     process_flag(priority, high),
-    {ok, #httpc_man{}}.
+    State = case application:get_env(lhttpc, connection_timeout) of
+        undefined     -> #httpc_man{};
+        {ok, Timeout} -> #httpc_man{timeout = Timeout}
+    end,
+    {ok, State}.
 
 %% @hidden
 -spec handle_call(any(), any(), #httpc_man{}) ->
@@ -108,6 +131,8 @@ handle_call(_, _, State) ->
 handle_cast({done, Host, Port, Ssl, Socket}, State) ->
     NewState = store_socket({Host, Port, Ssl}, Socket, State),
     {noreply, NewState};
+handle_cast({update_timeout, Milliseconds}, State) ->
+    {noreply, State#httpc_man{timeout = Milliseconds}};
 handle_cast(_, State) ->
     {noreply, State}.
 
@@ -186,8 +211,8 @@ remove_socket(Socket, State) ->
     end.
 
 store_socket({_, _, Ssl} = Destination, Socket, State) ->
-    % we want to time out on the socket, should the time be an option?
-    Timer = erlang:send_after(300000, self(), {timeout, Socket}), 
+    Timeout = State#httpc_man.timeout,
+    Timer = erlang:send_after(Timeout, self(), {timeout, Socket}),
     % the socket might be closed from the other side
     lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
     Destinations = State#httpc_man.destinations,
