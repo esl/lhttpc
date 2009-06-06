@@ -50,7 +50,8 @@ tcp_test_() ->
 %            ?_test(bad_url())
             ?_test(persistent_connection()),
             ?_test(timeout()),
-            ?_test(suspended_manager())
+            ?_test(suspended_manager()),
+            ?_test(connection_count()) % just check that it's 0 (last)
         ]}.
 
 %%% Tests
@@ -146,6 +147,9 @@ suspended_manager() ->
     {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<"Great success!">>, body(SecondResponse)).
+
+connection_count() ->
+    ?assertEqual(0, lhttpc_manager:connection_count()).
 
 %%% Helpers functions
 
