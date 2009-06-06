@@ -205,7 +205,7 @@ read_until_closed(Socket, Acc, Ssl) ->
             read_until_closed(Socket, NewAcc, Ssl);
         {error, closed} ->
             lhttpc_sock:close(Socket, Ssl),
-            {ok, Acc};
+            {ok, Acc, undefined}; % The socket has been closed
         Other ->
             Other
     end.
