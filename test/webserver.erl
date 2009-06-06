@@ -66,7 +66,9 @@ server_loop(Module, Socket, Request, Headers, Responders) ->
             end,
             Responder = hd(Responders),
             Responder(Module, Socket, Request, Headers, RequestBody),
-            server_loop(Module, Socket, none, [], tl(Responders))
+            server_loop(Module, Socket, none, [], tl(Responders));
+        {error, closed} ->
+            Module:close(Socket)
     end.
 
 listen(ssl) ->
