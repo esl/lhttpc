@@ -53,7 +53,7 @@ tcp_test_() ->
             ?_test(connection_close()),
             ?_test(simple_put()),
             ?_test(post()),
-%            ?_test(bad_url())
+            ?_test(bad_url()),
             ?_test(persistent_connection()),
             ?_test(request_timeout()),
             ?_test(connection_timeout()),
@@ -117,11 +117,8 @@ post() ->
     ?assertEqual("OK", ReasonPhrase),
     ?assertEqual(iolist_to_binary(Body), body(Response)).
 
-% Can't test this, since eunit uses catch, which won't catch exit signals
-% coming from other processes (such as the request process)...
-% Maybe I should "fix" that in lhttpc... or not?
-%bad_url() ->
-%    ?assertExit(_, lhttpc:request(ost, "GET", [], 100)).
+bad_url() ->
+    ?assertExit(_, lhttpc:request(ost, "GET", [], 100)).
 
 persistent_connection() ->
     Port = start(gen_tcp, [
