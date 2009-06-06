@@ -103,11 +103,8 @@ start_link() ->
 -spec init(any()) -> {ok, #httpc_man{}}.
 init(_) ->
     process_flag(priority, high),
-    State = case application:get_env(lhttpc, connection_timeout) of
-        undefined     -> #httpc_man{};
-        {ok, Timeout} -> #httpc_man{timeout = Timeout}
-    end,
-    {ok, State}.
+    {ok, Timeout} = application:get_env(lhttpc, connection_timeout),
+    {ok, #httpc_man{timeout = Timeout}}.
 
 %% @hidden
 -spec handle_call(any(), any(), #httpc_man{}) ->
