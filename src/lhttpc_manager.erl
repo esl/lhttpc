@@ -185,8 +185,6 @@ find_socket({_, _, Ssl} = Destination, Pid, State) ->
                     lhttpc_sock:setopts(Socket, [{active, true}], Ssl),
                     {no_socket, State}
             end;
-        {ok, []} ->
-            {no_socket, State};
         error ->
             {no_socket, State}
     end.
