@@ -1,17 +1,17 @@
-
-
 APPLICATION := lhttpc
-APP_FILE:=ebin/$(APPLICATION).app
-SOURCES:=$(wildcard src/*.erl)
-HEADERS:=$(wildcard src/*.hrl)
-MODULES:=$(patsubst src/%.erl,%,$(SOURCES))
-BEAMS:=$(patsubst %,ebin/%.beam,$(MODULES))
+APP_FILE := ebin/$(APPLICATION).app
+SOURCES := $(wildcard src/*.erl)
+HEADERS := $(wildcard src/*.hrl)
+MODULES := $(patsubst src/%.erl,%,$(SOURCES))
+BEAMS := $(patsubst %,ebin/%.beam,$(MODULES))
 
 comma := ,
 e :=
 space := $(e) $(e)
 MODULELIST := $(subst $(space),$(comma),$(MODULES))
 
+TEST_SOURCES := $(wildcard test/*.erl)
+TEST_BEAMS := $(patsubst %.erl,%.beam, $(TEST_SOURCES))
 
 include vsn.mk
 
@@ -20,6 +20,14 @@ include vsn.mk
 all: $(APPLICATION) doc
 
 $(APPLICATION): $(BEAMS) $(APP_FILE)
+
+test: $(APPLICATION) $(TEST_BEAMS)
+	@echo Running tests
+	@erl -pa ebin/ -pa test/ -noinput -eval 'eunit:test(run_test)' -s erlang halt
+
+test/%.beam: test/%.erl
+	@echo Compiling $<
+	@erlc -o test/ $<
 
 $(APP_FILE): src/$(APPLICATION).app.src
 	@echo Generating $@
@@ -45,4 +53,4 @@ doc/edoc-info: doc/overview.edoc $(SOURCES)
 
 clean:
 	@echo Cleaning
-	@rm -f ebin/*.{beam,app} doc/*.{html,css,png} doc/edoc-info
+	@rm -f ebin/*.{beam,app} test/*.beam doc/*.{html,css,png} doc/edoc-info
