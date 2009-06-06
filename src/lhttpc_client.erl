@@ -38,7 +38,7 @@
 
 -spec request(pid(), string(), string() | atom(), headers(), iolist()) -> 
     no_return().
-%% @spec (From, URL, Method, Hdrs, Body) -> void()
+%% @spec (From, URL, Method, Hdrs, Body) -> ok
 %%    From = pid()
 %%    URL = string()
 %%    Method = atom() | string()
@@ -48,7 +48,7 @@
 request(From, URL, Method, Hdrs, Body) ->
     case catch execute(From, URL, Method, Hdrs, Body) of
         {'EXIT', Reason} -> exit(Reason);
-        _                -> exit(normal) % this should never return
+        _                -> ok
     end.
 
 execute(From, URL, Method, Hdrs, Body) ->
