@@ -32,7 +32,7 @@
         {vsn, "@VSN@"},
         {modules, [@MODULES@]},
         {registered, [lhttpc_manager]},
-        {applications, [kernel, stdlib]},
+        {applications, [kernel, stdlib, ssl, crypto]},
   {mod, {lhttpc, nil}},
   {env, [{connection_timeout, 300000}]}
  ]}.

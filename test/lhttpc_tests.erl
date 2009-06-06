@@ -36,10 +36,14 @@
 %%% Eunit setup stuff
 
 start_app() ->
+	ok = application:start(crypto),
+	ok = application:start(ssl),
     ok = application:start(lhttpc).
 
 stop_app(_) ->
-    ok = application:stop(lhttpc).
+    ok = application:stop(lhttpc),
+	ok = application:stop(ssl),
+	ok = application:stop(crypto).
 
 tcp_test_() ->
     {setup, fun start_app/0, fun stop_app/1, [

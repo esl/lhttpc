@@ -43,6 +43,8 @@
 -spec start(normal | {takeover, node()} | {failover, node()}, any()) ->
     {ok, pid()}.
 start(_, _) ->
+	% Make sure that the ssl random number generator is seeded
+	ssl:seed(crypto:rand_bytes(255)),
     lhttpc_sup:start_link().
 
 %% @hidden
