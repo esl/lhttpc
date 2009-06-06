@@ -36,14 +36,6 @@
 
 -include("lhttpc_types.hrl").
 
-% Make sure that the ssl random number generator is seeded
-% This was new in R13 (ssl-3.10.1 in R13B vs. ssl-3.10.0 in R12B-5)
--ifdef(NEW_SSL).
--define(SEED, ssl:seed(crypto:rand_bytes(255))).
--else.
--define(SEED, ok).
--endif.
-
 -type result() :: {ok, {{pos_integer(), string()}, headers(), binary()}} |
     {error, atom()}.
 
@@ -51,7 +43,14 @@
 -spec start(normal | {takeover, node()} | {failover, node()}, any()) ->
     {ok, pid()}.
 start(_, _) ->
-    ?SEED,
+    case lists:member({seed,1}, ssl:module_info(exports)) of
+        true ->
+            % Make sure that the ssl random number generator is seeded
+            % This was new in R13 (ssl-3.10.1 in R13B vs. ssl-3.10.0 in R12B-5)
+            ssl:seed(crypto:rand_bytes(255));
+        false ->
+            ok
+    end,
     lhttpc_sup:start_link().
 
 %% @hidden
