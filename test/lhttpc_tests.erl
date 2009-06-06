@@ -31,6 +31,8 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(DEFAULT_STRING, "Great success!").
+
 %%% Eunit setup stuff
 
 start_app() ->
@@ -72,7 +74,7 @@ no_content_length_get() ->
     URL = "http://localhost:" ++ integer_to_list(Port) ++ "/no_cl",
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
-    ?assertEqual(<<"Great success!">>, body(Response)).
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
 connection_close() ->
     Port = start(gen_tcp, [fun respond_and_close/5]),
@@ -80,7 +82,7 @@ connection_close() ->
     Body = pid_to_list(self()),
     {ok, Response} = lhttpc:request(URL, "PUT", [], Body, 1000),
     ?assertEqual({200, "OK"}, status(Response)),
-    ?assertEqual(<<"Great success!">>, body(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)),
     receive closed -> ok end.
 
 simple_put() ->
@@ -121,9 +123,9 @@ persistent_connection() ->
     {ok, SecondResponse} = lhttpc:request(URL, "GET", Headers, 1000),
     {ok, ThirdResponse} = lhttpc:request(URL, "POST", [], 1000),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
-    ?assertEqual(<<"Great success!">>, body(FirstResponse)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
-    ?assertEqual(<<"Great success!">>, body(SecondResponse)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)),
     ?assertEqual({200, "OK"}, status(ThirdResponse)),
     ?assertEqual(<<>>, body(ThirdResponse)).
 
@@ -137,7 +139,7 @@ suspended_manager() ->
     URL = "http://localhost:" ++ integer_to_list(Port) ++ "/persistent",
     {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
-    ?assertEqual(<<"Great success!">>, body(FirstResponse)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
     Pid = whereis(lhttpc_manager),
     true = erlang:suspend_process(Pid),
     ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)),
@@ -146,7 +148,7 @@ suspended_manager() ->
         lhttpc_manager:connection_count({"localhost", Port, false})),
     {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
-    ?assertEqual(<<"Great success!">>, body(SecondResponse)).
+    ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)).
 
 connection_count() ->
     ?assertEqual(0, lhttpc_manager:connection_count()).
@@ -160,7 +162,7 @@ simple(Method) ->
     {StatusCode, ReasonPhrase} = status(Response),
     ?assertEqual(200, StatusCode),
     ?assertEqual("OK", ReasonPhrase),
-    ?assertEqual(<<"Great success!">>, body(Response)).
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
 status({Status, _, _}) ->
     Status.
@@ -175,7 +177,7 @@ simple_response(Module, Socket, _Request, _Headers, _Body) ->
         Socket,
         "HTTP/1.1 200 OK\r\n"
         "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
-        "Great success!"
+        ?DEFAULT_STRING
     ).
 
 empty_body(Module, Socket, _, _, _) ->
@@ -203,7 +205,7 @@ respond_and_close(Module, Socket, _, _, Body) ->
         "HTTP/1.1 200 OK\r\n"
         "Connection: close\r\n"
         "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
-        "Great success!"
+        ?DEFAULT_STRING
     ),
     case Module:recv(Socket, 0) of
         {error, closed} -> Pid ! closed
@@ -216,7 +218,7 @@ slow_response(Module, Socket, _, _, _) ->
         Socket,
         "HTTP/1.1 200 OK\r\n"
         "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
-        "Great success!"
+        ?DEFAULT_STRING
     ).
 
 no_content_length(Module, Socket, _, _, _) ->
@@ -224,5 +226,5 @@ no_content_length(Module, Socket, _, _, _) ->
         Socket,
         "HTTP/1.1 200 OK\r\n"
         "Content-type: text/plain\r\nConnection: close\r\n\r\n"
-        "Great success!"
+        ?DEFAULT_STRING
     ).
