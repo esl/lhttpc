@@ -69,7 +69,7 @@ execute(From, URL, Method, Hdrs, Body) ->
 			% can't change the controlling process for to the manager. This
 			% really shouldn't fail, but it could do if:
 			% * The socket was closed remotely already 
-			% * Due to an error in this module (giving back dead sockets for
+			% * Due to an error in this module (returning dead sockets for
 			%   instance)
             ManagerPid = whereis(lhttpc_manager),
             case lhttpc_sock:controlling_process(NewSocket, ManagerPid, Ssl) of
