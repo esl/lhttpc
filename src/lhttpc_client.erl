@@ -47,7 +47,7 @@
 %%    Body = iolist()
 request(From, URL, Method, Hdrs, Body) ->
     case catch execute(From, URL, Method, Hdrs, Body) of
-        {'EXIT', Reason} -> exit(Reason);
+        {'EXIT', Reason} -> From ! {exit, Reason};
         _                -> ok
     end.
 

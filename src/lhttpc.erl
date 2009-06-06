@@ -113,9 +113,15 @@ request(URL, Method, Hdrs, Body, Timeout) ->
     receive
         {response, Pid, R} ->
             R;
+        {exit, Reason} ->
+            % We would rather want to exit here, since that
+            % could be caught
+            exit(Reason);
         {'EXIT', Pid, Reason} ->
             % This could happen if the process we're running in taps exits
-            erlang:error(Reason)
+            % and the client process exits due to some exit signal being
+            % sent to it. Very unlikely though
+            exit(Reason)
     after Timeout ->
             kill_client(Pid)
     end.
