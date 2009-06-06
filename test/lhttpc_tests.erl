@@ -49,7 +49,8 @@ tcp_test_() ->
             ?_test(post()),
 %            ?_test(bad_url())
             ?_test(persistent_connection()),
-            ?_test(timeout())
+            ?_test(timeout()),
+            ?_test(suspended_manager())
         ]}.
 
 %%% Tests
@@ -129,6 +130,22 @@ timeout() ->
     Port = start(gen_tcp, [fun slow_response/5]),
     URL = "http://localhost:" ++ integer_to_list(Port) ++ "/slow",
     ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)).
+
+suspended_manager() ->
+    Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
+    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/persistent",
+    {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
+    ?assertEqual({200, "OK"}, status(FirstResponse)),
+    ?assertEqual(<<"Great success!">>, body(FirstResponse)),
+    Pid = whereis(lhttpc_manager),
+    true = erlang:suspend_process(Pid),
+    ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)),
+    true = erlang:resume_process(Pid),
+    ?assertEqual(1,
+        lhttpc_manager:connection_count({"localhost", Port, false})),
+    {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
+    ?assertEqual({200, "OK"}, status(SecondResponse)),
+    ?assertEqual(<<"Great success!">>, body(SecondResponse)).
 
 %%% Helpers functions
 
