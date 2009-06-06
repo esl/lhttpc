@@ -34,7 +34,7 @@
 -export([accept_connection/3]).
 
 start(Module, Responders) ->
-    {ok, LS} = Module:listen(0, [{packet, http}, binary, {active, false}]),
+    LS = listen(Module),
     spawn_link(?MODULE, accept_connection, [Module, LS, Responders]),
     port(Module, LS).
 
@@ -69,8 +69,21 @@ server_loop(Module, Socket, Request, Headers, Responders) ->
             server_loop(Module, Socket, none, [], tl(Responders))
     end.
 
+listen(ssl) ->
+    SSLOpts = [
+        {verify,0},
+        {keyfile, "test/key.pem"},
+        {certfile, "test/crt.pem"}
+    ],
+    Opts = [{packet, http}, binary, {active, false} | SSLOpts],
+    {ok, LS} = ssl:listen(0, Opts),
+    LS;
+listen(Module) ->
+    {ok, LS} = Module:listen(0, [{packet, http}, binary, {active, false}]),
+    LS.
+
 accept(ssl, ListenSocket) ->
-    {ok, Socket} = ssl:transport_accpet(ListenSocket, 10000),
+    {ok, Socket} = ssl:transport_accept(ListenSocket, 10000),
     ok = ssl:ssl_accept(Socket),
     Socket;
 accept(Module, ListenSocket) ->

@@ -60,6 +60,13 @@ tcp_test_() ->
             ?_test(connection_count()) % just check that it's 0 (last)
         ]}.
 
+ssl_test_() ->
+    {setup, fun start_app/0, fun stop_app/1, [
+            ?_test(ssl_get()),
+            ?_test(ssl_post()),
+            ?_test(connection_count()) % just check that it's 0 (last)
+        ]}.
+
 %%% Tests
 
 simple_get() ->
@@ -153,6 +160,22 @@ suspended_manager() ->
     {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)).
+
+ssl_get() ->
+    Port = start(ssl, [fun simple_response/5]),
+    URL = "https://localhost:" ++ integer_to_list(Port) ++ "/simple",
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+ssl_post() ->
+    Port = start(ssl, [fun copy_body/5]),
+    URL = "https://localhost:" ++ integer_to_list(Port) ++ "/simple",
+    Body = "SSL Test <o/",
+    BinaryBody = list_to_binary(Body),
+    {ok, Response} = lhttpc:request(URL, "POST", [], Body, 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(BinaryBody, body(Response)).
 
 connection_count() ->
     ?assertEqual(0, lhttpc_manager:connection_count()).
