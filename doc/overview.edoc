@@ -5,6 +5,13 @@ lhttpc:request/4} and {@link lhttpc:request/5}.
 
 <h1>Configuration</h1>
 <h2>`connection_timeout'</h2>
-The maximume time (in milliseconds) the client will keep a TCP connection
+The maximum time (in milliseconds) the client will keep a TCP connection
 open to a server.
+
+<h1>Current limitations</h1>
+<ul>
+    <li>No support for chunked downloading</li>
+    <li>No support for HTTP redirects</li>
+    <li>No support for "streaming" the response body to a process</li>
+</ul>
 @end
