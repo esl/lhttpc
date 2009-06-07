@@ -49,6 +49,7 @@ tcp_test_() ->
     {setup, fun start_app/0, fun stop_app/1, [
             ?_test(simple_get()),
             ?_test(empty_get()),
+            ?_test(get_with_mandatory_hdrs()),
             ?_test(no_content_length_get()),
             ?_test(connection_close()),
             ?_test(simple_put()),
@@ -80,6 +81,18 @@ empty_get() ->
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<>>, body(Response)).
+
+get_with_mandatory_hdrs() ->
+    Port = start(gen_tcp, [fun simple_response/5]),
+    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/host",
+    Body = <<?DEFAULT_STRING>>,
+    Hdrs = [
+        {"content-length", integer_to_list(size(Body))},
+        {"host", "localhost"}
+    ],
+    {ok, Response} = lhttpc:request(URL, "POST", Hdrs, Body, 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
 no_content_length_get() ->
     Port = start(gen_tcp, [fun no_content_length/5]),
@@ -139,7 +152,7 @@ persistent_connection() ->
     ?assertEqual(<<>>, body(ThirdResponse)).
 
 request_timeout() ->
-    Port = start(gen_tcp, [fun slow_response/5]),
+    Port = start(gen_tcp, [fun very_slow_response/5]),
     URL = "http://localhost:" ++ integer_to_list(Port) ++ "/slow",
     ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)).
 
@@ -249,7 +262,7 @@ respond_and_close(Module, Socket, _, _, Body) ->
     end,
     Module:close(Socket).
 
-slow_response(Module, Socket, _, _, _) ->
+very_slow_response(Module, Socket, _, _, _) ->
     timer:sleep(1000),
     Module:send(
         Socket,
