@@ -177,7 +177,7 @@ find_socket({_, _, Ssl} = Dest, Pid, State) ->
                     },
                     {{ok, Socket}, NewState};
                 _ -> % Pid has timed out, reuse for someone else
-                    lhttpc_sock:setopts(Socket, [{active, true}], Ssl),
+                    lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
                     {no_socket, State}
             end;
         error ->
