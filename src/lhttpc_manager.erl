@@ -209,12 +209,11 @@ store_socket({_, _, Ssl} = Destination, Socket, State) ->
     lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
     Destinations = State#httpc_man.destinations,
     Sockets = case dict:find(Destination, Destinations) of
-        {ok, S} -> S;
-        error   -> []
+        {ok, S} -> [Socket | S];
+        error   -> [Socket]
     end,
     State#httpc_man{
-        destinations = dict:store(Destination, [Socket | Sockets],
-            Destinations),
+        destinations = dict:store(Destination, Sockets, Destinations),
         sockets = dict:store(Socket, {Destination, Timer},
             State#httpc_man.sockets)
     }.
