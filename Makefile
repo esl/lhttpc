@@ -23,11 +23,11 @@ $(APPLICATION): $(BEAMS) $(APP_FILE)
 
 test: $(APPLICATION) $(TEST_BEAMS)
 	@echo Running tests
-	@erl -pa ebin/ -pa test/ -noinput -eval 'eunit:test(run_test)' -s erlang halt
+	@erl -pa ebin/ -pa test/ -noinput -eval 'run_test:run()' -s erlang halt
 
 test/%.beam: test/%.erl
 	@echo Compiling $<
-	@erlc -o test/ $<
+	@erlc +debug_info -o test/ $<
 
 $(APP_FILE): src/$(APPLICATION).app.src
 	@echo Generating $@
@@ -35,7 +35,7 @@ $(APP_FILE): src/$(APPLICATION).app.src
 
 ebin/%.beam: src/%.erl $(HEADERS) $(filter-out $(wildcard ebin), ebin)
 	@echo Compiling $<
-	@erlc -o ebin/ $<
+	@erlc +debug_info -o ebin/ $<
 
 ebin:
 	@echo Creating ebin/
@@ -54,3 +54,4 @@ doc/edoc-info: doc/overview.edoc $(SOURCES)
 clean:
 	@echo Cleaning
 	@rm -f ebin/*.{beam,app} test/*.beam doc/*.{html,css,png} doc/edoc-info
+	@rm -r cover_report
