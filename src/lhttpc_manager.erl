@@ -187,35 +187,33 @@ find_socket({_, _, Ssl} = Destination, Pid, State) ->
     end.
 
 remove_socket(Socket, State) ->
-    Destinations = State#httpc_man.destinations,
+    Dests = State#httpc_man.destinations,
     case dict:find(Socket, State#httpc_man.sockets) of
-        {ok, {{_, _, Ssl} = Destination, Timer}} ->
+        {ok, {{_, _, Ssl} = Dest, Timer}} ->
             cancel_timer(Timer, Socket),
             lhttpc_sock:close(Socket, Ssl),
-            OldSockets = dict:fetch(Destination, Destinations),
+            Sockets = lists:delete(Socket, dict:fetch(Dest, Dests)),
             State#httpc_man{
-                destinations = update_dest(Destination, lists:delete(Socket,
-                        OldSockets), Destinations),
+                destinations = update_dest(Dest, Sockets, Dests),
                 sockets = dict:erase(Socket, State#httpc_man.sockets)
             };
         error ->
             State
     end.
 
-store_socket({_, _, Ssl} = Destination, Socket, State) ->
+store_socket({_, _, Ssl} = Dest, Socket, State) ->
     Timeout = State#httpc_man.timeout,
     Timer = erlang:send_after(Timeout, self(), {timeout, Socket}),
     % the socket might be closed from the other side
     lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
-    Destinations = State#httpc_man.destinations,
-    Sockets = case dict:find(Destination, Destinations) of
+    Dests = State#httpc_man.destinations,
+    Sockets = case dict:find(Dest, Dests) of
         {ok, S} -> [Socket | S];
         error   -> [Socket]
     end,
     State#httpc_man{
-        destinations = dict:store(Destination, Sockets, Destinations),
-        sockets = dict:store(Socket, {Destination, Timer},
-            State#httpc_man.sockets)
+        destinations = dict:store(Dest, Sockets, Dests),
+        sockets = dict:store(Socket, {Dest, Timer}, State#httpc_man.sockets)
     }.
 
 update_dest(Destination, [], Destinations) ->
