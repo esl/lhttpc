@@ -172,7 +172,7 @@ find_socket({_, _, Ssl} = Destination, Pid, State) ->
                     {_, Timer} = dict:fetch(Socket, State#httpc_man.sockets),
                     cancel_timer(Timer, Sockets),
                     NewState = State#httpc_man{
-                        destinations = dict:store(Destination, Sockets,
+                        destinations = update_dest(Destination, Sockets,
                             Destinations),
                         sockets = dict:erase(Socket,
                             State#httpc_man.sockets)
@@ -182,8 +182,6 @@ find_socket({_, _, Ssl} = Destination, Pid, State) ->
                     lhttpc_sock:setopts(Socket, [{active, true}], Ssl),
                     {no_socket, State}
             end;
-        {ok, []} ->
-            {no_socket, State};
         error ->
             {no_socket, State}
     end.
@@ -195,12 +193,9 @@ remove_socket(Socket, State) ->
             cancel_timer(Timer, Socket),
             lhttpc_sock:close(Socket, Ssl),
             OldSockets = dict:fetch(Destination, Destinations),
-            NewDestinations = case lists:delete(Socket, OldSockets) of
-                []      -> dict:erase(Destination, Destinations);
-                Sockets -> dict:store(Destination, Sockets, Destinations)
-            end,
             State#httpc_man{
-                destinations = NewDestinations,
+                destinations = update_dest(Destination, lists:delete(Socket,
+                        OldSockets), Destinations),
                 sockets = dict:erase(Socket, State#httpc_man.sockets)
             };
         error ->
@@ -214,10 +209,8 @@ store_socket({_, _, Ssl} = Destination, Socket, State) ->
     lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
     Destinations = State#httpc_man.destinations,
     Sockets = case dict:find(Destination, Destinations) of
-        {ok, S} -> 
-            S;
-        error ->
-            []
+        {ok, S} -> S;
+        error   -> []
     end,
     State#httpc_man{
         destinations = dict:store(Destination, [Socket | Sockets],
@@ -225,6 +218,11 @@ store_socket({_, _, Ssl} = Destination, Socket, State) ->
         sockets = dict:store(Socket, {Destination, Timer},
             State#httpc_man.sockets)
     }.
+
+update_dest(Destination, [], Destinations) ->
+    dict:erase(Destination, Destinations);
+update_dest(Destination, Sockets, Destinations) ->
+    dict:store(Destination, Sockets, Destinations).
 
 close_sockets(Sockets) ->
     lists:foreach(fun({Socket, {{_, _, Ssl}, Timer}}) ->
