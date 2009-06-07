@@ -162,9 +162,9 @@ terminate(_, State) ->
 code_change(_, State, _) ->
     State.
 
-find_socket({_, _, Ssl} = Destination, Pid, State) ->
-    Destinations = State#httpc_man.destinations,
-    case dict:find(Destination, Destinations) of
+find_socket({_, _, Ssl} = Dest, Pid, State) ->
+    Dests = State#httpc_man.destinations,
+    case dict:find(Dest, Dests) of
         {ok, [Socket | Sockets]} ->
             lhttpc_sock:setopts(Socket, [{active, false}], Ssl),
             case lhttpc_sock:controlling_process(Socket, Pid, Ssl) of
@@ -172,10 +172,8 @@ find_socket({_, _, Ssl} = Destination, Pid, State) ->
                     {_, Timer} = dict:fetch(Socket, State#httpc_man.sockets),
                     cancel_timer(Timer, Sockets),
                     NewState = State#httpc_man{
-                        destinations = update_dest(Destination, Sockets,
-                            Destinations),
-                        sockets = dict:erase(Socket,
-                            State#httpc_man.sockets)
+                        destinations = update_dest(Dest, Sockets, Dests),
+                        sockets = dict:erase(Socket, State#httpc_man.sockets)
                     },
                     {{ok, Socket}, NewState};
                 _ -> % Pid has timed out, reuse for someone else
