@@ -176,9 +176,11 @@ find_socket({_, _, Ssl} = Dest, Pid, State) ->
                         sockets = dict:erase(Socket, State#httpc_man.sockets)
                     },
                     {{ok, Socket}, NewState};
-                _ -> % Pid has timed out, reuse for someone else
+                {error, badarg} -> % Pid has timed out, reuse for someone else
                     lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
-                    {no_socket, State}
+                    {no_socket, State};
+                _ -> % something wrong with the socket; remove it, try again
+                    find_socket(Dest, Pid, remove_socket(Socket, State))
             end;
         error ->
             {no_socket, State}
