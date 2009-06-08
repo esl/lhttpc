@@ -201,6 +201,7 @@ ssl_post() ->
     ?assertEqual(BinaryBody, body(Response)).
 
 connection_count() ->
+    timer:sleep(50), % give the TCP stack time to deliver messages
     ?assertEqual(0, lhttpc_manager:connection_count()).
 
 %%% Helpers functions
