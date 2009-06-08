@@ -102,13 +102,13 @@ closed_race_cond() ->
     ManagerPid = whereis(lhttpc_manager),
     true = erlang:suspend_process(ManagerPid),
     spawn_link(fun() -> 
-                Pid ! gen_server:call(lhttpc_manager,
-                    {socket, self(), ?HOST, ?PORT, ?SSL})
+                Pid ! {result, gen_server:call(lhttpc_manager,
+                        {socket, self(), ?HOST, ?PORT, ?SSL})}
         end),
     erlang:yield(), % make sure that the spawned process has run
     gen_tcp:close(Socket), % a closed message should be sent to the manager
     true = erlang:resume_process(ManagerPid),
-    Result = receive R -> R end,
+    Result = receive {result, R} -> R end,
     ?assertEqual(no_socket, Result).
 
 %%% Helpers functions
