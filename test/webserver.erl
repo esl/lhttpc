@@ -72,16 +72,24 @@ server_loop(Module, Socket, Request, Headers, Responders) ->
     end.
 
 listen(ssl) ->
-    SSLOpts = [
+    Opts = [
+        {packet, http},
+        binary,
+        {active, false},
+        {ip, {127,0,0,1}},
         {verify,0},
         {keyfile, "test/key.pem"},
         {certfile, "test/crt.pem"}
     ],
-    Opts = [{packet, http}, binary, {active, false} | SSLOpts],
     {ok, LS} = ssl:listen(0, Opts),
     LS;
 listen(Module) ->
-    {ok, LS} = Module:listen(0, [{packet, http}, binary, {active, false}]),
+    {ok, LS} = Module:listen(0, [
+            {packet, http},
+            binary,
+            {active, false},
+            {ip, {127,0,0,1}}
+        ]),
     LS.
 
 accept(ssl, ListenSocket) ->
