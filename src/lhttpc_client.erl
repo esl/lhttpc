@@ -65,20 +65,20 @@ execute(From, URL, Method, Hdrs, Body) ->
         {ok, R, NewSocket} ->
             % The socket we ended up doing the request over is returned
             % here, it might be the same as Socket, but we don't know.
-			% I've noticed that we don't want to give send sockets that we
-			% can't change the controlling process for to the manager. This
-			% really shouldn't fail, but it could do if:
-			% * The socket was closed remotely already 
-			% * Due to an error in this module (returning dead sockets for
-			%   instance)
+            % I've noticed that we don't want to give send sockets that we
+            % can't change the controlling process for to the manager. This
+            % really shouldn't fail, but it could do if:
+            % * The socket was closed remotely already 
+            % * Due to an error in this module (returning dead sockets for
+            %   instance)
             ManagerPid = whereis(lhttpc_manager),
             case lhttpc_sock:controlling_process(NewSocket, ManagerPid, Ssl) of
-				ok ->
-					gen_server:cast(lhttpc_manager,
-						{done, Host, Port, Ssl, NewSocket});
-				_ ->
-					ok
-			end,
+                ok ->
+                    gen_server:cast(lhttpc_manager,
+                        {done, Host, Port, Ssl, NewSocket});
+                _ ->
+                    ok
+            end,
             {ok, R};
         {error, Reason} ->
             {error, Reason}
