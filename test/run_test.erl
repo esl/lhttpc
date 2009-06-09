@@ -31,68 +31,68 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(FILE_NAME(MODULE),
-	"cover_report/" ++ atom_to_list(MODULE) ++ ".html").
+    "cover_report/" ++ atom_to_list(MODULE) ++ ".html").
 
 run() ->
-	Modules = get_modules(),
-	ok = cover_compile(Modules),
-	eunit:test(?MODULE),
-	filelib:ensure_dir("cover_report/index.html"),
-	html_report(Modules),
-	write_report(Modules),
-	io:format("Cover report in cover_report/index.html~n").
+    Modules = get_modules(),
+    ok = cover_compile(Modules),
+    eunit:test(?MODULE),
+    filelib:ensure_dir("cover_report/index.html"),
+    html_report(Modules),
+    write_report(Modules),
+    io:format("Cover report in cover_report/index.html~n").
 
 html_report([Module | Modules]) ->
-	cover:analyse_to_file(Module, ?FILE_NAME(Module), [html]),
-	html_report(Modules);
+    cover:analyse_to_file(Module, ?FILE_NAME(Module), [html]),
+    html_report(Modules);
 html_report([]) ->
-	ok.
+    ok.
 
 write_report(Modules) ->
-	{TotalPercentage, ModulesPersentage} = percentage(Modules, 0, 0, []),
-	file:write_file("cover_report/index.html",
-		[
-			"<html>\n<head><title>Cover report index</title></head>\n"
-			"<body>\n"
-			"<h1>Cover report for lhttpc</h1>"
-			"Total coverage: ", integer_to_list(TotalPercentage), "%"
-			"<h2>Cover for individual modules</h2>\n"
-			"<ul>\n\t",
-			lists:foldl(fun({Module, Percentage}, Acc) ->
-						Name = atom_to_list(Module),
-						[
-							"<li>"
-							"<a href=\"", Name ++ ".html" "\">",
-							Name,
-							"</a> ", integer_to_list(Percentage), "%"
-							"</li>\n\t" |
-							Acc
-						]
-				end, [], ModulesPersentage),
-			"</ul></body></html>"
-		]).
+    {TotalPercentage, ModulesPersentage} = percentage(Modules, 0, 0, []),
+    file:write_file("cover_report/index.html",
+        [
+            "<html>\n<head><title>Cover report index</title></head>\n"
+            "<body>\n"
+            "<h1>Cover report for lhttpc</h1>"
+            "Total coverage: ", integer_to_list(TotalPercentage), "%"
+            "<h2>Cover for individual modules</h2>\n"
+            "<ul>\n\t",
+            lists:foldl(fun({Module, Percentage}, Acc) ->
+                        Name = atom_to_list(Module),
+                        [
+                            "<li>"
+                            "<a href=\"", Name ++ ".html" "\">",
+                            Name,
+                            "</a> ", integer_to_list(Percentage), "%"
+                            "</li>\n\t" |
+                            Acc
+                        ]
+                end, [], ModulesPersentage),
+            "</ul></body></html>"
+        ]).
 
 percentage([Module | Modules], TotCovered, TotLines, Percentages) ->
-	{ok, Analasys} = cover:analyse(Module, coverage, line),
+    {ok, Analasys} = cover:analyse(Module, coverage, line),
     {Covered, Lines} = lists:foldl(fun({_, {C, _}}, {Covered, Lines}) ->
                 {C + Covered, Lines + 1}
-		end, {0, 0}, Analasys),
-	Percent = (Covered * 100) div Lines,
+        end, {0, 0}, Analasys),
+    Percent = (Covered * 100) div Lines,
     NewPercentages = [{Module, Percent} | Percentages],
-	percentage(Modules, Covered + TotCovered, Lines + TotLines, NewPercentages);
+    percentage(Modules, Covered + TotCovered, Lines + TotLines, NewPercentages);
 percentage([], Covered, Lines, Percentages) ->
     {(Covered * 100) div Lines, Percentages}.
 
 get_modules() ->
-	application:load(lhttpc),
-	{ok, Modules} = application:get_key(lhttpc, modules),
-	Modules.
+    application:load(lhttpc),
+    {ok, Modules} = application:get_key(lhttpc, modules),
+    Modules.
 
 cover_compile([Module | Modules]) ->
-	{ok, Module} = cover:compile_beam(Module),
-	cover_compile(Modules);
+    {ok, Module} = cover:compile_beam(Module),
+    cover_compile(Modules);
 cover_compile([]) ->
-	ok.
+    ok.
 
 %%% Eunit functions
 application_test_() ->
