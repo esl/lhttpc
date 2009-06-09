@@ -49,7 +49,7 @@ html_report([]) ->
 	ok.
 
 write_report(Modules) ->
-	{TotalPercentage, ModulesPersentage} = percentage(Modules, []),
+	{TotalPercentage, ModulesPersentage} = percentage(Modules, 0, 0, []),
 	file:write_file("cover_report/index.html",
 		[
 			"<html>\n<head><title>Cover report index</title></head>\n"
@@ -72,21 +72,16 @@ write_report(Modules) ->
 			"</ul></body></html>"
 		]).
 
-percentage([Module | Modules], Percentages) ->
-	{ok, Lines} = cover:analyse(Module, coverage, line),
-	Covered = lists:foldl(fun({_, {Covered, _}}, Acc) ->
-				Covered + Acc
-		end, 0, Lines),
-	Percent = (Covered * 100) div length(Lines),
-	percentage(Modules, [{Module, Percent} | Percentages]);
-percentage([], Percentages) ->
-	{total_percentage(Percentages), Percentages}.
-
-total_percentage(Percentages) ->
-	Total = lists:foldl(fun({_, Percent}, Acc) ->
-				Acc + Percent
-		end, 0, Percentages),
-	Total div length(Percentages). 
+percentage([Module | Modules], TotCovered, TotLines, Percentages) ->
+	{ok, Analasys} = cover:analyse(Module, coverage, line),
+    {Covered, Lines} = lists:foldl(fun({_, {C, _}}, {Covered, Lines}) ->
+                {C + Covered, Lines + 1}
+		end, {0, 0}, Analasys),
+	Percent = (Covered * 100) div Lines,
+    NewPercentages = [{Module, Percent} | Percentages],
+	percentage(Modules, Covered + TotCovered, Lines + TotLines, NewPercentages);
+percentage([], Covered, Lines, Percentages) ->
+    {(Covered * 100) div Lines, Percentages}.
 
 get_modules() ->
 	application:load(lhttpc),
