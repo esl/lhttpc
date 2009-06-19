@@ -57,7 +57,7 @@ handle_continue(_Method, _URI, _Vsn, _ReqHdrs, CBState) ->
 handle_request(_Method, "/static/1M", {1,1}, _, Entity, State) ->
 	case Entity of
 		{identity, Reader} ->
-			case Reader(50000) of
+			case Reader(complete, 50000) of
 				{ok, Body} ->
 					{reply, 200, [], Body, State};
 				{error, Reason} ->
