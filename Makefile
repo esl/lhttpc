@@ -49,7 +49,7 @@ dialyzer:
 
 doc/edoc-info: doc/overview.edoc $(SOURCES) 
 	@echo Generating documentation from edoc
-	@erl -noinput -eval 'edoc:application(gen_httpd, "./", [{doc, "doc/"}])' -s erlang halt
+	@erl -noinput -eval 'edoc:application(lhttpc, "./", [{doc, "doc/"}])' -s erlang halt
 
 clean:
 	@echo Cleaning
