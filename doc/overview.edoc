@@ -1,7 +1,7 @@
 @author Oscar Hellström <oscar@erlang-consulting.com>
 @doc A lightweight HTTP client.
 The only functions of much interest right now are {@link
-lhttpc:request/4} and {@link lhttpc:request/5}.
+lhttpc:request/4}, {@link lhttpc:request/5} and {@link lhttpc:request/6}.
 
 <h1>Configuration</h1>
 <h2>`connection_timeout'</h2>
