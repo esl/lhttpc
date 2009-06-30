@@ -31,7 +31,7 @@
 -module(lhttpc).
 -behaviour(application).
 
--export([request/4, request/5]).
+-export([request/4, request/5, request/6]).
 -export([start/2, stop/1]).
 
 -include("lhttpc_types.hrl").
