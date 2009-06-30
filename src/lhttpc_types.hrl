@@ -28,4 +28,5 @@
 -type headers() :: [header()].
 
 -type option() ::
-        {connect_timeout, timeout()}.
+        {connect_timeout, timeout()} |
+        {send_retry, non_neg_integer()}.

@@ -26,7 +26,7 @@
 
 %%% @author Oscar Hellström <oscar@erlang-consulting.com>
 %%% @doc Main interface to the lightweight http client.
-%%% See `request/4' and `request/5' functions.
+%%% See {@link request/4}, {@link request/5} and {@link request/6} functions.
 %%% @end
 -module(lhttpc).
 -behaviour(application).
@@ -72,7 +72,7 @@ stop(_) ->
 %%   Body = binary()
 %% @doc Sends a request without a body.
 %% Would be the same as calling `request(URL, Method, Hdrs, [], Timeout)',
-%% that is `request/5' with an empty body (`Body' could also be `<<>>').
+%% that is {@link request/5} with an empty body (`Body' could also be `<<>>').
 %% @end
 -spec request(string(), string() | atom(), headers(), pos_integer() |
         infinity) -> result().
@@ -94,7 +94,7 @@ request(URL, Method, Hdrs, Timeout) ->
 %%   ResponseBody = binary()
 %% @doc Sends a request with a body.
 %% Would be the same as calling
-%% `request(URL, Method, Hdrs, Body, Timeout, [])', that is `request/6' with
+%% `request(URL, Method, Hdrs, Body, Timeout, [])', that is {@link request/6} with
 %% no options.
 %% @end
 -spec request(string(), string() | atom(), headers(), iolist(),
@@ -111,7 +111,9 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   RequestBody = iolist()
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
-%%   Option = {connect_timeout, Milliseconds}
+%%   Option = {connect_timeout, Milliseconds | infinity} |
+%%            {send_retry, integer()}
+%%   Milliseconds = integer()
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
 %%   StatusCode = integer()
@@ -131,12 +133,19 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% `Options' is a list of options.
 %%
 %% Options:
+%%
 %% `{connect_timeout, Milliseconds}' specifies how many milliseconds the
 %% client can spend trying to establish a connection to the server. This
 %% doesn't affect the overall request timeout. However, if it's longer than
 %% the overall timeout it will be ignored. Also note that the TCP layer my
 %% choose to give up earlier than the connect timeout, in which case the
-%% client will also give up.
+%% client will also give up. The default value is infinity, which means that
+%% it will either give up when the TCP stack gives up, or when the overall
+%% request timeout is reached. 
+%%
+%% `{send_retry, N}' specifies how many times the client should retry
+%% sending a request if the connection is closed after the data has been
+%% sent. The default value is 1.
 %% @end
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity, [option()]) -> result().
@@ -174,6 +183,9 @@ kill_client(Pid) ->
             erlang:error(Reason)
     end.
 
+verify_options([{send_retry, N} | Options], Errors)
+        when is_integer(N), N >= 0 ->
+    verify_options(Options, Errors);
 verify_options([{connect_timeout, infinity} | Options], Errors) ->
     verify_options(Options, Errors);
 verify_options([{connect_timeout, MS} | Options], Errors)

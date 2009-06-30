@@ -43,8 +43,7 @@
         request,
         socket,
         connect_timeout,
-        attempts,
-        response_acc = {nil, nil, [], <<>>}
+        attempts
     }).
 
 -spec request(pid(), string(), string() | atom(), headers(),
@@ -73,15 +72,15 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
         {ok, S}   -> S; % Re-using HTTP/1.1 connections
         no_socket -> undefined % Opening a new HTTP/1.1 connection
     end,
-    ConnectTimeout = proplists:get_value(connect_timeout, Options, infinity),
     State = #client_state{
         host = Host,
         port = Port,
         ssl = Ssl,
         request = Request,
         socket = Socket,
-        connect_timeout = ConnectTimeout,
-        attempts = 2
+        connect_timeout = proplists:get_value(connect_timeout, Options,
+            infinity),
+        attempts = 1 + proplists:get_value(send_retry, Options, 1)
     },
     Response = case send_request(State) of
         {ok, R, undefined} ->
