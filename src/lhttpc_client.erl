@@ -125,6 +125,8 @@ send_request(#client_state{socket = undefined} = State) ->
         {error, etimedout} ->
             % Connect timed out (the TCP stack decided so), so we give up.
             {error, connect_timeout};
+        {error, timeout} ->
+            {error, connect_timeout};
         {error, Reason} ->
             {error, Reason}
     end;
