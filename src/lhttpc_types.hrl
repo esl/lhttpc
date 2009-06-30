@@ -26,3 +26,6 @@
 
 -type header() :: {string() | atom(), string()}.
 -type headers() :: [header()].
+
+-type option() ::
+        {connect_timeout, timeout()}.

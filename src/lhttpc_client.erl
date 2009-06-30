@@ -32,26 +32,40 @@
 %%% @end
 -module(lhttpc_client).
 
--export([request/5]).
+-export([request/6]).
 
 -include("lhttpc_types.hrl").
 
--spec request(pid(), string(), string() | atom(), headers(), iolist()) -> 
-    no_return().
-%% @spec (From, URL, Method, Hdrs, Body) -> ok
+-record(client_state, {
+        host,
+        port,
+        ssl,
+        request,
+        socket,
+        connect_timeout,
+        attempts,
+        response_acc = {nil, nil, [], <<>>}
+    }).
+
+-spec request(pid(), string(), string() | atom(), headers(),
+        iolist(), [option()]) -> no_return().
+%% @spec (From, URL, Method, Hdrs, Body, Options) -> ok
 %%    From = pid()
 %%    URL = string()
 %%    Method = atom() | string()
 %%    Hdrs = [Header]
 %%    Header = {string() | atom(), string()}
 %%    Body = iolist()
-request(From, URL, Method, Hdrs, Body) ->
-    case catch execute(From, URL, Method, Hdrs, Body) of
+%%    Options = [Option]
+%%    Option = {connect_timeout, Milliseconds}
+%% @end
+request(From, URL, Method, Hdrs, Body, Options) ->
+    case catch execute(From, URL, Method, Hdrs, Body, Options) of
         {'EXIT', Reason} -> From ! {exit, Reason};
         _                -> ok
     end.
 
-execute(From, URL, Method, Hdrs, Body) ->
+execute(From, URL, Method, Hdrs, Body, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
     Request = lhttpc_lib:format_request(Path, Method, Hdrs, Host, Body),
     SocketRequest = {socket, self(), Host, Port, Ssl},
@@ -59,7 +73,17 @@ execute(From, URL, Method, Hdrs, Body) ->
         {ok, S}   -> S; % Re-using HTTP/1.1 connections
         no_socket -> undefined % Opening a new HTTP/1.1 connection
     end,
-    Response = case send_request(Host, Port, Ssl, Request, Socket, 1) of
+    ConnectTimeout = proplists:get_value(connect_timeout, Options, infinity),
+    State = #client_state{
+        host = Host,
+        port = Port,
+        ssl = Ssl,
+        request = Request,
+        socket = Socket,
+        connect_timeout = ConnectTimeout,
+        attempts = 2
+    },
+    Response = case send_request(State) of
         {ok, R, undefined} ->
             {ok, R};
         {ok, R, NewSocket} ->
@@ -86,29 +110,32 @@ execute(From, URL, Method, Hdrs, Body) ->
     From ! {response, self(), Response},
     ok.
 
-send_request(_, _, _, _, _, 3) ->
-    % Only do two attempts to connect to the server and send the request,
-    % if it closes the connection on us twice, something is very wrong.
+send_request(#client_state{attempts = 0}) ->
+    % Don't try again if the number of allowed attempts is 0.
     {error, connection_closed};
-send_request(Host, Port, Ssl, Request, undefined, Attempt) ->
-    Options = [binary, {packet, http}, {active, false}],
-    case lhttpc_sock:connect(Host, Port, Options, Ssl) of
+send_request(#client_state{socket = undefined} = State) ->
+    Host = State#client_state.host,
+    Port = State#client_state.port,
+    Ssl = State#client_state.ssl,
+    Timeout = State#client_state.connect_timeout,
+    SocketOptions = [binary, {packet, http}, {active, false}],
+    case lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
         {ok, Socket} ->
-            send_request(Host, Port, Ssl, Request, Socket, Attempt);
+            send_request(State#client_state{socket = Socket});
         {error, etimedout} ->
-            % Connect timed out (the TCP stack decided so), try again.
-            % Notice, no attempt to actually send the data has been made
-            % here.
-            send_request(Host, Port, Ssl, Request, undefined, Attempt);
+            % Connect timed out (the TCP stack decided so), so we give up.
+            {error, connect_timeout};
         {error, Reason} ->
             {error, Reason}
     end;
-send_request(Host, Port, Ssl, Request, Socket, Attempt) ->
+send_request(State) ->
+    Socket = State#client_state.socket,
+    Ssl = State#client_state.ssl,
+    Request = State#client_state.request,
     case lhttpc_sock:send(Socket, Request, Ssl) of
         ok ->
-            Acc = {nil, nil, [], <<>>},
             lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
-            case read_response(Host, Port, Ssl, Request, Acc, Socket, Attempt) of
+            case read_response(State, nil, nil, [], <<>>) of
                 {ok, Response, NewSocket} ->
                     {ok, Response, NewSocket};
                 {error, Reason} ->
@@ -117,23 +144,26 @@ send_request(Host, Port, Ssl, Request, Socket, Attempt) ->
             end;
         {error, closed} ->
             lhttpc_sock:close(Socket, Ssl),
-            send_request(Host, Port, Ssl, Request, undefined, Attempt + 1);
+            NewState = State#client_state{
+                socket = undefined,
+                attempts = State#client_state.attempts - 1
+            },
+            send_request(NewState);
         Other ->
             lhttpc_sock:close(Socket, Ssl),
             Other
     end.
 
-read_response(Host, Port, Ssl, Request, Acc, Socket, Attempt) ->
-    {Vsn, Status, Hdrs, Body} = Acc,
+read_response(State, Vsn, Status, Hdrs, Body) ->
+    Socket = State#client_state.socket,
+    Ssl = State#client_state.ssl,
     case lhttpc_sock:read(Socket, Ssl) of
         {ok, {http_response, NewVsn, StatusCode, Reason}} ->
             NewStatus = {StatusCode, Reason},
-            NewAcc = {NewVsn, NewStatus, Hdrs, Body},
-            read_response(Host, Port, Ssl, Request, NewAcc, Socket, Attempt);
+            read_response(State, NewVsn, NewStatus, Hdrs, Body);
         {ok, {http_header, _, Name, _, Value}} ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            NewAcc = {Vsn, Status, [Header | Hdrs], Body},
-            read_response(Host, Port, Ssl, Request, NewAcc, Socket, Attempt);
+            read_response(State, Vsn, Status, [Header | Hdrs], Body);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             case read_body(Vsn, Hdrs, Ssl, Socket) of
@@ -149,7 +179,11 @@ read_response(Host, Port, Ssl, Request, Acc, Socket, Attempt) ->
             % closing connections without sending responses.
             % If this the first attempt to send the request, we will try again.
             lhttpc_sock:close(Socket, Ssl),
-            send_request(Host, Port, Ssl, Request, Socket, Attempt + 1);
+            NewState = State#client_state{
+                socket = undefined,
+                attempts = State#client_state.attempts - 1
+            },
+            send_request(NewState);
         {error, Reason} ->
             {error, Reason}
     end.

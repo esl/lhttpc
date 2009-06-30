@@ -33,7 +33,7 @@
 -module(lhttpc_sock).
 
 -export([
-        connect/4,
+        connect/5,
         read/2,
         read/3,
         send/3,
@@ -45,10 +45,11 @@
 -type host() :: string() | {integer(), integer(), integer(), integer()}.
 -type options() :: [atom() | {atom(), any()}].
 
-%% @spec (Host, Port, Options, SslFlag) -> {ok, Socket} | {error, Reason}
+%% @spec (Host, Port, Options, Timeout, SslFlag) -> {ok, Socket} | {error, Reason}
 %%   Host = string() | ip_address()
 %%   Port = integer()
 %%   Options = [{atom(), term()} | atom()]
+%%   Timeout = infinity | integer()
 %%   SslFlag = bool()
 %%   Socket = port()
 %%   Reason = atom()
@@ -57,12 +58,12 @@
 %% Will use the `ssl' module if `SslFlag' is `true' and gen_tcp otherwise.
 %% `Options' are the normal `gen_tcp' or `ssl' Options.
 %% @end
--spec connect(host(), integer(), options(), bool()) ->
+-spec connect(host(), integer(), options(), timeout(), bool()) ->
     {ok, port()} | {error, atom()}.
-connect(Host, Port, Options, true) ->
-    ssl:connect(Host, Port, Options);
-connect(Host, Port, Options, false) ->
-    gen_tcp:connect(Host, Port, Options).
+connect(Host, Port, Options, Timeout, true) ->
+    ssl:connect(Host, Port, Options, Timeout);
+connect(Host, Port, Options, Timeout, false) ->
+    gen_tcp:connect(Host, Port, Options, Timeout).
 
 %% @spec (Socket, SslFlag) -> {ok, Data} | {error, Reason}
 %%   Socket = port()

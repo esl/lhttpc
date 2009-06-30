@@ -77,7 +77,7 @@ stop(_) ->
 -spec request(string(), string() | atom(), headers(), pos_integer() |
         infinity) -> result().
 request(URL, Method, Hdrs, Timeout) ->
-    request(URL, Method, Hdrs, [], Timeout).
+    request(URL, Method, Hdrs, [], Timeout, []).
 
 %% @spec (URL, Method, Hdrs, RequestBody, Timeout) -> Result
 %%   URL = string()
@@ -87,6 +87,31 @@ request(URL, Method, Hdrs, Timeout) ->
 %%   Value = string() | binary()
 %%   RequestBody = iolist()
 %%   Timeout = integer() | infinity
+%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
+%%            | {error, Reason}
+%%   StatusCode = integer()
+%%   ReasonPhrase = string()
+%%   ResponseBody = binary()
+%% @doc Sends a request with a body.
+%% Would be the same as calling
+%% `request(URL, Method, Hdrs, Body, Timeout, [])', that is `request/6' with
+%% no options.
+%% @end
+-spec request(string(), string() | atom(), headers(), iolist(),
+        pos_integer() | infinity) -> result().
+request(URL, Method, Hdrs, Body, Timeout) ->
+    request(URL, Method, Hdrs, Body, Timeout, []).
+
+%% @spec (URL, Method, Hdrs, RequestBody, Timeout, Options) -> Result
+%%   URL = string()
+%%   Method = string() | atom()
+%%   Hdrs = [{Header, Value}]
+%%   Header = string() | binary() | atom()
+%%   Value = string() | binary()
+%%   RequestBody = iolist()
+%%   Timeout = integer() | infinity
+%%   Options = [Option]
+%%   Option = {connect_timeout, Milliseconds}
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
 %%   StatusCode = integer()
@@ -103,11 +128,21 @@ request(URL, Method, Hdrs, Timeout) ->
 %% `Body' is the entity to send in the request. Please don't include entity
 %% bodies where there shouldn't be any (such as for `GET').
 %% `Timeout' is the timeout for the request in milliseconds.
+%% `Options' is a list of options.
+%%
+%% Options:
+%% `{connect_timeout, Milliseconds}' specifies how many milliseconds the
+%% client can spend trying to establish a connection to the server. This
+%% doesn't affect the overall request timeout. However, if it's longer than
+%% the overall timeout it will be ignored. Also note that the TCP layer my
+%% choose to give up earlier than the connect timeout, in which case the
+%% client will also give up.
 %% @end
 -spec request(string(), string() | atom(), headers(), iolist(),
-        pos_integer() | infinity) -> result().
-request(URL, Method, Hdrs, Body, Timeout) ->
-    Args = [self(), URL, Method, Hdrs, Body],
+        pos_integer() | infinity, [option()]) -> result().
+request(URL, Method, Hdrs, Body, Timeout, Options) ->
+    verify_options(Options, []),
+    Args = [self(), URL, Method, Hdrs, Body, Options],
     Pid = spawn_link(lhttpc_client, request, Args),
     receive
         {response, Pid, R} ->
@@ -138,3 +173,15 @@ kill_client(Pid) ->
         {'DOWN', _, process, Pid, Reason}  ->
             erlang:error(Reason)
     end.
+
+verify_options([{connect_timeout, infinity} | Options], Errors) ->
+    verify_options(Options, Errors);
+verify_options([{connect_timeout, MS} | Options], Errors)
+        when is_integer(MS), MS >= 0 ->
+    verify_options(Options, Errors);
+verify_options([Option | Options], Errors) ->
+    verify_options(Options, [Option | Errors]);
+verify_options([], []) ->
+    ok;
+verify_options([], Errors) ->
+    erlang:error({bad_options, Errors}).
