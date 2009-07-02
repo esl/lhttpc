@@ -59,6 +59,8 @@ tcp_test_() ->
             ?_test(request_timeout()),
             ?_test(connection_timeout()),
             ?_test(suspended_manager()),
+            ?_test(chunked_encoding()),
+            ?_test(close_connection()),
             ?_test(connection_count()) % just check that it's 0 (last)
         ]}.
 
@@ -69,6 +71,11 @@ ssl_test_() ->
             ?_test(connection_count()) % just check that it's 0 (last)
         ]}.
 
+other_test_() ->
+    [
+        ?_test(invalid_options())
+    ].
+
 %%% Tests
 
 simple_get() ->
@@ -77,14 +84,14 @@ simple_get() ->
 
 empty_get() ->
     Port = start(gen_tcp, [fun empty_body/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/empty",
+    URL = url(Port, "/empty"),
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<>>, body(Response)).
 
 get_with_mandatory_hdrs() ->
     Port = start(gen_tcp, [fun simple_response/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/host",
+    URL = url(Port, "/host"),
     Body = <<?DEFAULT_STRING>>,
     Hdrs = [
         {"content-length", integer_to_list(size(Body))},
@@ -96,14 +103,14 @@ get_with_mandatory_hdrs() ->
 
 no_content_length_get() ->
     Port = start(gen_tcp, [fun no_content_length/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/no_cl",
+    URL = url(Port, "/no_cl"),
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
 connection_close() ->
     Port = start(gen_tcp, [fun respond_and_close/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/close",
+    URL = url(Port, "/close"),
     Body = pid_to_list(self()),
     {ok, Response} = lhttpc:request(URL, "PUT", [], Body, 1000),
     ?assertEqual({200, "OK"}, status(Response)),
@@ -116,7 +123,7 @@ simple_put() ->
 
 post() ->
     Port = start(gen_tcp, [fun copy_body/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/post",
+    URL = url(Port, "/post"),
     {X, Y, Z} = now(),
     Body = [
         "This is a rather simple post :)",
@@ -139,7 +146,7 @@ persistent_connection() ->
             fun simple_response/5,
             fun copy_body/5
         ]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/persistent",
+    URL = url(Port, "/persistent"),
     {ok, FirstResponse} = lhttpc:request(URL, "GET", [], 1000),
     Headers = [{"KeepAlive", "300"}], % shouldn't be needed
     {ok, SecondResponse} = lhttpc:request(URL, "GET", Headers, 1000),
@@ -153,12 +160,12 @@ persistent_connection() ->
 
 request_timeout() ->
     Port = start(gen_tcp, [fun very_slow_response/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/slow",
+    URL = url(Port, "/slow"),
     ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)).
 
 connection_timeout() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/close_conn",
+    URL = url(Port, "/close_conn"),
     lhttpc_manager:update_connection_timeout(50), % very short keep alive
     {ok, Response} = lhttpc:request(URL, get, [], 100),
     ?assertEqual({200, "OK"}, status(Response)),
@@ -170,7 +177,7 @@ connection_timeout() ->
 
 suspended_manager() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/persistent",
+    URL = url(Port, "/persistent"),
     {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
@@ -184,16 +191,40 @@ suspended_manager() ->
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)).
 
+chunked_encoding() ->
+    Port = start(gen_tcp, [fun chunked_response/5, fun chunked_response_t/5]),
+    URL = url(Port, "/chunked"),
+    {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
+    ?assertEqual({200, "OK"}, status(FirstResponse)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
+    ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
+            headers(FirstResponse))),
+    {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
+    ?assertEqual({200, "OK"}, status(SecondResponse)),
+    ?assertEqual(<<"Again, great success!">>, body(SecondResponse)),
+    ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
+            headers(SecondResponse))),
+    ?assertEqual("1", lhttpc_lib:header_value("Trailer-1",
+            headers(SecondResponse))),
+    ?assertEqual("2", lhttpc_lib:header_value("Trailer-2",
+            headers(SecondResponse))).
+
+close_connection() ->
+    Port = start(gen_tcp, [fun close_connection/5]),
+    URL = url(Port, "/close"),
+    ?assertEqual({error, connection_closed}, lhttpc:request(URL, "GET", [],
+            1000)).
+
 ssl_get() ->
     Port = start(ssl, [fun simple_response/5]),
-    URL = "https://localhost:" ++ integer_to_list(Port) ++ "/simple",
+    URL = ssl_url(Port, "/simple"),
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
 ssl_post() ->
     Port = start(ssl, [fun copy_body/5]),
-    URL = "https://localhost:" ++ integer_to_list(Port) ++ "/simple",
+    URL = ssl_url(Port, "/simple"),
     Body = "SSL Test <o/",
     BinaryBody = list_to_binary(Body),
     {ok, Response} = lhttpc:request(URL, "POST", [], Body, 1000),
@@ -204,16 +235,27 @@ connection_count() ->
     timer:sleep(50), % give the TCP stack time to deliver messages
     ?assertEqual(0, lhttpc_manager:connection_count()).
 
+invalid_options() ->
+    ?assertError({bad_options, [{foo, bar}, bad_option]},
+        lhttpc:request("http://localhost/", get, [], <<>>, 1000,
+            [bad_option, {foo, bar}])).
+
 %%% Helpers functions
 
 simple(Method) ->
     Port = start(gen_tcp, [fun simple_response/5]),
-    URL = "http://localhost:" ++ integer_to_list(Port) ++ "/simple",
+    URL = url(Port, "/simple"),
     {ok, Response} = lhttpc:request(URL, Method, [], 1000),
     {StatusCode, ReasonPhrase} = status(Response),
     ?assertEqual(200, StatusCode),
     ?assertEqual("OK", ReasonPhrase),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+url(Port, Path) ->
+    "http://localhost:" ++ integer_to_list(Port) ++ Path.
+
+ssl_url(Port, Path) ->
+    "https://localhost:" ++ integer_to_list(Port) ++ Path.
 
 status({Status, _, _}) ->
     Status.
@@ -221,6 +263,8 @@ status({Status, _, _}) ->
 body({_, _, Body}) ->
     Body.
 
+headers({_, Headers, _}) ->
+    Headers.
 
 %%% Responders
 simple_response(Module, Socket, _Request, _Headers, _Body) ->
@@ -279,3 +323,41 @@ no_content_length(Module, Socket, _, _, _) ->
         "Content-type: text/plain\r\nConnection: close\r\n\r\n"
         ?DEFAULT_STRING
     ).
+
+chunked_response(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n"
+        "5\r\n"
+        "Great\r\n"
+        "1\r\n"
+        " \r\n"
+        "8\r\n"
+        "success!\r\n"
+        "0\r\n"
+        "\r\n"
+    ).
+
+chunked_response_t(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n"
+        "7\r\n"
+        "Again, \r\n"
+        "E\r\n"
+        "great success!\r\n"
+        "0\r\n"
+        "Trailer-1: 1\r\n"
+        "Trailer-2: 2\r\n"
+        "\r\n"
+    ).
+
+close_connection(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+    ),
+    Module:close(Socket).
