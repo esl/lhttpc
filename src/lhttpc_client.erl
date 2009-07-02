@@ -165,7 +165,7 @@ send_request(State) ->
 read_response(State, Vsn, Status, Hdrs, Body) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
-    case lhttpc_sock:read(Socket, Ssl) of
+    case lhttpc_sock:recv(Socket, Ssl) of
         {ok, {http_response, NewVsn, StatusCode, Reason}} ->
             NewStatus = {StatusCode, Reason},
             read_response(State, NewVsn, NewStatus, Hdrs, Body);
@@ -211,7 +211,7 @@ read_body(Vsn, Hdrs, Ssl, Socket) ->
     end.
 
 read_length(Hdrs, Ssl, Socket, Length) ->
-    case lhttpc_sock:read(Socket, Length, Ssl) of
+    case lhttpc_sock:recv(Socket, Length, Ssl) of
         {ok, Data} ->
             NewSocket = case lhttpc_lib:header_value("connection", Hdrs) of
                 "close" ->
@@ -240,8 +240,8 @@ read_infinite_body(Socket, _, Hdrs, Ssl) ->
         _         -> erlang:error(no_content_length)
     end.
 
-    case lhttpc_sock:read(Socket, Ssl) of
 read_until_closed(Socket, Acc, Hdrs, Ssl) ->
+    case lhttpc_sock:recv(Socket, Ssl) of
         {ok, Body} ->
             NewAcc = <<Acc/binary, Body/binary>>,
             read_until_closed(Socket, NewAcc, Hdrs, Ssl);

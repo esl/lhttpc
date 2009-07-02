@@ -34,8 +34,8 @@
 
 -export([
         connect/5,
-        read/2,
-        read/3,
+        recv/2,
+        recv/3,
         send/3,
         controlling_process/3,
         setopts/3,
@@ -76,10 +76,10 @@ connect(Host, Port, Options, Timeout, false) ->
 %% Will block untill data is available on the socket and return the first
 %% packet.
 %% @end
--spec read(port(), bool()) -> {ok, any()} | {error, atom()}.
-read(Socket, true) ->
+-spec recv(port(), bool()) -> {ok, any()} | {error, atom()}.
+recv(Socket, true) ->
     ssl:recv(Socket, 0);
-read(Socket, false) ->
+recv(Socket, false) ->
     gen_tcp:recv(Socket, 0).
 
 %% @spec (Socket, Length, SslFlag) -> {ok, Data} | {error, Reason}
@@ -89,15 +89,15 @@ read(Socket, false) ->
 %%   Data = term()
 %%   Reason = atom()
 %% @doc
-%% Reads `Length' bytes from `Socket'.
+%% Receives `Length' bytes from `Socket'.
 %% Will block untill `Length' bytes is available.
 %% @end
--spec read(port(), integer(), bool()) -> {ok, any()} | {error, atom()}.
-read(_, 0, _) ->
+-spec recv(port(), integer(), bool()) -> {ok, any()} | {error, atom()}.
+recv(_, 0, _) ->
     {ok, <<>>};
-read(Socket, Length, true) ->
+recv(Socket, Length, true) ->
     ssl:recv(Socket, Length);
-read(Socket, Length, false) ->
+recv(Socket, Length, false) ->
     gen_tcp:recv(Socket, Length).
 
 %% @spec (Socket, Data, SslFlag) -> ok | {error, Reason}
