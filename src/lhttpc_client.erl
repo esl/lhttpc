@@ -59,12 +59,20 @@
 %%    Option = {connect_timeout, Milliseconds}
 %% @end
 request(From, URL, Method, Hdrs, Body, Options) ->
-    case catch execute(From, URL, Method, Hdrs, Body, Options) of
-        {'EXIT', Reason} -> From ! {exit, Reason};
-        _                -> ok
-    end.
+    Result = try
+        execute(URL, Method, Hdrs, Body, Options)
+    catch 
+        closed ->
+            {response, self(), {error, connection_closed}};
+        Reason ->
+            {response, self(), {error, Reason}};
+        error:Error ->
+            {exit, self(), {Error, erlang:get_stacktrace()}}
+    end,
+    From ! Result,
+    ok.
 
-execute(From, URL, Method, Hdrs, Body, Options) ->
+execute(URL, Method, Hdrs, Body, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
     Request = lhttpc_lib:format_request(Path, Method, Hdrs, Host, Body),
     SocketRequest = {socket, self(), Host, Port, Ssl},
@@ -104,10 +112,9 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
             end,
             {ok, R};
         {error, Reason} ->
-            {error, Reason}
+            throw(Reason)
     end,
-    From ! {response, self(), Response},
-    ok.
+    {response, self(), Response}.
 
 send_request(#client_state{attempts = 0}) ->
     % Don't try again if the number of allowed attempts is 0.
@@ -122,12 +129,12 @@ send_request(#client_state{socket = undefined} = State) ->
         {ok, Socket} ->
             send_request(State#client_state{socket = Socket});
         {error, etimedout} ->
-            % Connect timed out (the TCP stack decided so), so we give up.
-            {error, connect_timeout};
+            % TCP stack decided to give up
+            throw(connect_timeout);
         {error, timeout} ->
-            {error, connect_timeout};
+            throw(connect_timeout);
         {error, Reason} ->
-            {error, Reason}
+            throw(Reason)
     end;
 send_request(State) ->
     Socket = State#client_state.socket,
@@ -141,7 +148,7 @@ send_request(State) ->
                     {ok, Response, NewSocket};
                 {error, Reason} ->
                     lhttpc_sock:close(Socket, Ssl),
-                    {error, Reason}
+                    throw(Reason)
             end;
         {error, closed} ->
             lhttpc_sock:close(Socket, Ssl),
@@ -167,12 +174,8 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             read_response(State, Vsn, Status, [Header | Hdrs], Body);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            case read_body(Vsn, Hdrs, Ssl, Socket) of
-                {ok, NewBody, NewSocket} ->
-                    {ok, {Status, Hdrs, NewBody}, NewSocket};
-                {error, Reason} ->
-                    {error, Reason}
-            end;
+            {NewBody, NewHdrs, NewSocket} = read_body(Vsn, Hdrs, Ssl, Socket),
+            {ok, {Status, NewHdrs, NewBody}, NewSocket};
         {error, closed} ->
             % Either we only noticed that the socket was closed after we
             % sent the request, the server closed it just after we put
@@ -186,7 +189,7 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             },
             send_request(NewState);
         {error, Reason} ->
-            {error, Reason}
+            throw(Reason)
     end.
 
 read_body(Vsn, Hdrs, Ssl, Socket) ->
@@ -217,11 +220,9 @@ read_length(Hdrs, Ssl, Socket, Length) ->
                 _ ->
                     Socket
             end,
-            {ok, Data, NewSocket};
-        {error, closed} ->
-            {error, connection_closed};
-        Other ->
-            Other
+            {Data, Hdrs, NewSocket};
+        {error, Reason} ->
+            throw(Reason)
     end.
 
 read_chunked_body(_, _) ->
@@ -230,23 +231,23 @@ read_chunked_body(_, _) ->
 
 read_infinite_body(Socket, {1, 1}, Hdrs, Ssl) ->
     case lhttpc_lib:header_value("connection", Hdrs) of
-        "close" -> read_until_closed(Socket, <<>>, Ssl);
-        _       -> {error, bad_response}
+        "close" -> read_until_closed(Socket, <<>>, Hdrs, Ssl);
+        _       -> erlang:error(no_content_length)
     end;
 read_infinite_body(Socket, _, Hdrs, Ssl) ->
     case lhttpc_lib:header_value("KeepAlive", Hdrs) of
-        undefined -> read_until_closed(Socket, <<>>, Ssl);
-        _         -> {error, bad_response}
+        undefined -> read_until_closed(Socket, <<>>, Hdrs, Ssl);
+        _         -> erlang:error(no_content_length)
     end.
 
-read_until_closed(Socket, Acc, Ssl) ->
     case lhttpc_sock:read(Socket, Ssl) of
+read_until_closed(Socket, Acc, Hdrs, Ssl) ->
         {ok, Body} ->
             NewAcc = <<Acc/binary, Body/binary>>,
-            read_until_closed(Socket, NewAcc, Ssl);
+            read_until_closed(Socket, NewAcc, Hdrs, Ssl);
         {error, closed} ->
             lhttpc_sock:close(Socket, Ssl),
-            {ok, Acc, undefined}; % The socket has been closed
-        Other ->
-            Other
+            {Acc, Hdrs, undefined}; % The socket has been closed
+        {error, Reason} ->
+            throw(Reason)
     end.

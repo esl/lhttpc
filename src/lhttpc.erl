@@ -156,9 +156,10 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
     receive
         {response, Pid, R} ->
             R;
-        {exit, Reason} ->
-            % We would rather want to exit here, since that
-            % could be caught
+        {exit, Pid, Reason} ->
+            % We would rather want to exit here, instead of letting the
+            % linked client send us an exit signal, since this can be
+            % caught by the caller.
             exit(Reason);
         {'EXIT', Pid, Reason} ->
             % This could happen if the process we're running in taps exits
