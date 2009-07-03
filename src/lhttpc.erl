@@ -65,11 +65,12 @@ stop(_) ->
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
 %%   Timeout = integer() | infinity
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, Body}}
+%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
 %%   StatusCode = integer()
 %%   ReasonPhrase = string()
-%%   Body = binary()
+%%   ResponseBody = binary()
+%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request without a body.
 %% Would be the same as calling `request(URL, Method, Hdrs, [], Timeout)',
 %% that is {@link request/5} with an empty body (`Body' could also be `<<>>').
@@ -92,6 +93,7 @@ request(URL, Method, Hdrs, Timeout) ->
 %%   StatusCode = integer()
 %%   ReasonPhrase = string()
 %%   ResponseBody = binary()
+%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling
 %% `request(URL, Method, Hdrs, Body, Timeout, [])', that is {@link request/6} with
@@ -119,6 +121,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   StatusCode = integer()
 %%   ReasonPhrase = string()
 %%   ResponseBody = binary()
+%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% `URL' is expected to be a valid URL: 
 %% `scheme://host[:port][/path]'.

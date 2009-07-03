@@ -62,10 +62,10 @@ request(From, URL, Method, Hdrs, Body, Options) ->
     Result = try
         execute(URL, Method, Hdrs, Body, Options)
     catch 
-        closed ->
-            {response, self(), {error, connection_closed}};
         Reason ->
             {response, self(), {error, Reason}};
+        error:closed ->
+            {response, self(), {error, connection_closed}};
         error:Error ->
             {exit, self(), {Error, erlang:get_stacktrace()}}
     end,
@@ -91,9 +91,9 @@ execute(URL, Method, Hdrs, Body, Options) ->
         attempts = 1 + proplists:get_value(send_retry, Options, 1)
     },
     Response = case send_request(State) of
-        {ok, R, undefined} ->
+        {R, undefined} ->
             {ok, R};
-        {ok, R, NewSocket} ->
+        {R, NewSocket} ->
             % The socket we ended up doing the request over is returned
             % here, it might be the same as Socket, but we don't know.
             % I've noticed that we don't want to give send sockets that we
@@ -110,15 +110,13 @@ execute(URL, Method, Hdrs, Body, Options) ->
                 _ ->
                     ok
             end,
-            {ok, R};
-        {error, Reason} ->
-            throw(Reason)
+            {ok, R}
     end,
     {response, self(), Response}.
 
 send_request(#client_state{attempts = 0}) ->
     % Don't try again if the number of allowed attempts is 0.
-    {error, connection_closed};
+    throw(connection_closed);
 send_request(#client_state{socket = undefined} = State) ->
     Host = State#client_state.host,
     Port = State#client_state.port,
@@ -134,7 +132,7 @@ send_request(#client_state{socket = undefined} = State) ->
         {error, timeout} ->
             throw(connect_timeout);
         {error, Reason} ->
-            throw(Reason)
+            erlang:error(Reason)
     end;
 send_request(State) ->
     Socket = State#client_state.socket,
@@ -143,13 +141,7 @@ send_request(State) ->
     case lhttpc_sock:send(Socket, Request, Ssl) of
         ok ->
             lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
-            case read_response(State, nil, nil, [], <<>>) of
-                {ok, Response, NewSocket} ->
-                    {ok, Response, NewSocket};
-                {error, Reason} ->
-                    lhttpc_sock:close(Socket, Ssl),
-                    throw(Reason)
-            end;
+            read_response(State, nil, nil, [], <<>>);
         {error, closed} ->
             lhttpc_sock:close(Socket, Ssl),
             NewState = State#client_state{
@@ -157,9 +149,9 @@ send_request(State) ->
                 attempts = State#client_state.attempts - 1
             },
             send_request(NewState);
-        Other ->
+        {error, Reason} ->
             lhttpc_sock:close(Socket, Ssl),
-            Other
+            erlang:error(Reason)
     end.
 
 read_response(State, Vsn, Status, Hdrs, Body) ->
@@ -175,7 +167,7 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             {NewBody, NewHdrs, NewSocket} = read_body(Vsn, Hdrs, Ssl, Socket),
-            {ok, {Status, NewHdrs, NewBody}, NewSocket};
+            {{Status, NewHdrs, NewBody}, NewSocket};
         {error, closed} ->
             % Either we only noticed that the socket was closed after we
             % sent the request, the server closed it just after we put
@@ -189,7 +181,7 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             },
             send_request(NewState);
         {error, Reason} ->
-            throw(Reason)
+            erlang:error(Reason)
     end.
 
 read_body(Vsn, Hdrs, Ssl, Socket) ->
@@ -222,7 +214,7 @@ read_length(Hdrs, Ssl, Socket, Length) ->
             end,
             {Data, Hdrs, NewSocket};
         {error, Reason} ->
-            throw(Reason)
+            erlang:error(Reason)
     end.
 
 read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
@@ -239,7 +231,7 @@ read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
                     read_chunked_body(Socket, Ssl, Hdrs, [Chunk | Chunks])
             end;
         {error, Reason} ->
-            throw(Reason)
+            erlang:error(Reason)
     end.
 
 chunk_size(Bin) ->
@@ -260,7 +252,7 @@ read_chunk(Socket, Ssl, Size) ->
         {ok, Data} ->
             erlang:error({invalid_chunk, Data});
         {error, Reason} ->
-            throw(Reason)
+            erlang:error(Reason)
     end.
 
 read_trailers(Socket, Ssl, Hdrs) ->
@@ -271,7 +263,7 @@ read_trailers(Socket, Ssl, Hdrs) ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
             read_trailers(Socket, Ssl, [Header | Hdrs]);
         {error, {http_error, Data}} ->
-            throw({bad_trailer, Data})
+            erlang:error({bad_trailer, Data})
     end.
 
 read_infinite_body(Socket, {1, 1}, Hdrs, Ssl) ->
@@ -294,5 +286,5 @@ read_until_closed(Socket, Acc, Hdrs, Ssl) ->
             lhttpc_sock:close(Socket, Ssl),
             {Acc, Hdrs, undefined}; % The socket has been closed
         {error, Reason} ->
-            throw(Reason)
+            erlang:error(Reason)
     end.
