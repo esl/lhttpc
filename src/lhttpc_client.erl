@@ -232,7 +232,8 @@ read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
             case chunk_size(ChunkSizeExt) of
                 0 ->
                     Body = list_to_binary(lists:reverse(Chunks)),
-                    {Body, read_trailers(Socket, Ssl, Hdrs, <<>>), Socket};
+                    lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
+                    {Body, read_trailers(Socket, Ssl, Hdrs), Socket};
                 Size ->
                     Chunk = read_chunk(Socket, Ssl, Size),
                     read_chunked_body(Socket, Ssl, Hdrs, [Chunk | Chunks])
@@ -262,46 +263,13 @@ read_chunk(Socket, Ssl, Size) ->
             throw(Reason)
     end.
 
-%% XXX: This seems very much too complicated, right?
-%% Oh well, it seems there is a problem with erlang:decode_packet/3, which I
-%% haven't had time to look at:
-%% erlang:decode_packet(httph,<<"Trailer-1: 1\r\n">>,[]) ->
-%%     {more,undefined}
-%% erlang:decode_packet(httph,<<"Trailer-1: 1\r\nX">>,[]) ->
-%%     {ok,{http_header,0,"Trailer-1",undefined,"1"},<<"X">>}
-%% Luckily this works:
-%% erlang:decode_packet(httph,<<"\r\n">>,[]) ->
-%%     {ok, http_eoh}
-read_trailers(Socket, Ssl, Hdrs, <<>>) ->
+read_trailers(Socket, Ssl, Hdrs) ->
     case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, Line} ->
-            case erlang:decode_packet(httph, Line, []) of
-                {ok, {http_header, _, Name, _, Value}, Rest} ->
-                    Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-                    read_trailers(Socket, Ssl, [Header | Hdrs], Rest);
-                {ok, http_eoh, _} ->
-                    Hdrs;
-                {more, _} ->
-                    read_trailers(Socket, Ssl, Hdrs, Line)
-            end;
-        {error, Reason} ->
-            throw(Reason)
-    end;
-read_trailers(Socket, Ssl, Hdrs, Acc) ->
-    case erlang:decode_packet(httph, Acc, []) of
-        {ok, {http_header, _, Name, _, Value}, Rest} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            read_trailers(Socket, Ssl, [Header | Hdrs], Rest);
-        {ok, http_eoh, _} ->
+        {ok, http_eoh} ->
             Hdrs;
-        {more, _} ->
-            case lhttpc_sock:recv(Socket, Ssl) of
-                {ok, Line} ->
-                    NewAcc = <<Acc/binary, Line/binary>>,
-                    read_trailers(Socket, Ssl, Hdrs, NewAcc);
-                {error, Reason} ->
-                    throw(Reason)
-            end
+        {ok, {http_header, _, Name, _, Value}} ->
+            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
+            read_trailers(Socket, Ssl, [Header | Hdrs])
     end.
 
 read_infinite_body(Socket, {1, 1}, Hdrs, Ssl) ->
