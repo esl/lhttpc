@@ -68,6 +68,7 @@ ssl_test_() ->
     {setup, fun start_app/0, fun stop_app/1, [
             ?_test(ssl_get()),
             ?_test(ssl_post()),
+            ?_test(ssl_chunked()),
             ?_test(connection_count()) % just check that it's 0 (last)
         ]}.
 
@@ -230,6 +231,24 @@ ssl_post() ->
     {ok, Response} = lhttpc:request(URL, "POST", [], Body, 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(BinaryBody, body(Response)).
+
+ssl_chunked() ->
+    Port = start(ssl, [fun chunked_response/5, fun chunked_response_t/5]),
+    URL = ssl_url(Port, "/chunked"),
+    {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
+    ?assertEqual({200, "OK"}, status(FirstResponse)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
+    ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
+            headers(FirstResponse))),
+    {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
+    ?assertEqual({200, "OK"}, status(SecondResponse)),
+    ?assertEqual(<<"Again, great success!">>, body(SecondResponse)),
+    ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
+            headers(SecondResponse))),
+    ?assertEqual("1", lhttpc_lib:header_value("Trailer-1",
+            headers(SecondResponse))),
+    ?assertEqual("2", lhttpc_lib:header_value("Trailer-2",
+            headers(SecondResponse))).
 
 connection_count() ->
     timer:sleep(50), % give the TCP stack time to deliver messages
