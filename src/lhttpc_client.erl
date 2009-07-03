@@ -269,7 +269,9 @@ read_trailers(Socket, Ssl, Hdrs) ->
             Hdrs;
         {ok, {http_header, _, Name, _, Value}} ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            read_trailers(Socket, Ssl, [Header | Hdrs])
+            read_trailers(Socket, Ssl, [Header | Hdrs]);
+        {error, {http_error, Data}} ->
+            throw({bad_trailer, Data})
     end.
 
 read_infinite_body(Socket, {1, 1}, Hdrs, Ssl) ->
