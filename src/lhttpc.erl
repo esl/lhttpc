@@ -187,7 +187,7 @@ kill_client(Pid) ->
             erlang:error(Reason)
     end.
 
--spec verify_options(options(), options()) -> ok | no_return().
+-spec verify_options(options(), options()) -> ok.
 verify_options([{send_retry, N} | Options], Errors)
         when is_integer(N), N >= 0 ->
     verify_options(Options, Errors);
@@ -201,4 +201,8 @@ verify_options([Option | Options], Errors) ->
 verify_options([], []) ->
     ok;
 verify_options([], Errors) ->
+    bad_options(Errors).
+
+-spec bad_options(options()) -> no_return().
+bad_options(Errors) ->
     erlang:error({bad_options, Errors}).
