@@ -42,8 +42,7 @@
         close/2
     ]).
 
--type host() :: string() | {integer(), integer(), integer(), integer()}.
--type options() :: [atom() | {atom(), any()}].
+-include("lhttpc_types.hrl").
 
 %% @spec (Host, Port, Options, Timeout, SslFlag) -> {ok, Socket} | {error, Reason}
 %%   Host = string() | ip_address()
@@ -51,22 +50,22 @@
 %%   Options = [{atom(), term()} | atom()]
 %%   Timeout = infinity | integer()
 %%   SslFlag = bool()
-%%   Socket = port()
+%%   Socket = socket()
 %%   Reason = atom()
 %% @doc
 %% Connects to `Host' and `Port'.
 %% Will use the `ssl' module if `SslFlag' is `true' and gen_tcp otherwise.
 %% `Options' are the normal `gen_tcp' or `ssl' Options.
 %% @end
--spec connect(host(), integer(), options(), timeout(), bool()) ->
-    {ok, port()} | {error, atom()}.
+-spec connect(host(), integer(), socket_options(), timeout(), bool()) ->
+    {ok, socket()} | {error, atom()}.
 connect(Host, Port, Options, Timeout, true) ->
     ssl:connect(Host, Port, Options, Timeout);
 connect(Host, Port, Options, Timeout, false) ->
     gen_tcp:connect(Host, Port, Options, Timeout).
 
 %% @spec (Socket, SslFlag) -> {ok, Data} | {error, Reason}
-%%   Socket = port()
+%%   Socket = socket()
 %%   Length = integer()
 %%   SslFlag = bool()
 %%   Data = term()
@@ -76,14 +75,15 @@ connect(Host, Port, Options, Timeout, false) ->
 %% Will block untill data is available on the socket and return the first
 %% packet.
 %% @end
--spec recv(port(), bool()) -> {ok, any()} | {error, atom()}.
+-spec recv(socket(), bool()) ->
+    {ok, any()} | {error, atom()} | {error, {http_error, string()}}.
 recv(Socket, true) ->
     ssl:recv(Socket, 0);
 recv(Socket, false) ->
     gen_tcp:recv(Socket, 0).
 
 %% @spec (Socket, Length, SslFlag) -> {ok, Data} | {error, Reason}
-%%   Socket = port()
+%%   Socket = socket()
 %%   Length = integer()
 %%   SslFlag = bool()
 %%   Data = term()
@@ -92,7 +92,7 @@ recv(Socket, false) ->
 %% Receives `Length' bytes from `Socket'.
 %% Will block untill `Length' bytes is available.
 %% @end
--spec recv(port(), integer(), bool()) -> {ok, any()} | {error, atom()}.
+-spec recv(socket(), integer(), bool()) -> {ok, any()} | {error, atom()}.
 recv(_, 0, _) ->
     {ok, <<>>};
 recv(Socket, Length, true) ->
@@ -101,7 +101,7 @@ recv(Socket, Length, false) ->
     gen_tcp:recv(Socket, Length).
 
 %% @spec (Socket, Data, SslFlag) -> ok | {error, Reason}
-%%   Socket = port()
+%%   Socket = socket()
 %%   Data = iolist()
 %%   SslFlag = bool()
 %%   Reason = atom()
@@ -110,21 +110,21 @@ recv(Socket, Length, false) ->
 %% Will use the `ssl' module if `SslFlag' is set to `true', otherwise the
 %% gen_tcp module.
 %% @end
--spec send(port(), iolist(), bool()) -> ok | {error, atom()}.
+-spec send(socket(), iolist(), bool()) -> ok | {error, atom()}.
 send(Socket, Request, true) ->
     ssl:send(Socket, Request);
 send(Socket, Request, false) ->
     gen_tcp:send(Socket, Request).
 
 %% @spec (Socket, Pid, SslFlag) -> ok | {error, Reason}
-%%   Socket = port()
+%%   Socket = socket()
 %%   Pid = pid()
 %%   SslFlag = bool()
 %%   Reason = atom()
 %% @doc
 %% Sets the controlling proces for the `Socket'.
 %% @end
--spec controlling_process(port(), pid(), bool()) ->
+-spec controlling_process(socket(), pid(), bool()) ->
     ok | {error, atom()}.
 controlling_process(Socket, Pid, true) ->
     ssl:controlling_process(Socket, Pid);
@@ -132,14 +132,14 @@ controlling_process(Socket, Pid, false) ->
     gen_tcp:controlling_process(Socket, Pid).
 
 %% @spec (Socket, Options, SslFlag) -> ok | {error, Reason}
-%%   Socket = port()
+%%   Socket = socket()
 %%   Options = [atom() | {atom(), term()}]
 %%   SslFlag = bool()
 %%   Reason = atom()
 %% @doc
 %% Sets options for a socket. Look in `inet:setopts/2' for more info.
 %% @end
--spec setopts(port(), options(), bool()) ->
+-spec setopts(socket(), socket_options(), bool()) ->
     ok | {error, atom()}.
 setopts(Socket, Options, true) ->
     ssl:setopts(Socket, Options);
@@ -147,13 +147,13 @@ setopts(Socket, Options, false) ->
     inet:setopts(Socket, Options).
 
 %% @spec (Socket, SslFlag) -> ok | {error, Reason}
-%%   Socket = port()
+%%   Socket = socket()
 %%   SslFlag = bool()
 %%   Reason = atom()
 %% @doc
 %% Closes a socket.
 %% @end
--spec close(port(), bool()) -> ok | {error, atom()}.
+-spec close(socket(), bool()) -> ok | {error, atom()}.
 close(Socket, true) ->
     ssl:close(Socket);
 close(Socket, false) ->

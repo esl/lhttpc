@@ -27,6 +27,14 @@
 -type header() :: {string() | atom(), string()}.
 -type headers() :: [header()].
 
+-type socket() :: _.
+
 -type option() ::
         {connect_timeout, timeout()} |
         {send_retry, non_neg_integer()}.
+
+-type options() :: [option()].
+
+-type host() :: string() | {integer(), integer(), integer(), integer()}.
+
+-type socket_options() :: [{atom(), term()} | atom()].
