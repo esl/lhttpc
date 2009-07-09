@@ -43,7 +43,10 @@
         request,
         socket,
         connect_timeout,
-        attempts
+        attempts,
+        requester :: pid(), 
+        partial_upload = false :: true | false,
+        upload_window :: non_neg_integer() | infinity
     }).
 
 -spec request(pid(), string(), string() | atom(), headers(),
@@ -60,7 +63,7 @@
 %% @end
 request(From, URL, Method, Hdrs, Body, Options) ->
     Result = try
-        execute(URL, Method, Hdrs, Body, Options)
+        execute(From, URL, Method, Hdrs, Body, Options)
     catch 
         Reason ->
             {response, self(), {error, Reason}};
@@ -71,8 +74,9 @@ request(From, URL, Method, Hdrs, Body, Options) ->
     end,
     From ! Result,
     ok.
-
-execute(URL, Method, Hdrs, Body, Options) ->
+%%TODO:if partial_upload's first request has body and no cont.length
+%% has to be chunked?
+execute(From, URL, Method, Hdrs, Body, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
     Request = lhttpc_lib:format_request(Path, Method, Hdrs, Host, Body),
     SocketRequest = {socket, self(), Host, Port, Ssl},
@@ -85,10 +89,12 @@ execute(URL, Method, Hdrs, Body, Options) ->
         port = Port,
         ssl = Ssl,
         request = Request,
+        requester = From,
         socket = Socket,
         connect_timeout = proplists:get_value(connect_timeout, Options,
             infinity),
-        attempts = 1 + proplists:get_value(send_retry, Options, 1)
+        attempts = 1 + proplists:get_value(send_retry, Options, 1),
+        partial_upload = proplists:get_value(partial_upload, Options, false)
     },
     Response = case send_request(State) of
         {R, undefined} ->
@@ -140,8 +146,13 @@ send_request(State) ->
     Request = State#client_state.request,
     case lhttpc_sock:send(Socket, Request, Ssl) of
         ok ->
-            lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
-            read_response(State, nil, nil, [], <<>>);
+            if
+                State#client_state.partial_upload ->
+                    read_partial_upload(State);
+                not State#client_state.partial_upload ->
+                    lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
+                    read_response(State, nil, nil, [], <<>>)
+            end;
         {error, closed} ->
             lhttpc_sock:close(Socket, Ssl),
             NewState = State#client_state{
@@ -154,6 +165,28 @@ send_request(State) ->
             erlang:error(Reason)
     end.
 
+read_partial_upload(State) ->
+    Response = {response, self(), {ok, 
+                                  {self(), State#client_state.upload_window}}}, 
+    State#client_state.requester ! Response,
+    partial_upload_loop(State#client_state{attempts= 1}).
+
+
+partial_upload_loop(State = #client_state{requester= Pid}) ->
+    receive
+        {body_part, Pid, <<>>} ->
+            %%close_request(State),
+            Socket = State#client_state.socket,
+            Ssl = State#client_state.ssl,
+            lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
+            read_response(State, nil, nil, [], <<>>);
+        {body_part, Pid, Bin} ->
+            %%TODO: send the message
+            State#client_state.requester ! {ack, self()}; 
+        Error -> %% got garbage
+            erlang:error({malformed_message, Error})
+    end.
+ 
 read_response(State, Vsn, Status, Hdrs, Body) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,

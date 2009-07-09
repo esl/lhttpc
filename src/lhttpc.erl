@@ -32,6 +32,7 @@
 -behaviour(application).
 
 -export([request/4, request/5, request/6]).
+-export([send_body_part/2, read_ack/1, read_response/1]).
 -export([start/2, stop/1]).
 
 -include("lhttpc_types.hrl").
@@ -186,6 +187,37 @@ kill_client(Pid) ->
         {'DOWN', _, process, Pid, Reason}  ->
             erlang:error(Reason)
     end.
+
+send_body_part({_Pid, 0}, _Bin) ->
+    {error, no_free_window};
+send_body_part({Pid, Window}, Bin) 
+        when Window >= 0 and is_binary(Bin) ->
+    Pid ! {body_part, self(), Bin},
+    {Pid, Window - 1}.
+%%TODO: It can be nasty to not read all the ack messages before going
+%% into receive
+%%TODO: {error, closed} or some other errors here as well
+read_ack({Pid, Window}) ->
+    receive
+        {ack, Pid} ->
+            %%body_part ACK
+            read_ack({Pid, Window + 1});
+        {reponse, Pid, R} ->
+            %%something went wrong in the client
+            %%for example the connection died or
+            %% the last body part has been sent 
+            R;
+        {exit, Pid, Reason} ->
+            exit(Reason);
+        {'EXIT', Pid, Reason} ->
+            exit(Reason)
+    after 0 ->
+        {Pid, Window}
+    end.
+
+read_response(State = {Pid, Window}) ->
+    NewState = send_body_part(State, <<>>),
+    read_ack(NewState).
 
 -spec verify_options(options(), options()) -> ok.
 verify_options([{send_retry, N} | Options], Errors)
