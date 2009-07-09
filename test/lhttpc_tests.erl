@@ -50,7 +50,8 @@ tcp_test_() ->
             ?_test(simple_get()),
             ?_test(empty_get()),
             ?_test(get_with_mandatory_hdrs()),
-            ?_test(no_content_length_get()),
+            ?_test(no_content_length()),
+            ?_test(no_content_length_1_0()),
             ?_test(server_connection_close()),
             ?_test(client_connection_close()),
             ?_test(pre_1_1_server_connection()),
@@ -105,8 +106,15 @@ get_with_mandatory_hdrs() ->
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
-no_content_length_get() ->
+no_content_length() ->
     Port = start(gen_tcp, [fun no_content_length/5]),
+    URL = url(Port, "/no_cl"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+no_content_length_1_0() ->
+    Port = start(gen_tcp, [fun no_content_length_1_0/5]),
     URL = url(Port, "/no_cl"),
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
@@ -399,6 +407,14 @@ no_content_length(Module, Socket, _, _, _) ->
         Socket,
         "HTTP/1.1 200 OK\r\n"
         "Content-type: text/plain\r\nConnection: close\r\n\r\n"
+        ?DEFAULT_STRING
+    ).
+
+no_content_length_1_0(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.0 200 OK\r\n"
+        "Content-type: text/plain\r\n\r\n"
         ?DEFAULT_STRING
     ).
 
