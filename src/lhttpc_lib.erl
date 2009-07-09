@@ -31,7 +31,7 @@
 %%% @end
 -module(lhttpc_lib).
 
--export([parse_url/1, format_request/5, header_value/2]).
+-export([parse_url/1, format_request/5, header_value/2, header_value/3]).
 -export([maybe_atom_to_list/1]).
 
 -include("lhttpc_types.hrl").
@@ -42,13 +42,25 @@
 %% Value = term()
 %% @doc
 %% Returns the value associated with the `Header' in `Headers'.
-%% `Header' must be a lowercase string, since every hader is mangled to
+%% `Header' must be a lowercase string, since every header is mangled to
 %% check the match.
 %% @end
--spec header_value(string(), [{string(), any()}]) -> undefined | string().
+-spec header_value(string(), [{string(), Value}]) -> undefined | Value.
 header_value(Hdr, Hdrs) ->
     header_value(Hdr, Hdrs, undefined).
 
+%% @spec header_value(Header, Headers, Default) -> Default | term()
+%% Header = string()
+%% Headers = [{string(), term()}]
+%% Value = term()
+%% Default = term()
+%% @doc
+%% Returns the value associated with the `Header' in `Headers'.
+%% `Header' must be a lowercase string, since every header is mangled to
+%% check the match.  If no match is found, `Default' is returned.
+%% @end
+-spec header_value(string(), [{string(), Value}], Default) ->
+    Default | Value.
 header_value(Hdr, [{Hdr, Value} | _], _) ->
     Value;
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) ->

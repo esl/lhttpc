@@ -37,14 +37,18 @@
 -include("lhttpc_types.hrl").
 
 -record(client_state, {
-        host,
-        port,
-        ssl,
-        request,
+        host :: string(),
+        port = 80 :: integer(),
+        ssl = false :: true | false,
+        request :: iolist(),
+        request_headers :: headers(),
         socket,
-        connect_timeout,
-        attempts
+        connect_timeout = infinity :: timeout(),
+        attempts :: integer()
     }).
+
+-define(CONNECTION_HDR(HDRS, DEFAULT),
+    string:to_lower(lhttpc_lib:header_value("connection", HDRS, DEFAULT))).
 
 -spec request(pid(), string(), string() | atom(), headers(),
         iolist(), [option()]) -> no_return().
@@ -85,6 +89,7 @@ execute(URL, Method, Hdrs, Body, Options) ->
         port = Port,
         ssl = Ssl,
         request = Request,
+        request_headers = Hdrs,
         socket = Socket,
         connect_timeout = proplists:get_value(connect_timeout, Options,
             infinity),
@@ -166,8 +171,12 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             read_response(State, Vsn, Status, [Header | Hdrs], Body);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            {NewBody, NewHdrs, NewSocket} = read_body(Vsn, Hdrs, Ssl, Socket),
-            {{Status, NewHdrs, NewBody}, NewSocket};
+            {NewBody, NewHdrs} = read_body(Vsn, Hdrs, Ssl, Socket),
+            Response = {Status, NewHdrs, NewBody},
+            RequestHdrs = State#client_state.request_headers,
+            NewSocket = maybe_close_socket(Socket, Ssl, Vsn, RequestHdrs,
+                NewHdrs),
+            {Response, NewSocket};
         {error, closed} ->
             % Either we only noticed that the socket was closed after we
             % sent the request, the server closed it just after we put
@@ -184,6 +193,27 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             erlang:error(Reason)
     end.
 
+maybe_close_socket(Socket, Ssl, {1, Minor}, ReqHdrs, RespHdrs) when Minor >= 1->
+    ClientConnection = ?CONNECTION_HDR(ReqHdrs, "keep-alive"),
+    ServerConnection = ?CONNECTION_HDR(RespHdrs, "keep-alive"),
+    if
+        ClientConnection =:= "close"; ServerConnection =:= "close" ->
+            lhttpc_sock:close(Socket, Ssl),
+            undefined;
+        ClientConnection =/= "close", ServerConnection =/= "close" ->
+            Socket
+    end;
+maybe_close_socket(Socket, Ssl, {0, _}, ReqHdrs, RespHdrs) ->
+    ClientConnection = ?CONNECTION_HDR(ReqHdrs, "keep-alive"),
+    ServerConnection = ?CONNECTION_HDR(RespHdrs, "close"),
+    if
+        ClientConnection =:= "close"; ServerConnection =/= "keep-alive" ->
+            lhttpc_sock:close(Socket, Ssl),
+            undefined;
+        ClientConnection =/= "close", ServerConnection =:= "keep-alive" ->
+            Socket
+    end.
+
 read_body(Vsn, Hdrs, Ssl, Socket) ->
     % Find out how to read the entity body from the request.
     % * If we have a Content-Length, just use that and read the complete
@@ -191,7 +221,7 @@ read_body(Vsn, Hdrs, Ssl, Socket) ->
     % * If Transfer-Encoding is set to chunked, we should read one chunk at
     %   the time
     % * If neither of this is true, we need to read until the socket is
-    %   closed (this was common in versions before 1.1).
+    %   closed (AFAIK, this was common in versions before 1.1).
     case lhttpc_lib:header_value("content-length", Hdrs) of
         undefined ->
             case lhttpc_lib:header_value("transfer-encoding", Hdrs) of
@@ -205,14 +235,7 @@ read_body(Vsn, Hdrs, Ssl, Socket) ->
 read_length(Hdrs, Ssl, Socket, Length) ->
     case lhttpc_sock:recv(Socket, Length, Ssl) of
         {ok, Data} ->
-            NewSocket = case lhttpc_lib:header_value("connection", Hdrs) of
-                "close" ->
-                    lhttpc_sock:close(Socket, Ssl),
-                    undefined;
-                _ ->
-                    Socket
-            end,
-            {Data, Hdrs, NewSocket};
+            {Data, Hdrs};
         {error, Reason} ->
             erlang:error(Reason)
     end.
@@ -225,7 +248,7 @@ read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
                 0 ->
                     Body = list_to_binary(lists:reverse(Chunks)),
                     lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
-                    {Body, read_trailers(Socket, Ssl, Hdrs), Socket};
+                    {Body, read_trailers(Socket, Ssl, Hdrs)};
                 Size ->
                     Chunk = read_chunk(Socket, Ssl, Size),
                     read_chunked_body(Socket, Ssl, Hdrs, [Chunk | Chunks])
@@ -266,15 +289,17 @@ read_trailers(Socket, Ssl, Hdrs) ->
             erlang:error({bad_trailer, Data})
     end.
 
-read_infinite_body(Socket, {1, 1}, Hdrs, Ssl) ->
-    case lhttpc_lib:header_value("connection", Hdrs) of
+read_infinite_body(Socket, {1, Minor}, Hdrs, Ssl) when Minor >= 1 ->
+    HdrValue = lhttpc_lib:header_value("connection", Hdrs, "keep-alive"),
+    case string:to_lower(HdrValue) of
         "close" -> read_until_closed(Socket, <<>>, Hdrs, Ssl);
         _       -> erlang:error(no_content_length)
     end;
 read_infinite_body(Socket, _, Hdrs, Ssl) ->
-    case lhttpc_lib:header_value("KeepAlive", Hdrs) of
-        undefined -> read_until_closed(Socket, <<>>, Hdrs, Ssl);
-        _         -> erlang:error(no_content_length)
+    HdrValue = lhttpc_lib:header_value("connection", Hdrs, "close"),
+    case string:to_lower(HdrValue) of
+        "close" -> read_until_closed(Socket, <<>>, Hdrs, Ssl);
+        _       -> erlang:error(no_content_length)
     end.
 
 read_until_closed(Socket, Acc, Hdrs, Ssl) ->
@@ -283,8 +308,7 @@ read_until_closed(Socket, Acc, Hdrs, Ssl) ->
             NewAcc = <<Acc/binary, Body/binary>>,
             read_until_closed(Socket, NewAcc, Hdrs, Ssl);
         {error, closed} ->
-            lhttpc_sock:close(Socket, Ssl),
-            {Acc, Hdrs, undefined}; % The socket has been closed
+            {Acc, Hdrs};
         {error, Reason} ->
             erlang:error(Reason)
     end.
