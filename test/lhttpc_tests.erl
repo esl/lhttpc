@@ -51,7 +51,10 @@ tcp_test_() ->
             ?_test(empty_get()),
             ?_test(get_with_mandatory_hdrs()),
             ?_test(no_content_length_get()),
-            ?_test(connection_close()),
+            ?_test(server_connection_close()),
+            ?_test(client_connection_close()),
+            ?_test(pre_1_1_server_connection()),
+            ?_test(pre_1_1_server_keep_alive()),
             ?_test(simple_put()),
             ?_test(post()),
             ?_test(bad_url()),
@@ -109,7 +112,7 @@ no_content_length_get() ->
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
-connection_close() ->
+server_connection_close() ->
     Port = start(gen_tcp, [fun respond_and_close/5]),
     URL = url(Port, "/close"),
     Body = pid_to_list(self()),
@@ -117,6 +120,35 @@ connection_close() ->
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)),
     receive closed -> ok end.
+
+client_connection_close() ->
+    Port = start(gen_tcp, [fun respond_and_wait/5]),
+    URL = url(Port, "/close"),
+    Body = pid_to_list(self()),
+    Hdrs = [{"Connection", "close"}],
+    {ok, _} = lhttpc:request(URL, put, Hdrs, Body, 1000),
+    % Wait for the server to see that socket has been closed
+    receive closed -> ok end.
+
+pre_1_1_server_connection() ->
+    Port = start(gen_tcp, [fun pre_1_1_server/5]),
+    URL = url(Port, "/close"),
+    Body = pid_to_list(self()),
+    {ok, _} = lhttpc:request(URL, put, [], Body, 1000),
+    % Wait for the server to see that socket has been closed.
+    % The socket should be closed by us since the server responded with a
+    % 1.0 version, and not the Connection: keep-alive header.
+    receive closed -> ok end.
+
+pre_1_1_server_keep_alive() ->
+    Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
+    URL = url(Port, "/close"),
+    {ok, Response1} = lhttpc:request(URL, get, [], [], 1000),
+    {ok, Response2} = lhttpc:request(URL, get, [], [], 1000),
+    ?assertEqual({200, "OK"}, status(Response1)),
+    ?assertEqual({200, "OK"}, status(Response2)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)).
 
 simple_put() ->
     simple(put),
@@ -321,9 +353,36 @@ respond_and_close(Module, Socket, _, _, Body) ->
         "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
         ?DEFAULT_STRING
     ),
-    case Module:recv(Socket, 0) of
-        {error, closed} -> Pid ! closed
-    end,
+    {error, closed} = Module:recv(Socket, 0),
+    Pid ! closed,
+    Module:close(Socket).
+
+respond_and_wait(Module, Socket, _, _, Body) ->
+    Pid = list_to_pid(binary_to_list(Body)),
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+        ?DEFAULT_STRING
+    ),
+    % We didn't signal a connection close, but we want the client to do that
+    % any way
+    {error, closed} = Module:recv(Socket, 0),
+    Pid ! closed,
+    Module:close(Socket).
+
+pre_1_1_server(Module, Socket, _, _, Body) ->
+    Pid = list_to_pid(binary_to_list(Body)),
+    Module:send(
+        Socket,
+        "HTTP/1.0 200 OK\r\n"
+        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+        ?DEFAULT_STRING
+    ),
+    % We didn't signal a connection close, but we want the client to do that
+    % any way since we're 1.0 now
+    {error, closed} = Module:recv(Socket, 0),
+    Pid ! closed,
     Module:close(Socket).
 
 very_slow_response(Module, Socket, _, _, _) ->
