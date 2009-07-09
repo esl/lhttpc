@@ -60,6 +60,8 @@ tcp_test_() ->
             ?_test(connection_timeout()),
             ?_test(suspended_manager()),
             ?_test(chunked_encoding()),
+            ?_test(partial_upload_identity()),
+            ?_test(partial_upload_chunked()),
             ?_test(close_connection()),
             ?_test(connection_count()) % just check that it's 0 (last)
         ]}.
@@ -210,6 +212,58 @@ chunked_encoding() ->
     ?assertEqual("2", lhttpc_lib:header_value("Trailer-2",
             headers(SecondResponse))).
 
+partial_upload_identity() ->
+    Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
+    URL = url(Port, "/partial_upload"),
+    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
+    Hdrs = [{"Content-Length", integer_to_list(iolist_size(Body))}],
+    Options = [{partial_upload, 1}],
+    {ok, UploadState1} = lhttpc:request(URL, post, Hdrs, hd(Body), 1000, Options),
+    Response1 = lists:foldl(fun upload_parts/2, UploadState1,
+        tl(Body) ++ [http_eob]),
+    ?assertEqual({200, "OK"}, status(Response1)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
+    ?assertEqual(<<"This is chunky stuff!">>,
+        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response1))),
+    % Make sure it works with no body part in the original request as well
+    {ok, UploadState2} = lhttpc:request(URL, post, Hdrs, [], 1000, Options),
+    Response2 = lists:foldl(fun upload_parts/2, UploadState2,
+        Body ++ [http_eob]),
+    ?assertEqual({200, "OK"}, status(Response2)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
+    ?assertEqual(<<"This is chunky stuff!">>,
+        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response2))).
+
+partial_upload_chunked() ->
+    Port = start(gen_tcp, [fun chunked_upload/5, fun chunked_upload/5]),
+    URL = url(Port, "/chunked_upload"),
+    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<"stuff!">>],
+    Options = [{partial_upload, 1}],
+    {ok, UploadState1} = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
+    Trailer = {"X-Trailer-1", "my tail is tailing me...."},
+    {ok, Response1} = lhttpc:send_trailers(
+        lists:foldl(fun upload_parts/2, UploadState1, tl(Body)),
+        [Trailer]
+    ),
+    ?assertEqual({200, "OK"}, status(Response1)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
+    ?assertEqual(<<"This is chunky stuff!">>,
+        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response1))),
+    ?assertEqual(element(2, Trailer), 
+        lhttpc_lib:header_value("X-Test-Orig-Trailer-1", headers(Response1))),
+    % Make sure it works with no body part in the original request as well
+    {ok, UploadState2} = lhttpc:request(URL, post, [], [], 1000, Options),
+    {ok, Response2} = lhttpc:send_trailers(
+        lists:foldl(fun upload_parts/2, UploadState2, Body),
+        [Trailer]
+    ),
+    ?assertEqual({200, "OK"}, status(Response2)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
+    ?assertEqual(<<"This is chunky stuff!">>,
+        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response2))),
+    ?assertEqual(element(2, Trailer), 
+        lhttpc_lib:header_value("X-Test-Orig-Trailer-1", headers(Response2))).
+
 close_connection() ->
     Port = start(gen_tcp, [fun close_connection/5]),
     URL = url(Port, "/close"),
@@ -261,6 +315,10 @@ invalid_options() ->
 
 %%% Helpers functions
 
+upload_parts(BodyPart, CurrentState) ->
+    {ok, NextState} = lhttpc:send_body_part(CurrentState, BodyPart, 1000),
+    NextState.
+
 simple(Method) ->
     Port = start(gen_tcp, [fun simple_response/5]),
     URL = url(Port, "/simple"),
@@ -286,12 +344,30 @@ headers({_, Headers, _}) ->
     Headers.
 
 %%% Responders
-simple_response(Module, Socket, _Request, _Headers, _Body) ->
+simple_response(Module, Socket, _Request, _Headers, Body) ->
     Module:send(
         Socket,
-        "HTTP/1.1 200 OK\r\n"
-        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
-        ?DEFAULT_STRING
+        [
+            "HTTP/1.1 200 OK\r\n"
+            "Content-type: text/plain\r\nContent-length: 14\r\n"
+            "X-Test-Orig-Body: ", Body, "\r\n\r\n"
+            ?DEFAULT_STRING
+        ]
+    ).
+
+chunked_upload(Module, Socket, _, Headers, undefined) ->
+    TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
+    {Body, HeadersAndTrailers} = webserver:read_chunked(Module, Socket),
+    Trailer1 = lhttpc_lib:header_value("X-Trailer-1", HeadersAndTrailers),
+    Module:send(
+        Socket,
+        [
+            "HTTP/1.1 200 OK\r\n"
+            "X-Test-Orig-Trailer-1:", Trailer1, "\r\n"
+            "X-Test-Orig-Enc: ", TransferEncoding, "\r\n"
+            "X-Test-Orig-Body: ", Body, "\r\n\r\n"
+            ?DEFAULT_STRING
+        ]
     ).
 
 empty_body(Module, Socket, _, _, _) ->

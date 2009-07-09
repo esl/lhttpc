@@ -30,7 +30,7 @@
 %%% @end
 -module(webserver).
 
--export([start/2]).
+-export([start/2, read_chunked/3]).
 -export([accept_connection/3]).
 
 start(Module, Responders) ->
@@ -41,6 +41,38 @@ start(Module, Responders) ->
 accept_connection(Module, ListenSocket, Responders) ->
     Socket = accept(Module, ListenSocket),
     server_loop(Module, Socket, nil, [], Responders).
+
+read_chunked(Module, Socket, Headers) ->
+    Body = read_chunks(Module, Socket, []),
+    ok = setopts(Module, Socket, [{packet, httph}]),
+    {Body, read_trailers(Module, Socket, Headers)}.
+
+read_chunks(Module, Socket, Acc) ->
+    ok = setopts(Module, Socket, [{packet, line}]),
+    case Module:recv(Socket, 0) of
+        {ok, HexSizeExtension} ->
+            case chunk_size(HexSizeExtension, []) of
+                0 -> 
+                    list_to_binary(lists:reverse(Acc));
+            Size ->
+                    setopts(Module, Socket, [{packet, raw}]),
+                    {ok, Chunk} = Module:recv(Socket, Size),
+                    read_chunks(Module, Socket, [Chunk | Acc])
+            end;
+        {error, Reason} ->
+            erlang:error(Reason)
+    end.
+
+read_trailers(Module, Socket, Hdrs) ->
+    case Module:recv(Socket, 0) of
+        {ok, {http_header, _, Name, _, Value}} when is_atom(Name) ->
+            Trailer = {atom_to_list(Name), Value},
+            read_trailers(Module, Socket, [Trailer | Hdrs]);
+        {ok, {http_header, _, Name, _, Value}} when is_list(Name) ->
+            Trailer = {Name, Value},
+            read_trailers(Module, Socket, [Trailer | Hdrs]);
+        {ok, {http_eoh}} -> Hdrs
+    end.
 
 server_loop(Module, Socket, _, _, []) ->
     Module:close(Socket);
@@ -111,3 +143,10 @@ port(ssl, Socket) ->
 port(_, Socket) ->
     {ok, Port} = inet:port(Socket),
     Port.
+
+chunk_size(<<$;, _/binary>>, Acc) ->
+    erlang:integer_to_list(lists:reverse(Acc), 16);
+chunk_size(<<"\r\n">>, Acc) ->
+    erlang:integer_to_list(lists:reverse(Acc), 16);
+chunk_size(<<Char, Rest/binary>>, Acc) ->
+    chunk_size(Rest, [Char | Acc]).
