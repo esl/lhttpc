@@ -277,8 +277,8 @@ read_infinite_body(Socket, {1, Minor}, Hdrs, Ssl) when Minor >= 1 ->
 read_infinite_body(Socket, _, Hdrs, Ssl) ->
     HdrValue = lhttpc_lib:header_value("connection", Hdrs, "close"),
     case string:to_lower(HdrValue) of
-        "close" -> read_until_closed(Socket, <<>>, Hdrs, Ssl);
-        _       -> erlang:error(no_content_length)
+        "keep-alive" -> erlang:error(no_content_length);
+        _            -> read_until_closed(Socket, <<>>, Hdrs, Ssl)
     end.
 
 read_until_closed(Socket, Acc, Hdrs, Ssl) ->
