@@ -2,13 +2,17 @@ Version 1.2.0:
 * Add support for options
     * {connect_timeout, Milliseconds}: Aborts the connect phase after Milliseconds
     * {send_retry, N}: The client will retry sending the request N times if the connection is closed
-* Add support for Chunked encoding
+* Add support for downloading chunked transfer encoding
 * More consistent error handling
     * The client can either return {ok, Result} or {error, Reason}. Reason wasn't very well defined before
         * connection_closed: The server closed the connection on us (N times in case it happens just after sending the request) 
         * connect_timeout: If the TCP stack gives up or we hit the connect_timeout option
         * timeout: If the overall request timeout value is hit
     * All other errors (socket, protocol etc. will result in a runtime error)
+* Better connection handling (issues #2 and #3 on bitbucket.org/etc/lhttpc)
+    * Now understands what to do with connections to servers < HTTP/1.1
+    * Now respects "Connection: close" in request headers, which means
+      clients can choose to not use persistent connections
 
 Version 1.1.2:
 * Fix minor error with {active, once} instead of {active, true} in manager
