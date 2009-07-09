@@ -302,7 +302,7 @@ maybe_close_socket(Socket, Ssl, {1, Minor}, ReqHdrs, RespHdrs) when Minor >= 1->
         ClientConnection =/= "close", ServerConnection =/= "close" ->
             Socket
     end;
-maybe_close_socket(Socket, Ssl, {0, _}, ReqHdrs, RespHdrs) ->
+maybe_close_socket(Socket, Ssl, _, ReqHdrs, RespHdrs) ->
     ClientConnection = ?CONNECTION_HDR(ReqHdrs, "keep-alive"),
     ServerConnection = ?CONNECTION_HDR(RespHdrs, "close"),
     if
