@@ -40,3 +40,7 @@
 -type host() :: string() | {integer(), integer(), integer(), integer()}.
 
 -type socket_options() :: [{atom(), term()} | atom()].
+
+%%-type timeout() :: non_neg_integer() | infinity.
+
+-type window_size() :: non_neg_integer() | infinity.
