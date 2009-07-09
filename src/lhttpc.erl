@@ -32,7 +32,7 @@
 -behaviour(application).
 
 -export([request/4, request/5, request/6]).
--export([send_body_part/2, read_ack/1, read_response/1]).
+-export([send_body_part/3, send_trailers/3]).
 -export([start/2, stop/1]).
 
 -include("lhttpc_types.hrl").
@@ -188,20 +188,28 @@ kill_client(Pid) ->
             erlang:error(Reason)
     end.
 
-send_body_part({_Pid, 0}, _Bin) ->
-    {error, no_free_window};
-send_body_part({Pid, Window}, Bin) 
-        when Window >= 0 and is_binary(Bin) ->
+-spec send_body_part({pid(), window_size()}, binary(), timeout()) -> 
+        {pid(), window_size()} | result().
+send_body_part({Pid, 0}, Bin, Timeout) ->
+    receive
+        {ack, Pid} ->
+            send_body_part({Pid, 1}, Bin, Timeout);
+        {response, Pid, R} ->
+            R;
+        {exit, Pid, Reason} ->
+            exit(Reason);
+        {'EXIT', Pid, Reason} ->
+            exit(Reason)
+    after Timeout ->
+        kill_client(Pid)
+    end;
+send_body_part({Pid, Window}, Bin, _Timeout) 
+        when Window >= 0, is_binary(Bin) ->
     Pid ! {body_part, self(), Bin},
-    {Pid, Window - 1}.
-%%TODO: It can be nasty to not read all the ack messages before going
-%% into receive
-%%TODO: {error, closed} or some other errors here as well
-read_ack({Pid, Window}) ->
     receive
         {ack, Pid} ->
             %%body_part ACK
-            read_ack({Pid, Window + 1});
+            {Pid, Window};
         {reponse, Pid, R} ->
             %%something went wrong in the client
             %%for example the connection died or
@@ -212,12 +220,37 @@ read_ack({Pid, Window}) ->
         {'EXIT', Pid, Reason} ->
             exit(Reason)
     after 0 ->
-        {Pid, Window}
+        {Pid, dec(Window)}
+    end;
+send_body_part({Pid, Window}, http_eob, Timeout) ->
+    Pid ! {body_part, self(), http_eob},
+    read_response({Pid, Window}, Timeout).
+
+-spec send_trailers({pid(), window_size()}, [{string() | string()}], 
+        timeout()) -> result().
+send_trailers({Pid, Window}, Trailers, Timeout) ->
+    Pid ! {trailers, self(), Trailers},
+    read_response({Pid, Window}, Timeout).
+
+-spec read_response({pid(), window_size()}, timeout()) -> result().
+read_response({Pid, Window}, Timeout) ->
+    receive
+        {ack, Pid} ->
+            read_response({Pid, Window}, Timeout); %%Maybe increment Window?
+        {response, Pid, R} ->
+            R;
+        {exit, Pid, Reason} ->
+            exit(Reason);
+        {'EXIT', Pid, Reason} ->
+            exit(Reason)
+    after Timeout ->
+        kill_client(Pid)
     end.
 
-read_response(State = {Pid, Window}) ->
-    NewState = send_body_part(State, <<>>),
-    read_ack(NewState).
+-spec dec(timeout()) -> timeout().
+dec(Num) when is_integer(Num) -> Num - 1;
+dec(Else)                     -> Else.
+
 
 -spec verify_options(options(), options()) -> ok.
 verify_options([{send_retry, N} | Options], Errors)
