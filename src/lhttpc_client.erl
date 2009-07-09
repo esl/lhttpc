@@ -193,27 +193,6 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             erlang:error(Reason)
     end.
 
-maybe_close_socket(Socket, Ssl, {1, Minor}, ReqHdrs, RespHdrs) when Minor >= 1->
-    ClientConnection = ?CONNECTION_HDR(ReqHdrs, "keep-alive"),
-    ServerConnection = ?CONNECTION_HDR(RespHdrs, "keep-alive"),
-    if
-        ClientConnection =:= "close"; ServerConnection =:= "close" ->
-            lhttpc_sock:close(Socket, Ssl),
-            undefined;
-        ClientConnection =/= "close", ServerConnection =/= "close" ->
-            Socket
-    end;
-maybe_close_socket(Socket, Ssl, {0, _}, ReqHdrs, RespHdrs) ->
-    ClientConnection = ?CONNECTION_HDR(ReqHdrs, "keep-alive"),
-    ServerConnection = ?CONNECTION_HDR(RespHdrs, "close"),
-    if
-        ClientConnection =:= "close"; ServerConnection =/= "keep-alive" ->
-            lhttpc_sock:close(Socket, Ssl),
-            undefined;
-        ClientConnection =/= "close", ServerConnection =:= "keep-alive" ->
-            Socket
-    end.
-
 read_body(Vsn, Hdrs, Ssl, Socket) ->
     % Find out how to read the entity body from the request.
     % * If we have a Content-Length, just use that and read the complete
@@ -311,4 +290,25 @@ read_until_closed(Socket, Acc, Hdrs, Ssl) ->
             {Acc, Hdrs};
         {error, Reason} ->
             erlang:error(Reason)
+    end.
+
+maybe_close_socket(Socket, Ssl, {1, Minor}, ReqHdrs, RespHdrs) when Minor >= 1->
+    ClientConnection = ?CONNECTION_HDR(ReqHdrs, "keep-alive"),
+    ServerConnection = ?CONNECTION_HDR(RespHdrs, "keep-alive"),
+    if
+        ClientConnection =:= "close"; ServerConnection =:= "close" ->
+            lhttpc_sock:close(Socket, Ssl),
+            undefined;
+        ClientConnection =/= "close", ServerConnection =/= "close" ->
+            Socket
+    end;
+maybe_close_socket(Socket, Ssl, {0, _}, ReqHdrs, RespHdrs) ->
+    ClientConnection = ?CONNECTION_HDR(ReqHdrs, "keep-alive"),
+    ServerConnection = ?CONNECTION_HDR(RespHdrs, "close"),
+    if
+        ClientConnection =:= "close"; ServerConnection =/= "keep-alive" ->
+            lhttpc_sock:close(Socket, Ssl),
+            undefined;
+        ClientConnection =/= "close", ServerConnection =:= "keep-alive" ->
+            Socket
     end.
