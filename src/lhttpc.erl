@@ -221,20 +221,23 @@ read_response(State = {Pid, Window}) ->
 
 -spec verify_options(options(), options()) -> ok.
 verify_options([{send_retry, N} | Options], Errors)
-        when is_integer(N) and N >= 0 ->
+        when is_integer(N), N >= 0 ->
     verify_options(Options, Errors);
 verify_options([{connect_timeout, infinity} | Options], Errors) ->
     verify_options(Options, Errors);
 verify_options([{connect_timeout, MS} | Options], Errors)
-        when is_integer(MS) and MS >= 0 ->
+        when is_integer(MS), MS >= 0 ->
     verify_options(Options, Errors);
 verify_options([{partial_upload, Window} | Options], Errors)
-        when (is_integer(Window) and Window >= 0) or 
-             (Window =:= infinity) ->
+        when is_integer(Window), Window >= 0 ->
+    verify_options(Options, Errors);
+verify_options([{partial_upload, infinity} | Options], Errors)  ->
     verify_options(Options, Errors);
 verify_options([{partial_download, Pid, Window} | Options], Errors)
-        when ((is_integer(Window) and Window >= 0) or 
-             (Window =:= infinity)) and is_pid(Pid) ->
+        when is_integer(Window), Window >= 0, is_pid(Pid) ->
+    verify_options(Options, Errors);
+verify_options([{partial_download, Pid, infinity} | Options], Errors)
+        when is_pid(Pid) ->
     verify_options(Options, Errors);
 verify_options([Option | Options], Errors) ->
     verify_options(Options, [Option | Errors]);
