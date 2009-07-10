@@ -31,7 +31,7 @@
 %%% @end
 -module(lhttpc_lib).
 
--export([parse_url/1, format_request/5, header_value/2, header_value/3]).
+-export([parse_url/1, format_request/6, header_value/2, header_value/3]).
 -export([maybe_atom_to_list/1]).
 
 -export([format_hdrs/1]).
@@ -130,21 +130,25 @@ split_port(_,[$/ | _] = Path, Port) ->
 split_port(Scheme, [P | T], Port) ->
     split_port(Scheme, T, [P | Port]).
 
-%% @spec (Path, Method, Headers, Host, Body) -> Request
+%% @spec (Path, Method, Headers, Host, Body, PartialUpload) -> Request
 %% Path = iolist()
 %% Method = atom() | string()
 %% Headers = [{atom() | string(), string()}]
 %% Host = string()
 %% Body = iolist()
+%% PartialUpload = true | false
 -spec format_request(iolist(), atom() | string(), headers(), string(),
-    iolist()) -> iolist().
-format_request(Path, Method, Hdrs, Host, Body) ->
+    iolist(), true | false ) -> {true | false, iolist()}.
+format_request(Path, Method, Hdrs, Host, Body, PartialUpload) ->
     FormatedMethod = format_method(Method),
+    AllHdrs = add_mandatory_hdrs(
+                   FormatedMethod, Hdrs, Host, Body, PartialUpload),
+    {is_chunked(AllHdrs),
     [
         FormatedMethod, " ", Path, " HTTP/1.1\r\n",
-        format_hdrs(add_mandatory_hdrs(FormatedMethod, Hdrs, Host, Body), []),
+        format_hdrs(AllHdrs),
         Body
-    ].
+    ]}.
 
 format_method(Method) when is_atom(Method) ->
     string:to_upper(atom_to_list(Method));
@@ -163,24 +167,38 @@ format_hdrs([{Hdr, Value} | T], Acc) ->
 format_hdrs([], Acc) ->
     [Acc, "\r\n"].
 
-add_mandatory_hdrs(Method, Hdrs, Host, Body) ->
-    add_host(add_content_length(Method, Hdrs, Body), Host).
+add_mandatory_hdrs(Method, Hdrs, Host, Body, PartialUpload) ->
+    add_host(add_bounding_header(Method, Hdrs, Body, PartialUpload), Host).
 
-add_content_length("POST", Hdrs, Body) ->
-    add_content_length(Hdrs, Body);
-add_content_length("PUT", Hdrs, Body) ->
-    add_content_length(Hdrs, Body);
-add_content_length(_, Hdrs, _) ->
-    Hdrs.
+add_bounding_header("POST", Hdrs, Body, PartialUpload) ->
+    add_bounding_header(Hdrs, Body, PartialUpload);
+add_bounding_header("PUT", Hdrs, Body, PartialUpload) ->
+    add_bounding_header(Hdrs, Body, PartialUpload);
+add_bounding_header(_, Hdrs, _, _PartialUpload) ->
+    Hdrs. %%TODO:No body here or need to be explicitly specified???
 
-add_content_length(Hdrs, Body) ->
+add_bounding_header(Hdrs, Body, false) ->
     case header_value("content-length", Hdrs) of
         undefined ->
             ContentLength = integer_to_list(iolist_size(Body)),
             [{"Content-Length", ContentLength} | Hdrs];
         _ -> % We have a content length
             Hdrs
+    end;
+add_bounding_header(Hdrs, _Body, true) ->
+    case {header_value("content-length", Hdrs), 
+         header_value("transfer-encoding", Hdrs)} of
+        {undefined, undefined} ->
+            [{"Transfer-Encoding", "chunked"} | Hdrs];
+        {undefined, _TransferEncoding} ->%%HTTP RFC:It must start with "chunked"
+            Hdrs;
+        {_Length, undefined} ->
+            Hdrs;
+        {_Length, _TransferEncoding} -> %% have both cont.length and chunked 
+            erlang:error({error, bad_header})
     end.
+
+
 
 add_host(Hdrs, Host) ->
     case header_value("host", Hdrs) of
@@ -189,3 +207,10 @@ add_host(Hdrs, Host) ->
         _ -> % We have a host
             Hdrs
     end.
+
+is_chunked(Hdrs) ->
+    case header_value("transfer-encoding", Hdrs) of
+        undefined -> false;
+        _ -> true %% chunked is mandatory with Transfer-Enncoding
+    end.
+
