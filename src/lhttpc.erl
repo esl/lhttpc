@@ -229,9 +229,9 @@ send_body_part({Pid, Window}, Bin, _Timeout)
     after 0 ->
         {Pid, dec(Window)}
     end;
-send_body_part({Pid, Window}, http_eob, Timeout) when is_pid(Pid) ->
+send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
-    read_response({Pid, Window}, Timeout).
+    read_response(Pid, Timeout).
 
 -spec send_trailers({pid(), window_size()}, headers()) -> result().
 send_trailers({Pid, Window}, Trailers) ->
@@ -239,16 +239,16 @@ send_trailers({Pid, Window}, Trailers) ->
 
 -spec send_trailers({pid(), window_size()}, [{string() | string()}], 
         timeout()) -> result().
-send_trailers({Pid, Window}, Trailers, Timeout)
+send_trailers({Pid, _Window}, Trailers, Timeout)
         when is_list(Trailers), is_pid(Pid) ->
     Pid ! {trailers, self(), Trailers},
-    read_response({Pid, Window}, Timeout).
+    read_response(Pid, Timeout).
 
--spec read_response({pid(), window_size()}, timeout()) -> result().
-read_response({Pid, Window}, Timeout) ->
+-spec read_response(pid(), timeout()) -> result().
+read_response(Pid, Timeout) ->
     receive
         {ack, Pid} ->
-            read_response({Pid, Window}, Timeout); %%Maybe increment Window?
+            read_response(Pid, Timeout);
         {response, Pid, R} ->
             R;
         {exit, Pid, Reason} ->
