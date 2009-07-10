@@ -34,6 +34,8 @@
 -export([parse_url/1, format_request/5, header_value/2, header_value/3]).
 -export([maybe_atom_to_list/1]).
 
+-export([format_hdrs/1]).
+
 -include("lhttpc_types.hrl").
 
 %% @spec header_value(Header, Headers) -> undefined | term()
@@ -148,6 +150,9 @@ format_method(Method) when is_atom(Method) ->
     string:to_upper(atom_to_list(Method));
 format_method(Method) ->
     Method.
+
+format_hdrs(Headers) ->
+    format_hdrs(Headers, []).
 
 format_hdrs([{Hdr, Value} | T], Acc) ->
     NewAcc = [
