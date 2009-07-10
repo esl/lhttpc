@@ -83,7 +83,7 @@ request(From, URL, Method, Hdrs, Body, Options) ->
 execute(From, URL, Method, Hdrs, Body, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
     UploadWindowSize = proplists:get_value(partial_upload, Options),
-    PartialUpload = UploadWindowSize =/= undefined,
+    PartialUpload = proplists:is_defined(partial_upload, Options),
     {ChunkedUpload, Request} = 
         lhttpc_lib:format_request(
          Path, Method, Hdrs, Host, Body, PartialUpload),
