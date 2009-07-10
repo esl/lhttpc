@@ -186,8 +186,7 @@ upload_loop(State = #client_state{requester = Pid}) ->
             send_body_part(State, Bin)
     end.
 
-send_body_part(State = #client_state{socket = Socket, ssl = Ssl}, 
-              http_eob) ->
+send_body_part(State = #client_state{socket = Socket, ssl = Ssl}, http_eob) ->
     LastChunk = last_chunk(State),
     handle_send_result(State,
         lhttpc_sock:send(Socket, close_body(State, LastChunk), Ssl)),
