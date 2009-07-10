@@ -151,6 +151,7 @@ format_method(Method) when is_atom(Method) ->
 format_method(Method) ->
     Method.
 
+-spec format_hdrs(headers()) -> iolist().
 format_hdrs(Headers) ->
     format_hdrs(Headers, []).
 

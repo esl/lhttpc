@@ -47,7 +47,7 @@
         attempts :: integer(),
         requester :: pid(), 
         partial_upload = false :: true | false,
-        chunked = false ::true | false,
+        chunked_upload = false ::true | false,
         upload_window :: non_neg_integer() | infinity
     }).
 
@@ -178,23 +178,19 @@ read_partial_upload(State) ->
     partial_upload_loop(State#client_state{attempts= 1}).
 
 
-partial_upload_loop(State = #client_state{requester= Pid}) ->
+partial_upload_loop(State = #client_state{requester = Pid}) ->
     receive
-       {trailers, Pid, Trailers} ->
+        {trailers, Pid, Trailers} ->
             send_trailers(State, Trailers);
         {body_part, Pid, Bin} ->
-            send_body_part(State, Bin);
-        Error -> %% got garbage
-            erlang:error({malformed_message, Error})
+            send_body_part(State, Bin)
     end.
 
 send_body_part(State = #client_state{socket = Socket, ssl = Ssl}, 
               http_eob) ->
     LastChunk = last_chunk(State),
-    case lhttpc_sock:send(Socket,close_body(State, LastChunk), Ssl) of
+    case lhttpc_sock:send(Socket, close_body(State, LastChunk), Ssl) of
         ok ->
-            Socket = State#client_state.socket,
-            Ssl = State#client_state.ssl,
             lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
             read_response(State, nil, nil, [], <<>>);
         {error, closed} ->
@@ -209,18 +205,18 @@ send_body_part(State, Bin) ->
     State#client_state.requester ! {ack, self()},
     partial_upload_loop(State).
 
-encode_body_part(#client_state{chunked = true}, Bin) ->
+encode_body_part(#client_state{chunked_upload = true}, Bin) ->
     encode_chunk(Bin);
-encode_body_part(#client_state{chunked = false}, Bin) ->
+encode_body_part(#client_state{chunked_upload = false}, Bin) ->
     Bin.
    
-close_body(#client_state{chunked = true}, Bin) ->
+close_body(#client_state{chunked_upload = true}, Bin) ->
     [Bin, <<"\r\n">>];
-close_body(#client_state{chunked = false}, Bin) ->
+close_body(#client_state{chunked_upload = false}, Bin) ->
     Bin.
  
 send_trailers(State = #client_state{socket = Socket, ssl = Ssl, 
-                                   chunked = true}, Trailers) ->
+                                   chunked_upload = true}, Trailers) ->
     LastChunk = last_chunk(State),
     TheEnd = lhttpc_lib:format_hdrs(Trailers),
     case lhttpc_sock:send(Socket,[LastChunk, TheEnd, <<"\r\n">>], Ssl) of
@@ -234,16 +230,16 @@ send_trailers(State = #client_state{socket = Socket, ssl = Ssl,
             lhttpc_sock:close(Socket, Ssl),
             erlang:error(Reason)
     end;
-send_trailers(#client_state{chunked = false}, _Trailers) ->
-    throw(trailers_not_allowed).
+send_trailers(#client_state{chunked_upload = false}, _Trailers) ->
+    erlang:error(trailers_not_allowed).
 
-last_chunk(#client_state{chunked = true}) ->
-    encode_chunk(<<>>);
-last_chunk(#client_state{chunked = false}) ->
+last_chunk(#client_state{chunked_upload = true}) ->
+    <<"0\r\n">>;
+last_chunk(#client_state{chunked_upload = false}) ->
     <<>>.    
     
 encode_chunk(Data) ->
-    Size = list_to_binary(integer_to_list(iolist_size(Data))),
+    Size = list_to_binary(erlang:integer_to_list(iolist_size(Data), 16)),
     [Size, <<"\r\n">>, Data, <<"\r\n">>].
  
 read_response(State, Vsn, Status, Hdrs, Body) ->

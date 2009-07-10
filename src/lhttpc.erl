@@ -229,13 +229,11 @@ send_body_part({Pid, Window}, Bin, _Timeout)
     after 0 ->
         {Pid, dec(Window)}
     end;
-send_body_part({Pid, Window}, http_eob, Timeout) 
-        when is_pid(Pid) ->
+send_body_part({Pid, Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
     read_response({Pid, Window}, Timeout).
 
--spec send_trailers({pid(), window_size()}, [{string() | string()}]) 
-        -> result().
+-spec send_trailers({pid(), window_size()}, headers()) -> result().
 send_trailers({Pid, Window}, Trailers) ->
         send_trailers({Pid, Window}, Trailers, infinity).
 
