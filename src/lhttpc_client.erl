@@ -100,7 +100,7 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
         connect_timeout = proplists:get_value(connect_timeout, Options,
             infinity),
         attempts = 1 + proplists:get_value(send_retry, Options, 1),
-        partial_upload = proplists:get_value(partial_upload, Options, false)
+        partial_upload = proplists:is_defined(partial_upload, Options)
     },
     Response = case send_request(State) of
         {R, undefined} ->
