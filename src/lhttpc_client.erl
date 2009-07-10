@@ -79,11 +79,14 @@ request(From, URL, Method, Hdrs, Body, Options) ->
     end,
     From ! Result,
     ok.
-%%TODO:if partial_upload's first request has body and no cont.length
-%% has to be chunked?
+
 execute(From, URL, Method, Hdrs, Body, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
-    Request = lhttpc_lib:format_request(Path, Method, Hdrs, Host, Body),
+    UploadWindowSize = proplists:get_value(partial_upload, Options),
+    PartialUpload = UploadWindowSize =/= undefined,
+    {ChunkedUpload, Request} = 
+        lhttpc_lib:format_request(
+         Path, Method, Hdrs, Host, Body, PartialUpload),
     SocketRequest = {socket, self(), Host, Port, Ssl},
     Socket = case gen_server:call(lhttpc_manager, SocketRequest, infinity) of
         {ok, S}   -> S; % Re-using HTTP/1.1 connections
@@ -100,7 +103,9 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
         connect_timeout = proplists:get_value(connect_timeout, Options,
             infinity),
         attempts = 1 + proplists:get_value(send_retry, Options, 1),
-        partial_upload = proplists:get_value(partial_upload, Options, false)
+        partial_upload = PartialUpload,
+        upload_window = UploadWindowSize,
+        chunked_upload = ChunkedUpload
     },
     Response = case send_request(State) of
         {R, undefined} ->
@@ -175,7 +180,7 @@ get_upload_data(State) ->
     Response = {response, self(), 
                     {ok, {self(), State#client_state.upload_window}}}, 
     State#client_state.requester ! Response,
-    upload_loop(State#client_state{attempts= 1}).
+    upload_loop(State#client_state{attempts = 1, request = undefined}).
 
 
 upload_loop(State = #client_state{requester = Pid}) ->

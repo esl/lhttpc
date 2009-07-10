@@ -195,7 +195,7 @@ send_body_part({Pid, Window}, Bin) ->
     send_body_part({Pid, Window}, Bin, infinity).
 
 -spec send_body_part({pid(), window_size()}, binary(), timeout()) -> 
-        {pid(), window_size()} | result().
+        {ok, {pid(), window_size()}} | result().
 send_body_part({Pid, 0}, Bin, Timeout) 
         when is_binary(Bin), is_pid(Pid) ->
     receive
@@ -216,7 +216,7 @@ send_body_part({Pid, Window}, Bin, _Timeout)
     receive
         {ack, Pid} ->
             %%body_part ACK
-            {Pid, Window};
+            {ok, {Pid, Window}};
         {reponse, Pid, R} ->
             %%something went wrong in the client
             %%for example the connection died or
@@ -227,7 +227,7 @@ send_body_part({Pid, Window}, Bin, _Timeout)
         {'EXIT', Pid, Reason} ->
             exit(Reason)
     after 0 ->
-        {Pid, dec(Window)}
+        {ok, {Pid, dec(Window)}}
     end;
 send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
@@ -235,7 +235,7 @@ send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
 
 -spec send_trailers({pid(), window_size()}, headers()) -> result().
 send_trailers({Pid, Window}, Trailers) ->
-        send_trailers({Pid, Window}, Trailers, infinity).
+    send_trailers({Pid, Window}, Trailers, infinity).
 
 -spec send_trailers({pid(), window_size()}, [{string() | string()}], 
         timeout()) -> result().
