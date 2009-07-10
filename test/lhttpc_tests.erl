@@ -395,7 +395,7 @@ simple_response(Module, Socket, _Request, _Headers, Body) ->
         ]
     ).
 
-chunked_upload(Module, Socket, _, Headers, undefined) ->
+chunked_upload(Module, Socket, _, Headers, <<>>) ->
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
     {Body, HeadersAndTrailers} = webserver:read_chunked(Module, Socket),
     Trailer1 = lhttpc_lib:header_value("X-Trailer-1", HeadersAndTrailers),
