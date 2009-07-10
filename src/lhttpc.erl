@@ -32,7 +32,8 @@
 -behaviour(application).
 
 -export([request/4, request/5, request/6]).
--export([send_body_part/3, send_trailers/3]).
+-export([send_body_part/2, send_body_part/3, 
+        send_trailers/2, send_trailers/3]).
 -export([start/2, stop/1]).
 
 -include("lhttpc_types.hrl").
@@ -188,9 +189,15 @@ kill_client(Pid) ->
             erlang:error(Reason)
     end.
 
+-spec send_body_part({pid(), window_size()}, binary()) -> 
+        {pid(), window_size()} | result().
+send_body_part({Pid, Window}, Bin) ->
+    send_body_part({Pid, Window}, Bin, infinity).
+
 -spec send_body_part({pid(), window_size()}, binary(), timeout()) -> 
         {pid(), window_size()} | result().
-send_body_part({Pid, 0}, Bin, Timeout) ->
+send_body_part({Pid, 0}, Bin, Timeout) 
+        when is_binary(Bin), is_pid(Pid) ->
     receive
         {ack, Pid} ->
             send_body_part({Pid, 1}, Bin, Timeout);
@@ -204,7 +211,7 @@ send_body_part({Pid, 0}, Bin, Timeout) ->
         kill_client(Pid)
     end;
 send_body_part({Pid, Window}, Bin, _Timeout) 
-        when Window >= 0, is_binary(Bin) ->
+        when Window > 0, is_binary(Bin), is_pid(Pid) ->
     Pid ! {body_part, self(), Bin},
     receive
         {ack, Pid} ->
@@ -222,13 +229,20 @@ send_body_part({Pid, Window}, Bin, _Timeout)
     after 0 ->
         {Pid, dec(Window)}
     end;
-send_body_part({Pid, Window}, http_eob, Timeout) ->
+send_body_part({Pid, Window}, http_eob, Timeout) 
+        when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
     read_response({Pid, Window}, Timeout).
 
+-spec send_trailers({pid(), window_size()}, [{string() | string()}]) 
+        -> result().
+send_trailers({Pid, Window}, Trailers) ->
+        send_trailers({Pid, Window}, Trailers, infinity).
+
 -spec send_trailers({pid(), window_size()}, [{string() | string()}], 
         timeout()) -> result().
-send_trailers({Pid, Window}, Trailers, Timeout) ->
+send_trailers({Pid, Window}, Trailers, Timeout)
+        when is_list(Trailers), is_pid(Pid) ->
     Pid ! {trailers, self(), Trailers},
     read_response({Pid, Window}, Timeout).
 
