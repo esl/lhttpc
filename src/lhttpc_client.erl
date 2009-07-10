@@ -154,7 +154,7 @@ send_request(State) ->
         ok ->
             if
                 State#client_state.partial_upload ->
-                    read_partial_upload(State);
+                    get_upload_data(State);
                 not State#client_state.partial_upload ->
                     lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
                     read_response(State, nil, nil, [], <<>>)
@@ -171,14 +171,14 @@ send_request(State) ->
             erlang:error(Reason)
     end.
 
-read_partial_upload(State) ->
+get_upload_data(State) ->
     Response = {response, self(), 
                     {ok, {self(), State#client_state.upload_window}}}, 
     State#client_state.requester ! Response,
-    partial_upload_loop(State#client_state{attempts= 1}).
+    upload_loop(State#client_state{attempts= 1}).
 
 
-partial_upload_loop(State = #client_state{requester = Pid}) ->
+upload_loop(State = #client_state{requester = Pid}) ->
     receive
         {trailers, Pid, Trailers} ->
             send_trailers(State, Trailers);
@@ -203,7 +203,7 @@ send_body_part(State = #client_state{socket = Socket, ssl = Ssl},
 send_body_part(State, Bin) ->
     encode_body_part(State, Bin),
     State#client_state.requester ! {ack, self()},
-    partial_upload_loop(State).
+    upload_loop(State).
 
 encode_body_part(#client_state{chunked_upload = true}, Bin) ->
     encode_chunk(Bin);
