@@ -110,7 +110,7 @@ recv(Socket, Length, false) ->
 %% Will use the `ssl' module if `SslFlag' is set to `true', otherwise the
 %% gen_tcp module.
 %% @end
--spec send(socket(), iolist(), bool()) -> ok | {error, atom()}.
+-spec send(socket(), iolist() | binary(), bool()) -> ok | {error, atom()}.
 send(Socket, Request, true) ->
     ssl:send(Socket, Request);
 send(Socket, Request, false) ->
