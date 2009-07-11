@@ -230,7 +230,7 @@ send_trailers(State = #client_state{socket = Socket, ssl = Ssl,
     LastChunk = last_chunk(State),
     TheEnd = lhttpc_lib:format_hdrs(Trailers),
     handle_send_result(State,
-        lhttpc_sock:send(Socket,[LastChunk, TheEnd, <<"\r\n">>], Ssl)),
+        lhttpc_sock:send(Socket,[LastChunk, TheEnd], Ssl)),
     lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
     read_response(State, nil, nil, [], <<>>);
 send_trailers(#client_state{chunked_upload = false}, _Trailers) ->
