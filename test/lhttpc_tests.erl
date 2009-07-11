@@ -27,11 +27,15 @@
 %%% @author Oscar Hellström <oscar@erlang-consulting.com>
 -module(lhttpc_tests).
 
+-export([test_no/2]).
 -import(webserver, [start/2]).
 
 -include_lib("eunit/include/eunit.hrl").
 
 -define(DEFAULT_STRING, "Great success!").
+
+test_no(N, Tests) ->
+	setelement(4, Tests, lists:nth(N, element(4, Tests))).
 
 %%% Eunit setup stuff
 
