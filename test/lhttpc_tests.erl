@@ -296,7 +296,8 @@ partial_upload_chunked() ->
     ?assertEqual(element(2, Trailer), 
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response1))),
     % Make sure it works with no body part in the original request as well
-    {ok, UploadState2} = lhttpc:request(URL, post, [], [], 1000, Options),
+	Headers = [{"Transfer-Encoding", "chunked"}],
+    {ok, UploadState2} = lhttpc:request(URL, post, Headers, [], 1000, Options),
     {ok, Response2} = lhttpc:send_trailers(
         lists:foldl(fun upload_parts/2, UploadState2, Body),
         [Trailer]
