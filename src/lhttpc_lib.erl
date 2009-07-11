@@ -141,14 +141,17 @@ split_port(Scheme, [P | T], Port) ->
     iolist(), true | false ) -> {true | false, iolist()}.
 format_request(Path, Method, Hdrs, Host, Body, PartialUpload) ->
     FormatedMethod = format_method(Method),
-    AllHdrs = add_mandatory_hdrs(
-                   FormatedMethod, Hdrs, Host, Body, PartialUpload),
-    {is_chunked(AllHdrs),
-    [
-        FormatedMethod, " ", Path, " HTTP/1.1\r\n",
-        format_hdrs(AllHdrs),
-        Body
-    ]}.
+    AllHdrs = add_mandatory_hdrs(FormatedMethod, Hdrs, Host, Body,
+        PartialUpload),
+    IsChunked = is_chunked(AllHdrs),
+    {
+        IsChunked,
+        [
+            FormatedMethod, " ", Path, " HTTP/1.1\r\n",
+            format_hdrs(AllHdrs),
+            format_body(Body, IsChunked)
+        ]
+    }.
 
 format_method(Method) when is_atom(Method) ->
     string:to_upper(atom_to_list(Method));
@@ -166,6 +169,12 @@ format_hdrs([{Hdr, Value} | T], Acc) ->
     format_hdrs(T, NewAcc);
 format_hdrs([], Acc) ->
     [Acc, "\r\n"].
+
+format_body(Body, false) ->
+    Body;
+format_body(Body, true) ->
+    Size = iolist_size(Body),
+    [erlang:integer_to_list(Size, 16), <<"\r\n">>, Body, <<"\r\n">>].
 
 add_mandatory_hdrs(Method, Hdrs, Host, Body, PartialUpload) ->
     add_host(add_bounding_header(Method, Hdrs, Body, PartialUpload), Host).
