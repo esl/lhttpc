@@ -277,7 +277,7 @@ partial_upload_identity() ->
 partial_upload_chunked() ->
     Port = start(gen_tcp, [fun chunked_upload/5, fun chunked_upload/5]),
     URL = url(Port, "/chunked_upload"),
-    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<"stuff!">>],
+    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
     Options = [{partial_upload, 1}],
     {ok, UploadState1} = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
     Trailer = {"X-Trailer-1", "my tail is tailing me...."},
@@ -287,7 +287,7 @@ partial_upload_chunked() ->
     ),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
-    ?assertEqual(<<"This is chunky stuff!">>,
+    ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
     ?assertEqual(element(2, Trailer), 
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response1))),
@@ -299,7 +299,7 @@ partial_upload_chunked() ->
     ),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
-    ?assertEqual(<<"This is chunky stuff!">>,
+    ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response2))),
     ?assertEqual(element(2, Trailer), 
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response2))).
@@ -404,6 +404,7 @@ chunked_upload(Module, Socket, _, Headers, <<>>) ->
         Socket,
         [
             "HTTP/1.1 200 OK\r\n"
+			"Content-Length: 14\r\n"
             "X-Test-Orig-Trailer-1:", Trailer1, "\r\n"
             "X-Test-Orig-Enc: ", TransferEncoding, "\r\n"
             "X-Test-Orig-Body: ", Body, "\r\n\r\n"
