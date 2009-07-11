@@ -280,7 +280,7 @@ partial_upload_identity() ->
 
 partial_upload_chunked() ->
     Port = start(gen_tcp, [fun chunked_upload/5, fun chunked_upload/5]),
-    URL = url(Port, "/chunked_upload"),
+    URL = url(Port, "/partial_upload_chunked"),
     Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
     Options = [{partial_upload, 1}],
     {ok, UploadState1} = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
@@ -332,7 +332,7 @@ ssl_post() ->
 
 ssl_chunked() ->
     Port = start(ssl, [fun chunked_response/5, fun chunked_response_t/5]),
-    URL = ssl_url(Port, "/chunked"),
+    URL = ssl_url(Port, "/ssl_chunked"),
     {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
@@ -403,7 +403,8 @@ chunked_upload(Module, Socket, _, Headers, <<>>) ->
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
     {Body, HeadersAndTrailers} =
 		webserver:read_chunked(Module, Socket, Headers),
-    Trailer1 = lhttpc_lib:header_value("x-trailer-1", HeadersAndTrailers),
+    Trailer1 = lhttpc_lib:header_value("x-trailer-1", HeadersAndTrailers,
+		"undefined"),
     Module:send(
         Socket,
         [
