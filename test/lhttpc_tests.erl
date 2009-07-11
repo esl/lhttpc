@@ -263,7 +263,7 @@ partial_upload_identity() ->
         tl(Body) ++ [http_eob]),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
-    ?assertEqual(<<"This is chunky stuff!">>,
+    ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
     % Make sure it works with no body part in the original request as well
     {ok, UploadState2} = lhttpc:request(URL, post, Hdrs, [], 1000, Options),
@@ -271,7 +271,7 @@ partial_upload_identity() ->
         Body ++ [http_eob]),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
-    ?assertEqual(<<"This is chunky stuff!">>,
+    ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response2))).
 
 partial_upload_chunked() ->
@@ -397,7 +397,8 @@ simple_response(Module, Socket, _Request, _Headers, Body) ->
 
 chunked_upload(Module, Socket, _, Headers, <<>>) ->
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
-    {Body, HeadersAndTrailers} = webserver:read_chunked(Module, Socket),
+    {Body, HeadersAndTrailers} =
+		webserver:read_chunked(Module, Socket, Headers),
     Trailer1 = lhttpc_lib:header_value("x-trailer-1", HeadersAndTrailers),
     Module:send(
         Socket,
