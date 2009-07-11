@@ -247,9 +247,9 @@ chunked_encoding() ->
     ?assertEqual(<<"Again, great success!">>, body(SecondResponse)),
     ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
             headers(SecondResponse))),
-    ?assertEqual("1", lhttpc_lib:header_value("Trailer-1",
+    ?assertEqual("1", lhttpc_lib:header_value("trailer-1",
             headers(SecondResponse))),
-    ?assertEqual("2", lhttpc_lib:header_value("Trailer-2",
+    ?assertEqual("2", lhttpc_lib:header_value("trailer-2",
             headers(SecondResponse))).
 
 partial_upload_identity() ->
@@ -264,7 +264,7 @@ partial_upload_identity() ->
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
     ?assertEqual(<<"This is chunky stuff!">>,
-        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response1))),
+        lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
     % Make sure it works with no body part in the original request as well
     {ok, UploadState2} = lhttpc:request(URL, post, Hdrs, [], 1000, Options),
     Response2 = lists:foldl(fun upload_parts/2, UploadState2,
@@ -272,7 +272,7 @@ partial_upload_identity() ->
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
     ?assertEqual(<<"This is chunky stuff!">>,
-        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response2))).
+        lhttpc_lib:header_value("x-test-orig-body", headers(Response2))).
 
 partial_upload_chunked() ->
     Port = start(gen_tcp, [fun chunked_upload/5, fun chunked_upload/5]),
@@ -288,9 +288,9 @@ partial_upload_chunked() ->
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
     ?assertEqual(<<"This is chunky stuff!">>,
-        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response1))),
+        lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
     ?assertEqual(element(2, Trailer), 
-        lhttpc_lib:header_value("X-Test-Orig-Trailer-1", headers(Response1))),
+        lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response1))),
     % Make sure it works with no body part in the original request as well
     {ok, UploadState2} = lhttpc:request(URL, post, [], [], 1000, Options),
     {ok, Response2} = lhttpc:send_trailers(
@@ -300,9 +300,9 @@ partial_upload_chunked() ->
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
     ?assertEqual(<<"This is chunky stuff!">>,
-        lhttpc_lib:header_value("X-Test-Orig-Body", headers(Response2))),
+        lhttpc_lib:header_value("x-test-orig-body", headers(Response2))),
     ?assertEqual(element(2, Trailer), 
-        lhttpc_lib:header_value("X-Test-Orig-Trailer-1", headers(Response2))).
+        lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response2))).
 
 close_connection() ->
     Port = start(gen_tcp, [fun close_connection/5]),
@@ -398,7 +398,7 @@ simple_response(Module, Socket, _Request, _Headers, Body) ->
 chunked_upload(Module, Socket, _, Headers, <<>>) ->
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
     {Body, HeadersAndTrailers} = webserver:read_chunked(Module, Socket),
-    Trailer1 = lhttpc_lib:header_value("X-Trailer-1", HeadersAndTrailers),
+    Trailer1 = lhttpc_lib:header_value("x-trailer-1", HeadersAndTrailers),
     Module:send(
         Socket,
         [
