@@ -57,10 +57,10 @@ read_chunks(Module, Socket, Acc) ->
             case chunk_size(HexSizeExtension, []) of
                 0 -> 
                     list_to_binary(lists:reverse(Acc));
-            Size ->
+                Size ->
                     setopts(Module, Socket, [{packet, raw}]),
                     {ok, <<Chunk:Size/binary, "\r\n">>} =
-						Module:recv(Socket, Size + 2),
+                        Module:recv(Socket, Size + 2),
                     read_chunks(Module, Socket, [Chunk | Acc])
             end;
         {error, Reason} ->
