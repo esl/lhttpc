@@ -80,7 +80,10 @@ server_loop(Module, Socket, Request, Headers, Responders) ->
     case Module:recv(Socket, 0) of
         {ok, {http_request, _, _, _} = NewRequest} ->
             server_loop(Module, Socket, NewRequest, Headers, Responders);
-        {ok, {http_header, _, Field, _, Value}} ->
+        {ok, {http_header, _, Field, _, Value}} when is_atom(Field) ->
+            NewHeaders = [{atom_to_list(Field), Value} | Headers],
+            server_loop(Module, Socket, Request, NewHeaders, Responders);
+        {ok, {http_header, _, Field, _, Value}} when is_list(Field) ->
             NewHeaders = [{Field, Value} | Headers],
             server_loop(Module, Socket, Request, NewHeaders, Responders);
         {ok, http_eoh} ->
