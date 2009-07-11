@@ -56,7 +56,8 @@ read_chunks(Module, Socket, Acc) ->
                     list_to_binary(lists:reverse(Acc));
             Size ->
                     setopts(Module, Socket, [{packet, raw}]),
-                    {ok, Chunk} = Module:recv(Socket, Size),
+                    {ok, <<Chunk:Size/binary, "\r\n">>} =
+						Module:recv(Socket, Size + 2),
                     read_chunks(Module, Socket, [Chunk | Acc])
             end;
         {error, Reason} ->
@@ -71,7 +72,7 @@ read_trailers(Module, Socket, Hdrs) ->
         {ok, {http_header, _, Name, _, Value}} when is_list(Name) ->
             Trailer = {Name, Value},
             read_trailers(Module, Socket, [Trailer | Hdrs]);
-        {ok, {http_eoh}} -> Hdrs
+        {ok, http_eoh} -> Hdrs
     end.
 
 server_loop(Module, Socket, _, _, []) ->
@@ -148,8 +149,8 @@ port(_, Socket) ->
     Port.
 
 chunk_size(<<$;, _/binary>>, Acc) ->
-    erlang:integer_to_list(lists:reverse(Acc), 16);
+    erlang:list_to_integer(lists:reverse(Acc), 16);
 chunk_size(<<"\r\n">>, Acc) ->
-    erlang:integer_to_list(lists:reverse(Acc), 16);
+    erlang:list_to_integer(lists:reverse(Acc), 16);
 chunk_size(<<Char, Rest/binary>>, Acc) ->
     chunk_size(Rest, [Char | Acc]).
