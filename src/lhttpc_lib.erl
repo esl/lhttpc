@@ -173,8 +173,15 @@ format_hdrs([], Acc) ->
 format_body(Body, false) ->
     Body;
 format_body(Body, true) ->
-    Size = iolist_size(Body),
-    [erlang:integer_to_list(Size, 16), <<"\r\n">>, Body, <<"\r\n">>].
+    case iolist_size(Body) of
+        0 ->
+            <<>>;
+        Size ->
+            [
+                erlang:integer_to_list(Size, 16), <<"\r\n">>,
+                Body, <<"\r\n">>
+            ]
+    end.
 
 add_mandatory_hdrs(Method, Hdrs, Host, Body, PartialUpload) ->
     add_host(add_bounding_header(Method, Hdrs, Body, PartialUpload), Host).
