@@ -87,7 +87,7 @@ server_loop(Module, Socket, Request, Headers, Responders) ->
             NewHeaders = [{Field, Value} | Headers],
             server_loop(Module, Socket, Request, NewHeaders, Responders);
         {ok, http_eoh} ->
-            RequestBody = case proplists:get_value('Content-Length', Headers) of
+            RequestBody = case proplists:get_value("Content-Length", Headers) of
                 undefined ->
                     <<>>;
                 "0" ->
