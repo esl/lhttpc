@@ -184,16 +184,16 @@ format_body(Body, true) ->
     end.
 
 add_mandatory_hdrs(Method, Hdrs, Host, Body, PartialUpload) ->
-    add_host(add_bounding_header(Method, Hdrs, Body, PartialUpload), Host).
+    add_host(add_content_headers(Method, Hdrs, Body, PartialUpload), Host).
 
-add_bounding_header("POST", Hdrs, Body, PartialUpload) ->
-    add_bounding_header(Hdrs, Body, PartialUpload);
-add_bounding_header("PUT", Hdrs, Body, PartialUpload) ->
-    add_bounding_header(Hdrs, Body, PartialUpload);
-add_bounding_header(_, Hdrs, _, _PartialUpload) ->
+add_content_headers("POST", Hdrs, Body, PartialUpload) ->
+    add_content_headers(Hdrs, Body, PartialUpload);
+add_content_headers("PUT", Hdrs, Body, PartialUpload) ->
+    add_content_headers(Hdrs, Body, PartialUpload);
+add_content_headers(_, Hdrs, _, _PartialUpload) ->
     Hdrs. %%TODO:No body here or need to be explicitly specified???
 
-add_bounding_header(Hdrs, Body, false) ->
+add_content_headers(Hdrs, Body, false) ->
     case header_value("content-length", Hdrs) of
         undefined ->
             ContentLength = integer_to_list(iolist_size(Body)),
@@ -201,7 +201,7 @@ add_bounding_header(Hdrs, Body, false) ->
         _ -> % We have a content length
             Hdrs
     end;
-add_bounding_header(Hdrs, _Body, true) ->
+add_content_headers(Hdrs, _Body, true) ->
     case {header_value("content-length", Hdrs), 
          header_value("transfer-encoding", Hdrs)} of
         {undefined, undefined} ->
