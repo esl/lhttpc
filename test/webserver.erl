@@ -45,7 +45,10 @@ accept_connection(Module, ListenSocket, Responders) ->
 read_chunked(Module, Socket, Headers) ->
     Body = read_chunks(Module, Socket, []),
     ok = setopts(Module, Socket, [{packet, httph}]),
-    {Body, read_trailers(Module, Socket, Headers)}.
+    Trailers = read_trailers(Module, Socket, Headers),
+    % For next request
+    ok = setopts(Module, Socket, [{packet, http}]),
+    {Body, Trailers}.
 
 read_chunks(Module, Socket, Acc) ->
     ok = setopts(Module, Socket, [{packet, line}]),
