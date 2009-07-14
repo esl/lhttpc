@@ -116,10 +116,11 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
-%%            {send_retry, integer()}
+%%            {send_retry, integer()} | {partial_upload, WindowSize}
 %%   Milliseconds = integer()
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
-%%            | {error, Reason}
+%%   WindowSize = integer() | infinity
+%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}} |
+%%            {ok, UploadState} | {error, Reason}
 %%   StatusCode = integer()
 %%   ReasonPhrase = string()
 %%   ResponseBody = binary()
@@ -151,14 +152,27 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%
 %% `{send_retry, N}' specifies how many times the client should retry
 %% sending a request if the connection is closed after the data has been
-%% sent. The default value is 1.
+%% sent. The default value is `1'. If `{partial_upload, WindowSize}'
+%% (see below) is specified, the client cannot retry after the first part
+%% of the body has been sent since it doesn't keep the whole entitity body
+%% in memory.
 %%
-%% `{partial_upload, N}' specifies how many body parts can be sent to the
-%% client handling the request without waiting for an acknowledgement. 
-%% N can be infinity as well meaning that waiting for acknowledgements is not
-%% required. If partial_upload is specified and the `Content-Length' is not 
-%% provided in the headers "chunked" `Transfer-Encoding' is used for sending
-%% the body parts.
+%% `{partial_upload, WindowSize}' means that the body will be supplied in
+%% parts to the client by the calling process. The `WindowSize' specifies how
+%% many parts can be sent to the process controlling the socket before waiting
+%% for an acknowledgement. This is to create a kind of internal flow control
+%% if the network is slow and the process is blocked by the TCP stack. Flow
+%% control is disabled if `WindowSize' is `infinity'. If `WindowSize' is an
+%% integer, it must be >= 0.  If partial upload is specified and no
+%% `Content-Length' is specified in `Hdrs' the client will use chunked
+%% transfer encoding to send the entity body. If a content length is
+%% specified, this must be the total size of the entity body.
+%% The call to {@link request/6} will return `{ok, UploadState}'. The
+%% `UploadState' is supposed to be used as the first argument to the {@link
+%% send_body_part/2} or {@link send_body_part/3} functions to send body parts.
+%% Partial upload is intended to avoid keeping large request bodies in
+%% memory but can also be used when the complete size of the body isn't known
+%% when the request is started.
 %% @end
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity, [option()]) -> result().
@@ -183,55 +197,43 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
             kill_client(Pid)
     end.
 
-kill_client(Pid) ->
-    Monitor = erlang:monitor(process, Pid),
-    unlink(Pid), % or we'll kill ourself :O
-    exit(Pid, timeout),
-    receive
-        {response, Pid, R} ->
-            erlang:demonitor(Monitor, [flush]),
-            R;
-        {'DOWN', _, process, Pid, timeout} ->
-            {error, timeout};
-        {'DOWN', _, process, Pid, Reason}  ->
-            erlang:error(Reason)
-    end.
-
-%% @spec (State :: State, BodyPart :: BodyPart) -> Result
-%%   State = {pid(), Window}
-%%   Window = non_neg_integer() | infinity 
+%% @spec (UploadState :: UploadState, BodyPart :: BodyPart) -> Result
 %%   BodyPart = iolist() | binary()
 %%   Timeout = integer() | infinity
-%%   Result = {error, Reason} | State
+%%   Result = {error, Reason} | UploadState
 %%   Reason = connection_closed | connect_timeout | timeout
-%% @doc Sends a body part to an ongoing request using the default timeout 
-%% infinity.
-%% It is the same as calling `send_body_part(State, BodyPart, infinity)'.
+%% @doc Sends a body part to an ongoing request when
+%% `{partial_upload, WindowSize}' is used. The default timeout, `infinity'
+%% will be used. Notice that if `WindowSize' is infinity, this call will never
+%% block.
+%% Would be the same as calling
+%% `send_body_part(UploadState, BodyPart, infinity)'.
 %% @end
 -spec send_body_part({pid(), window_size()}, binary()) -> 
         {pid(), window_size()} | result().
 send_body_part({Pid, Window}, Bin) ->
     send_body_part({Pid, Window}, Bin, infinity).
 
-%% @spec (State :: State, BodyPart :: BodyPart, Timeout) -> Result
-%%   State = {pid(), Window}
-%%   Window = non_neg_integer() | infinity 
+%% @spec (UploadState :: UploadState, BodyPart :: BodyPart, Timeout) -> Result
 %%   BodyPart = iolist() | binary()
 %%   Timeout = integer() | infinity
-%%   Result = {error, Reason} | State
+%%   Result = {error, Reason} | UploadState
 %%   Reason = connection_closed | connect_timeout | timeout
-%% @doc Sends a body part to an ongoing request.
+%% @doc Sends a body part to an ongoing request when
+%% `{partial_upload, WindowSize}' is used.
 %% `Timeout' is the timeout for the request in milliseconds.
 %%
 %% If the window size reaches 0 the call will block for at maximum Timeout
 %% milliseconds. If there is no acknowledgement received during that time the
-%% the request is cancelled and client process is killed.
+%% the request is cancelled and `{error, timeout}' is returned.
 %%
 %% As long as the window size is larger than 0 the function will return 
 %% immediately after sending the body part to the request handling process.
 %% 
-%% Sending http_eob as BodyPart finishes the request then the response is read 
-%% and returned.
+%% The `BodyPart' `http_eob' signals an end of the entity body, the request
+%% is considered sent and the response will be read from the socket. If
+%% there is no response within `Timeout' milliseconds, the request is
+%% canceled and `{error, timeout}' is returned.
 %% @end
 -spec send_body_part({pid(), window_size()}, binary(), timeout()) -> 
         {ok, {pid(), window_size()}} | result().
@@ -254,11 +256,11 @@ send_body_part({Pid, Window}, Bin, _Timeout)
     Pid ! {body_part, self(), Bin},
     receive
         {ack, Pid} ->
-            %%body_part ACK
+            %% body_part ACK
             {ok, {Pid, Window}};
         {reponse, Pid, R} ->
-            %%something went wrong in the client
-            %%for example the connection died or
+            %% something went wrong in the client
+            %% for example the connection died or
             %% the last body part has been sent 
             R;
         {exit, Pid, Reason} ->
@@ -272,24 +274,24 @@ send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
     read_response(Pid, Timeout).
 
-%% @spec (State :: State, Trailers) -> Result
-%%   State = {pid(), Window}
-%%   Window = non_neg_integer() | infinity 
+%% @spec (UploadState :: UploadState, Trailers) -> Result
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
 %%   Reason = connection_closed | connect_timeout | timeout
-%% @doc Sends trailers to an ongoing request using the default timeout infinity.
-%% It is the same as calling `send_trailers(State, BodyPart, infinity)'.
+%% @doc Sends trailers to an ongoing request when '{partial_upload,
+%% WindowSize}' is used and no `Content-Length' was specified. The default
+%% timout `infinity' will be used. Note that after this the request is
+%% considered complete and the response will be read from the socket. 
+%% Would be the same as calling
+%% `send_trailers(UploadState, BodyPart, infinity)'.
 %% @end
 -spec send_trailers({pid(), window_size()}, headers()) -> result().
 send_trailers({Pid, Window}, Trailers) ->
     send_trailers({Pid, Window}, Trailers, infinity).
 
-%% @spec (State :: State, Trailers, Timeout) -> Result
-%%   State = {pid(), Window}
-%%   Window = non_neg_integer() | infinity 
+%% @spec (UploadState :: UploadState, Trailers, Timeout) -> Result
 %%   Trailers = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
@@ -297,17 +299,16 @@ send_trailers({Pid, Window}, Trailers) ->
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
 %%   Reason = connection_closed | connect_timeout | timeout
-%% @doc Sends trailers to an ongoing request.
-%% `Timeout' is the timeout for the request in milliseconds.
+%% @doc Sends trailers to an ongoing request when
+%% '{partial_upload, WindowSize}' is used and no `Content-Length' was
+%% specified.
+%% `Timeout' is the timeout for sending the trailers and reading the
+%% response in milliseconds.
 %%
-%% If the window size reaches 0 the call will block for at maximum Timeout
-%% milliseconds. If there is no acknowledgement received during that time the
-%% the request is cancelled and client process is killed.
-%%
-%% Trailers can only be send with requests where "chunked" `Transfer=Encoding'
-%% is specified.
-%%
-%% Sending the trailers finishes the request then the response is read and
+%% Sending trailers also signals the end of the entity body, which means
+%% that no more body parts, or trailers can be sent and the response to the
+%% request will be read from the socket. If no response is received within
+%% `Timeout' milliseconds the request is canceled and `{error, timeout}' is
 %% returned.
 %% @end
 -spec send_trailers({pid(), window_size()}, [{string() | string()}], 
@@ -315,6 +316,10 @@ send_trailers({Pid, Window}, Trailers) ->
 send_trailers({Pid, _Window}, Trailers, Timeout)
         when is_list(Trailers), is_pid(Pid) ->
     Pid ! {trailers, self(), Trailers},
+    % XXX: You claimed earlier in the docs that if the window size would be
+    % 0 we would block, but we don't. I can't see why it would make any
+    % sense waiting for an ack here though since we're blocked in
+    % read_response any way.
     read_response(Pid, Timeout).
 
 -spec read_response(pid(), timeout()) -> result().
@@ -332,10 +337,25 @@ read_response(Pid, Timeout) ->
         kill_client(Pid)
     end.
 
+%%% Internal functions
+
+kill_client(Pid) ->
+    Monitor = erlang:monitor(process, Pid),
+    unlink(Pid), % or we'll kill ourself :O
+    exit(Pid, timeout),
+    receive
+        {response, Pid, R} ->
+            erlang:demonitor(Monitor, [flush]),
+            R;
+        {'DOWN', _, process, Pid, timeout} ->
+            {error, timeout};
+        {'DOWN', _, process, Pid, Reason}  ->
+            erlang:error(Reason)
+    end.
+
 -spec dec(timeout()) -> timeout().
 dec(Num) when is_integer(Num) -> Num - 1;
 dec(Else)                     -> Else.
-
 
 -spec verify_options(options(), options()) -> ok.
 verify_options([{send_retry, N} | Options], Errors)
@@ -346,13 +366,13 @@ verify_options([{connect_timeout, infinity} | Options], Errors) ->
 verify_options([{connect_timeout, MS} | Options], Errors)
         when is_integer(MS), MS >= 0 ->
     verify_options(Options, Errors);
-verify_options([{partial_upload, Window} | Options], Errors)
-        when is_integer(Window), Window >= 0 ->
+verify_options([{partial_upload, WindowSize} | Options], Errors)
+        when is_integer(WindowSize), WindowSize >= 0 ->
     verify_options(Options, Errors);
 verify_options([{partial_upload, infinity} | Options], Errors)  ->
     verify_options(Options, Errors);
-verify_options([{partial_download, Pid, Window} | Options], Errors)
-        when is_integer(Window), Window >= 0, is_pid(Pid) ->
+verify_options([{partial_download, Pid, WindowSize} | Options], Errors)
+        when is_integer(WindowSize), WindowSize >= 0, is_pid(Pid) ->
     verify_options(Options, Errors);
 verify_options([{partial_download, Pid, infinity} | Options], Errors)
         when is_pid(Pid) ->
