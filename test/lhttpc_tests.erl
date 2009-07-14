@@ -309,7 +309,7 @@ chunked_encoding() ->
     {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<"Again, great success!">>, body(SecondResponse)),
-    ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
+    ?assertEqual("ChUnKeD", lhttpc_lib:header_value("transfer-encoding",
             headers(SecondResponse))),
     ?assertEqual("1", lhttpc_lib:header_value("trailer-1",
             headers(SecondResponse))),
@@ -445,7 +445,7 @@ ssl_chunked() ->
     {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<"Again, great success!">>, body(SecondResponse)),
-    ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
+    ?assertEqual("ChUnKeD", lhttpc_lib:header_value("transfer-encoding",
             headers(SecondResponse))),
     ?assertEqual("1", lhttpc_lib:header_value("Trailer-1",
             headers(SecondResponse))),
@@ -676,7 +676,7 @@ chunked_response_t(Module, Socket, _, _, _) ->
     Module:send(
         Socket,
         "HTTP/1.1 200 OK\r\n"
-        "Content-type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n"
+        "Content-type: text/plain\r\nTransfer-Encoding: ChUnKeD\r\n\r\n"
         "7\r\n"
         "Again, \r\n"
         "E\r\n"
