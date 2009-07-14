@@ -131,7 +131,8 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% protocol, i.e: `"POST"' or `"GET"'. It could also be an atom, which is
 %% then made in to uppercase, if it isn't already.
 %% `Hdrs' is a list of headers to send. Mandatory headers such as
-%% `Host' or `Content-Length' (for some requests) are added.
+%% `Host', `Content-Length' or `Transfer-Encoding' (for some requests) 
+%% are added.
 %% `Body' is the entity to send in the request. Please don't include entity
 %% bodies where there shouldn't be any (such as for `GET').
 %% `Timeout' is the timeout for the request in milliseconds.
@@ -151,6 +152,13 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% `{send_retry, N}' specifies how many times the client should retry
 %% sending a request if the connection is closed after the data has been
 %% sent. The default value is 1.
+%%
+%% `{partial_upload, N}' specifies how many body parts can be sent to the
+%% client handling the request without waiting for an acknowledgement. 
+%% N can be infinity as well meaning that waiting for acknowledgements is not
+%% required. If partial_upload is specified and the `Content-Length' is not 
+%% provided in the headers "chunked" `Transfer-Encoding' is used for sending
+%% the body parts.
 %% @end
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity, [option()]) -> result().
@@ -189,11 +197,42 @@ kill_client(Pid) ->
             erlang:error(Reason)
     end.
 
+%% @spec (State :: State, BodyPart :: BodyPart) -> Result
+%%   State = {pid(), Window}
+%%   Window = non_neg_integer() | infinity 
+%%   BodyPart = iolist() | binary()
+%%   Timeout = integer() | infinity
+%%   Result = {error, Reason} | State
+%%   Reason = connection_closed | connect_timeout | timeout
+%% @doc Sends a body part to an ongoing request using the default timeout 
+%% infinity.
+%% It is the same as calling `send_body_part(State, BodyPart, infinity)'.
+%% @end
 -spec send_body_part({pid(), window_size()}, binary()) -> 
         {pid(), window_size()} | result().
 send_body_part({Pid, Window}, Bin) ->
     send_body_part({Pid, Window}, Bin, infinity).
 
+%% @spec (State :: State, BodyPart :: BodyPart, Timeout) -> Result
+%%   State = {pid(), Window}
+%%   Window = non_neg_integer() | infinity 
+%%   BodyPart = iolist() | binary()
+%%   Timeout = integer() | infinity
+%%   Result = {error, Reason} | State
+%%   Reason = connection_closed | connect_timeout | timeout
+%% @doc Sends a body part to an ongoing request.
+%% `Timeout' is the timeout for the request in milliseconds.
+%%
+%% If the window size reaches 0 the call will block for at maximum Timeout
+%% milliseconds. If there is no acknowledgement received during that time the
+%% the request is cancelled and client process is killed.
+%%
+%% As long as the window size is larger than 0 the function will return 
+%% immediately after sending the body part to the request handling process.
+%% 
+%% Sending http_eob as BodyPart finishes the request then the response is read 
+%% and returned.
+%% @end
 -spec send_body_part({pid(), window_size()}, binary(), timeout()) -> 
         {ok, {pid(), window_size()}} | result().
 send_body_part({Pid, 0}, Bin, Timeout) 
@@ -233,10 +272,44 @@ send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
     read_response(Pid, Timeout).
 
+%% @spec (State :: State, Trailers) -> Result
+%%   State = {pid(), Window}
+%%   Window = non_neg_integer() | infinity 
+%%   Header = string() | binary() | atom()
+%%   Value = string() | binary()
+%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
+%%            | {error, Reason}
+%%   Reason = connection_closed | connect_timeout | timeout
+%% @doc Sends trailers to an ongoing request using the default timeout infinity.
+%% It is the same as calling `send_trailers(State, BodyPart, infinity)'.
+%% @end
 -spec send_trailers({pid(), window_size()}, headers()) -> result().
 send_trailers({Pid, Window}, Trailers) ->
     send_trailers({Pid, Window}, Trailers, infinity).
 
+%% @spec (State :: State, Trailers, Timeout) -> Result
+%%   State = {pid(), Window}
+%%   Window = non_neg_integer() | infinity 
+%%   Trailers = [{Header, Value}]
+%%   Header = string() | binary() | atom()
+%%   Value = string() | binary()
+%%   Timeout = integer() | infinity
+%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
+%%            | {error, Reason}
+%%   Reason = connection_closed | connect_timeout | timeout
+%% @doc Sends trailers to an ongoing request.
+%% `Timeout' is the timeout for the request in milliseconds.
+%%
+%% If the window size reaches 0 the call will block for at maximum Timeout
+%% milliseconds. If there is no acknowledgement received during that time the
+%% the request is cancelled and client process is killed.
+%%
+%% Trailers can only be send with requests where "chunked" `Transfer=Encoding'
+%% is specified.
+%%
+%% Sending the trailers finishes the request then the response is read and
+%% returned.
+%% @end
 -spec send_trailers({pid(), window_size()}, [{string() | string()}], 
         timeout()) -> result().
 send_trailers({Pid, _Window}, Trailers, Timeout)
