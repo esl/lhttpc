@@ -280,7 +280,7 @@ send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
 %%   Reason = connection_closed | connect_timeout | timeout
-%% @doc Sends trailers to an ongoing request when '{partial_upload,
+%% @doc Sends trailers to an ongoing request when `{partial_upload,
 %% WindowSize}' is used and no `Content-Length' was specified. The default
 %% timout `infinity' will be used. Note that after this the request is
 %% considered complete and the response will be read from the socket. 
@@ -300,7 +300,7 @@ send_trailers({Pid, Window}, Trailers) ->
 %%            | {error, Reason}
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends trailers to an ongoing request when
-%% '{partial_upload, WindowSize}' is used and no `Content-Length' was
+%% `{partial_upload, WindowSize}' is used and no `Content-Length' was
 %% specified.
 %% `Timeout' is the timeout for sending the trailers and reading the
 %% response in milliseconds.
