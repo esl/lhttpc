@@ -48,7 +48,14 @@
         requester :: pid(), 
         partial_upload = false :: true | false,
         chunked_upload = false ::true | false,
-        upload_window :: non_neg_integer() | infinity
+        upload_window :: non_neg_integer() | infinity,
+        partial_download = false :: true | false,
+        download_window = infinity :: timeout(),
+        receiver :: pid(),
+        max_part_size :: non_neg_integer() | infinity
+        %% in case of infinity we read whatever data we can get from
+        %% the wire at that point or 
+        %% in case of chunked one chunk
     }).
 
 -define(CONNECTION_HDR(HDRS, DEFAULT),
@@ -84,6 +91,8 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
     UploadWindowSize = proplists:get_value(partial_upload, Options),
     PartialUpload = proplists:is_defined(partial_upload, Options),
+    PartialDownload = proplists:is_defined(partial_download, Options),
+    PartialDownloadOptions = proplists:get_valua(partial_download, Options, []),
     {ChunkedUpload, Request} = 
         lhttpc_lib:format_request(
          Path, Method, Hdrs, Host, Body, PartialUpload),
@@ -105,7 +114,14 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
         attempts = 1 + proplists:get_value(send_retry, Options, 1),
         partial_upload = PartialUpload,
         upload_window = UploadWindowSize,
-        chunked_upload = ChunkedUpload
+        chunked_upload = ChunkedUpload,
+        partial_download = PartialDownload,
+        download_window = proplists:get_value(window_size, 
+            PartialDownloadOptions, infinity),
+        max_part_size = proplists:get_value(part_size,
+            PartialDownloadOptions, infinity), 
+        receiver = proplists:get_value(receiver,
+            PartialDownloadOptions, From)
     },
     Response = case send_request(State) of
         {R, undefined} ->
@@ -256,13 +272,19 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
             read_response(State, Vsn, Status, [Header | Hdrs], Body);
         {ok, http_eoh} ->
-            lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            {NewBody, NewHdrs} = read_body(Vsn, Hdrs, Ssl, Socket),
-            Response = {Status, NewHdrs, NewBody},
-            RequestHdrs = State#client_state.request_headers,
-            NewSocket = maybe_close_socket(Socket, Ssl, Vsn, RequestHdrs,
-                NewHdrs),
-            {Response, NewSocket};
+            if 
+                State#client_state.partial_download ->
+                    send_partial_response(State,Vsn,Status,Hdrs);
+                not State#client_state.partial_download ->
+                    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+                    {NewBody, NewHdrs} = read_body(
+                        Vsn, Hdrs, Ssl, Socket, response_type(Hdrs)),
+                    Response = {Status, NewHdrs, NewBody},
+                    RequestHdrs = State#client_state.request_headers,
+                    NewSocket = maybe_close_socket(
+                        Socket, Ssl, Vsn, RequestHdrs, NewHdrs),
+                    {Response, NewSocket}
+            end;
         {error, closed} ->
             % Either we only noticed that the socket was closed after we
             % sent the request, the server closed it just after we put
@@ -279,7 +301,19 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             erlang:error(Reason)
     end.
 
-read_body(Vsn, Hdrs, Ssl, Socket) ->
+send_partial_response(State, Vsn, Status, Hdrs) ->
+    Response = {response, self(), {Status, Hdrs, self()}},
+    State#client_state.requester ! Response,
+    read_partial_body(State, Vsn, Hdrs, response_type(Hdrs)).
+
+read_partial_body(State, _Vsn, _Hdrs, chunked) ->
+    read_partial_chunked_body(State);
+read_partial_body(State, Vsn, Hdrs, infinite) ->
+    read_partial_infinite_body(State, Vsn, Hdrs);
+read_partial_body(State, _Vsn, _Hdrs, {fixed_length, ContentLength}) ->
+    read_partial_body(State, ContentLength).
+
+response_type(Hdrs) ->
     % Find out how to read the entity body from the request.
     % * If we have a Content-Length, just use that and read the complete
     %   entity.
@@ -293,12 +327,22 @@ read_body(Vsn, Hdrs, Ssl, Socket) ->
                 lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined")
             ),
             case TransferEncoding of
-                "chunked" -> read_chunked_body(Socket, Ssl, Hdrs, []);
-                _         -> read_infinite_body(Socket, Vsn, Hdrs, Ssl)
+                "chunked" -> chunked;
+                _         -> infinite
             end;
         ContentLength ->
-            read_length(Hdrs, Ssl, Socket, list_to_integer(ContentLength))
+            {fixed_length, list_to_integer(ContentLength)}
     end.
+    
+read_body(_Vsn, Hdrs, Ssl, Socket, chunked) ->
+    read_chunked_body(Socket, Ssl, Hdrs, []);
+read_body(Vsn, Hdrs, Ssl, Socket, infinite) ->
+    read_infinite_body(Socket, Vsn, Hdrs, Ssl);
+read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
+    read_length(Hdrs, Ssl, Socket, ContentLength).
+
+read_partial_body(State, ContentLength) ->
+    ok. %%TODO
 
 read_length(Hdrs, Ssl, Socket, Length) ->
     case lhttpc_sock:recv(Socket, Length, Ssl) of
@@ -307,6 +351,9 @@ read_length(Hdrs, Ssl, Socket, Length) ->
         {error, Reason} ->
             erlang:error(Reason)
     end.
+
+read_partial_chunked_body(State) -> 
+    ok. %%TODO
 
 read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
     lhttpc_sock:setopts(Socket, [{packet, line}], Ssl),
@@ -356,6 +403,9 @@ read_trailers(Socket, Ssl, Hdrs) ->
         {error, {http_error, Data}} ->
             erlang:error({bad_trailer, Data})
     end.
+
+read_partial_infinite_body(State, Vsn, Hdrs) ->
+    ok. %%TODO
 
 read_infinite_body(Socket, {1, Minor}, Hdrs, Ssl) when Minor >= 1 ->
     HdrValue = lhttpc_lib:header_value("connection", Hdrs, "keep-alive"),

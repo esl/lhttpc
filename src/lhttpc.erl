@@ -391,6 +391,7 @@ verify_options([], Errors) ->
 bad_options(Errors) ->
     erlang:error({bad_options, Errors}).
 
+-spec verify_partial_download(options(), options()) -> options().
 verify_partial_download([{window_size, Size} | Options], Errors) when
         is_integer(Size), Size >= 0 ->
     verify_partial_download(Options, Errors);
