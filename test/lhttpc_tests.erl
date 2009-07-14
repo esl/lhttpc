@@ -33,6 +33,63 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(DEFAULT_STRING, "Great success!").
+-define(LONG_BODY_PART,
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+        "This is a relatively long body, that we send to the client... "
+    ).
 
 test_no(N, Tests) ->
 	setelement(4, Tests, lists:nth(N, element(4, Tests))).
@@ -70,6 +127,9 @@ tcp_test_() ->
             ?_test(chunked_encoding()),
             ?_test(partial_upload_identity()),
             ?_test(partial_upload_chunked()),
+            ?_test(partial_download_identity()),
+            ?_test(limited_partial_download_identity()),
+            ?_test(partial_download_chunked()),
             ?_test(close_connection()),
             ?_test(connection_count()) % just check that it's 0 (last)
         ]}.
@@ -309,6 +369,49 @@ partial_upload_chunked() ->
     ?assertEqual(element(2, Trailer), 
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response2))).
 
+partial_download_identity() ->
+    Port = start(gen_tcp, [fun large_response/5]),
+    URL = url(Port, "/partial_download_identity"),
+    PartialDownload = [
+        {window_size, 1},
+        {receiver, self()}
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} =
+        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
+limited_partial_download_identity() ->
+    Port = start(gen_tcp, [fun large_response/5]),
+    URL = url(Port, "/partial_download_identity"),
+    PartialDownload = [
+        {window_size, 1},
+        {receiver, self()},
+        {part_size, 512} % bytes
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} =
+        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid, 512),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
+partial_download_chunked() ->
+    Port = start(gen_tcp, [fun large_chunked_response/5]),
+    URL = url(Port, "/partial_download_identity"),
+    PartialDownload = [
+        {window_size, 1},
+        {receiver, self()}
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} =
+        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
 close_connection() ->
     Port = start(gen_tcp, [fun close_connection/5]),
     URL = url(Port, "/close"),
@@ -364,6 +467,26 @@ upload_parts(BodyPart, CurrentState) ->
     {ok, NextState} = lhttpc:send_body_part(CurrentState, BodyPart, 1000),
     NextState.
 
+read_partial_body(Pid) ->
+    read_partial_body(Pid, infinity, []).
+
+read_partial_body(Pid, Size) ->
+    read_partial_body(Pid, Size, []).
+
+read_partial_body(Pid, Size, Acc) ->
+    case lhttpc:get_body_part(Pid) of
+        {ok, http_eob} ->
+            list_to_binary(Acc);
+        {ok, Bin} ->
+            if
+                Size =:= infinity ->
+                    ok;
+                Size =/= infinity ->
+                    ?assert(Size >= Bin)
+            end,
+            read_partial_body(Pid, [Acc, Bin])
+    end.
+
 simple(Method) ->
     Port = start(gen_tcp, [fun simple_response/5]),
     URL = url(Port, "/simple"),
@@ -399,6 +522,38 @@ simple_response(Module, Socket, _Request, _Headers, Body) ->
             ?DEFAULT_STRING
         ]
     ).
+
+large_response(Module, Socket, _, _, _) ->
+    BodyPart = <<?LONG_BODY_PART>>,
+    ContentLength = 3 * size(BodyPart),
+    Module:send(
+        Socket,
+        [
+            "HTTP/1.1 200 OK\r\n"
+            "Content-type: text/plain\r\n"
+            "Content-length: ", integer_to_list(ContentLength), "\r\n\r\n"
+        ]
+    ),
+    Module:send(Socket, BodyPart),
+    Module:send(Socket, BodyPart),
+    Module:send(Socket, BodyPart).
+
+large_chunked_response(Module, Socket, _, _, _) ->
+    BodyPart = <<?LONG_BODY_PART>>,
+    ChunkSize = erlang:integer_to_list(size(BodyPart), 16),
+    Chunk = [ChunkSize, "\r\n", BodyPart, "\r\n"],
+    Module:send(
+        Socket,
+        [
+            "HTTP/1.1 200 OK\r\n"
+            "Content-type: text/plain\r\n"
+            "Transfer-Encoding: chunked\r\n\r\n"
+        ]
+    ),
+    Module:send(Socket, Chunk),
+    Module:send(Socket, Chunk),
+    Module:send(Socket, Chunk),
+    Module:send(Socket, "0\r\n\r\n").
 
 chunked_upload(Module, Socket, _, Headers, <<>>) ->
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
