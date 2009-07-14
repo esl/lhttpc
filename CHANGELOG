@@ -13,6 +13,8 @@ Version 1.2.0:
     * Now understands what to do with connections to servers < HTTP/1.1
     * Now respects "Connection: close" in request headers, which means
       clients can choose to not use persistent connections
+* RFC Compliance
+    * Fix reading of chunked encoding since section 3.6 claims that "All transfer-coding values are case-insensitive"
 
 Version 1.1.2:
 * Fix minor error with {active, once} instead of {active, true} in manager
