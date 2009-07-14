@@ -371,12 +371,15 @@ verify_options([{partial_upload, WindowSize} | Options], Errors)
     verify_options(Options, Errors);
 verify_options([{partial_upload, infinity} | Options], Errors)  ->
     verify_options(Options, Errors);
-verify_options([{partial_download, Pid, WindowSize} | Options], Errors)
-        when is_integer(WindowSize), WindowSize >= 0, is_pid(Pid) ->
-    verify_options(Options, Errors);
-verify_options([{partial_download, Pid, infinity} | Options], Errors)
-        when is_pid(Pid) ->
-    verify_options(Options, Errors);
+verify_options([{partial_download, DownloadOptions} | Options], Errors)
+        when is_list(DownloadOptions) ->
+    case verify_partial_download(DownloadOptions, []) of
+        [] ->
+            verify_options(Options, Errors);
+        OptionErrors ->
+            NewErrors = [{partial_download, OptionErrors} | Errors],
+            verify_options(Options, NewErrors)
+    end;
 verify_options([Option | Options], Errors) ->
     verify_options(Options, [Option | Errors]);
 verify_options([], []) ->
@@ -387,3 +390,16 @@ verify_options([], Errors) ->
 -spec bad_options(options()) -> no_return().
 bad_options(Errors) ->
     erlang:error({bad_options, Errors}).
+
+verify_partial_download([{window_size, Size} | Options], Errors) when
+        is_integer(Size), Size >= 0 ->
+    verify_partial_download(Options, Errors);
+verify_partial_download([{receiver, Pid} | Options], Errors) when is_pid(Pid) ->
+    verify_partial_download(Options, Errors);
+verify_partial_download([{part_size, Size} | Options], Errors) when
+        is_integer(Size), Size >= 0 ->
+    verify_partial_download(Options, Errors);
+verify_partial_download([Option | Options], Errors) ->
+    verify_partial_download(Options, [Option | Errors]);
+verify_partial_download([], Errors) ->
+    Errors.
