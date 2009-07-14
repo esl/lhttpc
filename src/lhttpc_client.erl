@@ -203,9 +203,12 @@ read_body(Vsn, Hdrs, Ssl, Socket) ->
     %   closed (AFAIK, this was common in versions before 1.1).
     case lhttpc_lib:header_value("content-length", Hdrs) of
         undefined ->
-            case lhttpc_lib:header_value("transfer-encoding", Hdrs) of
+            TransferEncoding = string:to_lower(
+                lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined")
+            ),
+            case TransferEncoding of
                 "chunked" -> read_chunked_body(Socket, Ssl, Hdrs, []);
-                undefined -> read_infinite_body(Socket, Vsn, Hdrs, Ssl)
+                _ -> read_infinite_body(Socket, Vsn, Hdrs, Ssl)
             end;
         ContentLength ->
             read_length(Hdrs, Ssl, Socket, list_to_integer(ContentLength))
