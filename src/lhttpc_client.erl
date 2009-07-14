@@ -208,7 +208,7 @@ read_body(Vsn, Hdrs, Ssl, Socket) ->
             ),
             case TransferEncoding of
                 "chunked" -> read_chunked_body(Socket, Ssl, Hdrs, []);
-                _ -> read_infinite_body(Socket, Vsn, Hdrs, Ssl)
+                _         -> read_infinite_body(Socket, Vsn, Hdrs, Ssl)
             end;
         ContentLength ->
             read_length(Hdrs, Ssl, Socket, list_to_integer(ContentLength))
