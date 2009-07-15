@@ -92,7 +92,7 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
     UploadWindowSize = proplists:get_value(partial_upload, Options),
     PartialUpload = proplists:is_defined(partial_upload, Options),
     PartialDownload = proplists:is_defined(partial_download, Options),
-    PartialDownloadOptions = proplists:get_valua(partial_download, Options, []),
+    PartialDownloadOptions = proplists:get_value(partial_download, Options, []),
     {ChunkedUpload, Request} = 
         lhttpc_lib:format_request(
          Path, Method, Hdrs, Host, Body, PartialUpload),
