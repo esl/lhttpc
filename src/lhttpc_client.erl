@@ -309,9 +309,10 @@ send_partial_response(State, Vsn, Status, Hdrs) ->
 read_partial_body(State, _Vsn, _Hdrs, chunked) ->
     read_partial_chunked_body(State);
 read_partial_body(State, Vsn, Hdrs, infinite) ->
-    read_partial_infinite_body(State, Vsn, Hdrs);
+    check_infinite_response(Vsn, Hdrs),
+    read_partial_infinite_body(State, State#client_state.download_window);
 read_partial_body(State, _Vsn, _Hdrs, {fixed_length, ContentLength}) ->
-    read_partial_body(State, ContentLength).
+    read_partial_body(State, ContentLength, State#client_state.download_window).
 
 response_type(Hdrs) ->
     % Find out how to read the entity body from the request.
@@ -337,12 +338,55 @@ response_type(Hdrs) ->
 read_body(_Vsn, Hdrs, Ssl, Socket, chunked) ->
     read_chunked_body(Socket, Ssl, Hdrs, []);
 read_body(Vsn, Hdrs, Ssl, Socket, infinite) ->
-    read_infinite_body(Socket, Vsn, Hdrs, Ssl);
+    check_infinite_response(Vsn, Hdrs),
+    read_infinite_body(Socket, Hdrs, Ssl);
 read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
     read_length(Hdrs, Ssl, Socket, ContentLength).
 
-read_partial_body(State, ContentLength) ->
-    ok. %%TODO
+read_partial_body(State, 0, _Window) ->
+    {http_eob, State#client_state.socket};
+read_partial_body(State = #client_state{receiver = To}, ContentLength, 0) ->
+    receive
+        {ack, To} -> read_partial_body(State, ContentLength, 1)
+        %%TODO: Timeout??
+    end;
+read_partial_body(State = #client_state{receiver = To}, ContentLength, Window) 
+        when Window >= 0->
+    Bin = read_body_part(State, ContentLength),
+    State#client_state.receiver ! {body_part, self(), Bin},
+    receive
+        {ack, To} -> read_partial_body(State, ContentLength - iolist_size(Bin),
+                        Window)
+    after 0 ->
+        read_partial_body(State, ContentLength - iolist_size(Bin), 
+            lhttpc_lib:dec(Window))
+    end.
+
+read_body_part(#client_state{socket = Socket, ssl = Ssl, 
+    max_part_size = infinity}, _ContentLength) ->
+    case lhttpc_sock:recv(Socket, 0, Ssl) of
+        {ok, Data} ->
+            Data;
+        {error, Reason} ->
+            erlang:error(Reason)
+    end; 
+read_body_part(#client_state{socket = Socket, ssl = Ssl, 
+    max_part_size = MaxSize}, ContentLength) when MaxSize =< ContentLength ->
+    case lhttpc_sock:recv(Socket, MaxSize, Ssl) of
+        {ok, Data} ->
+            Data;
+        {error, Reason} ->
+            erlang:error(Reason)
+    end;
+read_body_part(#client_state{socket = Socket, ssl = Ssl, 
+    max_part_size = MaxSize}, ContentLength) when MaxSize > ContentLength ->
+    case lhttpc_sock:recv(Socket, ContentLength, Ssl) of
+        {ok, Data} ->
+            Data;
+        {error, Reason} ->
+            erlang:error(Reason)
+    end.
+ 
 
 read_length(Hdrs, Ssl, Socket, Length) ->
     case lhttpc_sock:recv(Socket, Length, Ssl) of
@@ -404,21 +448,41 @@ read_trailers(Socket, Ssl, Hdrs) ->
             erlang:error({bad_trailer, Data})
     end.
 
-read_partial_infinite_body(State, Vsn, Hdrs) ->
-    ok. %%TODO
+read_partial_infinite_body(State = #client_state{receiver = To}, 0) ->
+    receive
+        {ack, To} -> read_partial_infinite_body(State, 1)
+        %%TODO: Timeout??
+    end;
+read_partial_infinite_body(State = #client_state{receiver = To}, Window) 
+        when Window >= 0 ->
+    Bin = read_infinite_body_part(State),
+    State#client_state.receiver ! {body_part, self(), Bin},
+    receive
+        {ack, To} -> read_partial_infinite_body(State, Window)
+    after 0 ->
+        read_partial_infinite_body(State, lhttpc_lib:dec(Window))
+    end.
+%% TODO:
 
-read_infinite_body(Socket, {1, Minor}, Hdrs, Ssl) when Minor >= 1 ->
+read_infinite_body_part(State) ->
+    %%TODO: if {error, closed} http_eob ...
+    ok.
+
+check_infinite_response({1, Minor}, Hdrs) when Minor >= 1 ->
     HdrValue = lhttpc_lib:header_value("connection", Hdrs, "keep-alive"),
     case string:to_lower(HdrValue) of
-        "close" -> read_until_closed(Socket, <<>>, Hdrs, Ssl);
+        "close" -> ok;
         _       -> erlang:error(no_content_length)
     end;
-read_infinite_body(Socket, _, Hdrs, Ssl) ->
+check_infinite_response(_, Hdrs) ->
     HdrValue = lhttpc_lib:header_value("connection", Hdrs, "close"),
     case string:to_lower(HdrValue) of
         "keep-alive" -> erlang:error(no_content_length);
-        _            -> read_until_closed(Socket, <<>>, Hdrs, Ssl)
+        _            -> ok
     end.
+
+read_infinite_body(Socket, Hdrs, Ssl) ->   
+    read_until_closed(Socket, <<>>, Hdrs, Ssl).
 
 read_until_closed(Socket, Acc, Hdrs, Ssl) ->
     case lhttpc_sock:recv(Socket, Ssl) of

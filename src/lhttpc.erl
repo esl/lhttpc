@@ -268,7 +268,7 @@ send_body_part({Pid, Window}, Bin, _Timeout)
         {'EXIT', Pid, Reason} ->
             exit(Reason)
     after 0 ->
-        {ok, {Pid, dec(Window)}}
+        {ok, {Pid, lhttpc_lib:dec(Window)}}
     end;
 send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
@@ -352,10 +352,6 @@ kill_client(Pid) ->
         {'DOWN', _, process, Pid, Reason}  ->
             erlang:error(Reason)
     end.
-
--spec dec(timeout()) -> timeout().
-dec(Num) when is_integer(Num) -> Num - 1;
-dec(Else)                     -> Else.
 
 -spec verify_options(options(), options()) -> ok.
 verify_options([{send_retry, N} | Options], Errors)

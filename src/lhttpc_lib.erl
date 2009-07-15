@@ -34,7 +34,7 @@
 -export([parse_url/1, format_request/6, header_value/2, header_value/3]).
 -export([maybe_atom_to_list/1]).
 
--export([format_hdrs/1]).
+-export([format_hdrs/1, dec/1]).
 
 -include("lhttpc_types.hrl").
 
@@ -229,4 +229,8 @@ is_chunked(Hdrs) ->
         undefined -> false;
         _ -> true %% chunked is mandatory with Transfer-Enncoding
     end.
+
+-spec dec(timeout()) -> timeout().
+dec(Num) when is_integer(Num) -> Num - 1;
+dec(Else)                     -> Else.
 
