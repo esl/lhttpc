@@ -31,7 +31,13 @@
 %%% @end
 -module(lhttpc_lib).
 
--export([parse_url/1, format_request/5, header_value/2, header_value/3]).
+-export([
+        parse_url/1,
+        format_request/5,
+        header_value/2,
+        header_value/3,
+        normalize_method/1
+    ]).
 -export([maybe_atom_to_list/1]).
 
 -include("lhttpc_types.hrl").
@@ -137,16 +143,23 @@ split_port(Scheme, [P | T], Port) ->
 -spec format_request(iolist(), atom() | string(), headers(), string(),
     iolist()) -> iolist().
 format_request(Path, Method, Hdrs, Host, Body) ->
-    FormatedMethod = format_method(Method),
     [
-        FormatedMethod, " ", Path, " HTTP/1.1\r\n",
-        format_hdrs(add_mandatory_hdrs(FormatedMethod, Hdrs, Host, Body), []),
+        Method, " ", Path, " HTTP/1.1\r\n",
+        format_hdrs(add_mandatory_hdrs(Method, Hdrs, Host, Body), []),
         Body
     ].
 
-format_method(Method) when is_atom(Method) ->
+%% @spec normalize_method(AtomOrString) -> Method
+%%   AtomOrString = atom() | string()
+%%   Method = string()
+%% @doc
+%% Turns the method in to a string suitable for inclusion in a HTTP request
+%% line.
+%% @end
+-spec normalize_method(atom() | string()) -> string().
+normalize_method(Method) when is_atom(Method) ->
     string:to_upper(atom_to_list(Method));
-format_method(Method) ->
+normalize_method(Method) ->
     Method.
 
 format_hdrs([{Hdr, Value} | T], Acc) ->

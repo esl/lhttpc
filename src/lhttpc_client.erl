@@ -40,6 +40,7 @@
         host :: string(),
         port = 80 :: integer(),
         ssl = false :: true | false,
+        method :: string(),
         request :: iolist(),
         request_headers :: headers(),
         socket,
@@ -78,7 +79,9 @@ request(From, URL, Method, Hdrs, Body, Options) ->
 
 execute(URL, Method, Hdrs, Body, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
-    Request = lhttpc_lib:format_request(Path, Method, Hdrs, Host, Body),
+    NormalizedMethod = lhttpc_lib:normalize_method(Method),
+    Request = lhttpc_lib:format_request(Path, NormalizedMethod, Hdrs, Host,
+        Body),
     SocketRequest = {socket, self(), Host, Port, Ssl},
     Socket = case gen_server:call(lhttpc_manager, SocketRequest, infinity) of
         {ok, S}   -> S; % Re-using HTTP/1.1 connections
@@ -88,6 +91,7 @@ execute(URL, Method, Hdrs, Body, Options) ->
         host = Host,
         port = Port,
         ssl = Ssl,
+        method = NormalizedMethod,
         request = Request,
         request_headers = Hdrs,
         socket = Socket,
@@ -171,7 +175,9 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             read_response(State, Vsn, Status, [Header | Hdrs], Body);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            {NewBody, NewHdrs} = read_body(Vsn, Hdrs, Ssl, Socket),
+            Method = State#client_state.method,
+            {NewBody, NewHdrs} = maybe_read_body(Method, element(1, Status),
+                Vsn, Hdrs, Ssl, Socket),
             Response = {Status, NewHdrs, NewBody},
             RequestHdrs = State#client_state.request_headers,
             NewSocket = maybe_close_socket(Socket, Ssl, Vsn, RequestHdrs,
@@ -191,6 +197,25 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             send_request(NewState);
         {error, Reason} ->
             erlang:error(Reason)
+    end.
+
+maybe_read_body("HEAD", _, _, Hdrs, _, _) ->
+    % HEAD responses aren't allowed to include a body
+    {<<>>, Hdrs};
+maybe_read_body("OPTIONS", _, Vsn, Hdrs, Ssl, Socket) ->
+    % OPTIONS can include a body, if Content-Length or Transfer-Encoding
+    % indicates it.
+    ContentLength = lhttpc_lib:header_value("content-length", Hdrs),
+    TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Hdrs),
+    case {ContentLength, TransferEncoding} of
+        {undefined, undefined} -> {<<>>, Hdrs};
+        {_, _}                 -> read_body(Vsn, Hdrs, Ssl, Socket)
+    end;
+maybe_read_body(_, StatusCode, Vsn, Hdrs, Ssl, Socket) ->
+    % All other requests should have a body, unless indicated otherwise 
+    case StatusCode of
+        204 -> {<<>>, Hdrs};
+        _   -> read_body(Vsn, Hdrs, Ssl, Socket)
     end.
 
 read_body(Vsn, Hdrs, Ssl, Socket) ->
