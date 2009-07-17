@@ -231,7 +231,7 @@ post() ->
     ?assertEqual(iolist_to_binary(Body), body(Response)).
 
 bad_url() ->
-    ?assertExit(_, lhttpc:request(ost, "GET", [], 100)).
+    ?assertError(_, lhttpc:request(ost, "GET", [], 100)).
 
 persistent_connection() ->
     Port = start(gen_tcp, [
