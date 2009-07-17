@@ -52,6 +52,12 @@ tcp_test_() ->
             ?_test(get_with_mandatory_hdrs()),
             ?_test(no_content_length()),
             ?_test(no_content_length_1_0()),
+            ?_test(simple_head()),
+            ?_test(simple_head_atom()),
+            ?_test(delete_no_content()),
+            ?_test(delete_content()),
+            ?_test(options_content()),
+            ?_test(options_no_content()),
             ?_test(server_connection_close()),
             ?_test(client_connection_close()),
             ?_test(pre_1_1_server_connection()),
@@ -117,6 +123,48 @@ no_content_length_1_0() ->
     Port = start(gen_tcp, [fun no_content_length_1_0/5]),
     URL = url(Port, "/no_cl"),
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+simple_head() ->
+    Port = start(gen_tcp, [fun head_response/5]),
+    URL = url(Port, "/HEAD"),
+    {ok, Response} = lhttpc:request(URL, "HEAD", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+simple_head_atom() ->
+    Port = start(gen_tcp, [fun head_response/5]),
+    URL = url(Port, "/head"),
+    {ok, Response} = lhttpc:request(URL, head, [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+delete_no_content() ->
+    Port = start(gen_tcp, [fun no_content_response/5]),
+    URL = url(Port, "/delete_no_content"),
+    {ok, Response} = lhttpc:request(URL, delete, [], 1000),
+    ?assertEqual({204, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+delete_content() ->
+    Port = start(gen_tcp, [fun simple_response/5]),
+    URL = url(Port, "/delete_content"),
+    {ok, Response} = lhttpc:request(URL, "DELETE", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+options_no_content() ->
+    Port = start(gen_tcp, [fun head_response/5]),
+    URL = url(Port, "/options_no_content"),
+    {ok, Response} = lhttpc:request(URL, "OPTIONS", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+options_content() ->
+    Port = start(gen_tcp, [fun simple_response/5]),
+    URL = url(Port, "/options_content"),
+    {ok, Response} = lhttpc:request(URL, "OPTIONS", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
@@ -332,6 +380,20 @@ simple_response(Module, Socket, _Request, _Headers, _Body) ->
         "HTTP/1.1 200 OK\r\n"
         "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
         ?DEFAULT_STRING
+    ).
+
+head_response(Module, Socket, _Request, _Headers, _Body) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Server: Test server!\r\n\r\n"
+    ).
+
+no_content_response(Module, Socket, _Request, _Headers, _Body) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 204 OK\r\n"
+        "Server: Test server!\r\n\r\n"
     ).
 
 empty_body(Module, Socket, _, _, _) ->
