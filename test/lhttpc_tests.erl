@@ -46,41 +46,45 @@ stop_app(_) ->
     ok = application:stop(crypto).
 
 tcp_test_() ->
-    {setup, fun start_app/0, fun stop_app/1, [
-            ?_test(simple_get()),
-            ?_test(empty_get()),
-            ?_test(get_with_mandatory_hdrs()),
-            ?_test(no_content_length()),
-            ?_test(no_content_length_1_0()),
-            ?_test(simple_head()),
-            ?_test(simple_head_atom()),
-            ?_test(delete_no_content()),
-            ?_test(delete_content()),
-            ?_test(options_content()),
-            ?_test(options_no_content()),
-            ?_test(server_connection_close()),
-            ?_test(client_connection_close()),
-            ?_test(pre_1_1_server_connection()),
-            ?_test(pre_1_1_server_keep_alive()),
-            ?_test(simple_put()),
-            ?_test(post()),
-            ?_test(bad_url()),
-            ?_test(persistent_connection()),
-            ?_test(request_timeout()),
-            ?_test(connection_timeout()),
-            ?_test(suspended_manager()),
-            ?_test(chunked_encoding()),
-            ?_test(close_connection()),
-            ?_test(connection_count()) % just check that it's 0 (last)
-        ]}.
+    {inorder, 
+        {setup, fun start_app/0, fun stop_app/1, [
+                ?_test(simple_get()),
+                ?_test(empty_get()),
+                ?_test(get_with_mandatory_hdrs()),
+                ?_test(no_content_length()),
+                ?_test(no_content_length_1_0()),
+                ?_test(simple_head()),
+                ?_test(simple_head_atom()),
+                ?_test(delete_no_content()),
+                ?_test(delete_content()),
+                ?_test(options_content()),
+                ?_test(options_no_content()),
+                ?_test(server_connection_close()),
+                ?_test(client_connection_close()),
+                ?_test(pre_1_1_server_connection()),
+                ?_test(pre_1_1_server_keep_alive()),
+                ?_test(simple_put()),
+                ?_test(post()),
+                ?_test(bad_url()),
+                ?_test(persistent_connection()),
+                ?_test(request_timeout()),
+                ?_test(connection_timeout()),
+                ?_test(suspended_manager()),
+                ?_test(chunked_encoding()),
+                ?_test(close_connection()),
+                ?_test(connection_count()) % just check that it's 0 (last)
+            ]}
+    }.
 
 ssl_test_() ->
-    {setup, fun start_app/0, fun stop_app/1, [
-            ?_test(ssl_get()),
-            ?_test(ssl_post()),
-            ?_test(ssl_chunked()),
-            ?_test(connection_count()) % just check that it's 0 (last)
-        ]}.
+    {inorder,
+        {setup, fun start_app/0, fun stop_app/1, [
+                ?_test(ssl_get()),
+                ?_test(ssl_post()),
+                ?_test(ssl_chunked()),
+                ?_test(connection_count()) % just check that it's 0 (last)
+            ]}
+    }.
 
 other_test_() ->
     [
