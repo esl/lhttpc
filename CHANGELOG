@@ -15,7 +15,7 @@ Version 1.2.0:
       clients can choose to not use persistent connections
 * RFC Compliance
     * Fix reading of chunked encoding since section 3.6 claims that "All transfer-coding values are case-insensitive"
-    * Support for responses that doesn't have an entity body 
+    * Support for responses that doesn't have an entity body (thanks to Steve Ellis)
         * No body for the HEAD and OPTIONS (unless indicated for the latter) methods
         * Don't try to read a body when receiving a 204 status
 
