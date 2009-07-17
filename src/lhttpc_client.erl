@@ -32,7 +32,7 @@
 %%% @end
 -module(lhttpc_client).
 
--export([request/6]).
+-export([request/9]).
 
 -include("lhttpc_types.hrl").
 
@@ -51,11 +51,13 @@
 -define(CONNECTION_HDR(HDRS, DEFAULT),
     string:to_lower(lhttpc_lib:header_value("connection", HDRS, DEFAULT))).
 
--spec request(pid(), string(), string() | atom(), headers(),
-        iolist(), [option()]) -> no_return().
-%% @spec (From, URL, Method, Hdrs, Body, Options) -> ok
+-spec request(pid(), string(), 1..65535, true | false, string(),
+        string() | atom(), headers(), iolist(), [option()]) -> no_return().
+%% @spec (From, Host, Port, Ssl, Path, Method, Hdrs, RequestBody, Options) -> ok
 %%    From = pid()
-%%    URL = string()
+%%    Host = string()
+%%    Port = integer()
+%%    Ssl = boolean()
 %%    Method = atom() | string()
 %%    Hdrs = [Header]
 %%    Header = {string() | atom(), string()}
@@ -63,9 +65,9 @@
 %%    Options = [Option]
 %%    Option = {connect_timeout, Milliseconds}
 %% @end
-request(From, URL, Method, Hdrs, Body, Options) ->
+request(From, Host, Port, Path, Ssl, Method, Hdrs, Body, Options) ->
     Result = try
-        execute(URL, Method, Hdrs, Body, Options)
+        execute(Host, Port, Path, Ssl, Method, Hdrs, Body, Options)
     catch 
         Reason ->
             {response, self(), {error, Reason}};
@@ -77,8 +79,7 @@ request(From, URL, Method, Hdrs, Body, Options) ->
     From ! Result,
     ok.
 
-execute(URL, Method, Hdrs, Body, Options) ->
-    {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
+execute(Host, Port, Path, Ssl, Method, Hdrs, Body, Options) ->
     NormalizedMethod = lhttpc_lib:normalize_method(Method),
     Request = lhttpc_lib:format_request(Path, NormalizedMethod, Hdrs, Host,
         Body),
