@@ -65,9 +65,9 @@
 %%    Options = [Option]
 %%    Option = {connect_timeout, Milliseconds}
 %% @end
-request(From, Host, Port, Path, Ssl, Method, Hdrs, Body, Options) ->
+request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     Result = try
-        execute(Host, Port, Path, Ssl, Method, Hdrs, Body, Options)
+        execute(Host, Port, Ssl, Path, Method, Hdrs, Body, Options)
     catch 
         Reason ->
             {response, self(), {error, Reason}};
@@ -79,7 +79,7 @@ request(From, Host, Port, Path, Ssl, Method, Hdrs, Body, Options) ->
     From ! Result,
     ok.
 
-execute(Host, Port, Path, Ssl, Method, Hdrs, Body, Options) ->
+execute(Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     NormalizedMethod = lhttpc_lib:normalize_method(Method),
     Request = lhttpc_lib:format_request(Path, NormalizedMethod, Hdrs, Host,
         Body),

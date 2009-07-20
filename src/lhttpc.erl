@@ -135,7 +135,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
         pos_integer() | infinity, [option()]) -> result().
 request(URL, Method, Hdrs, Body, Timeout, Options) ->
     {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
-    request(Host, Port, Path, Ssl, Method, Hdrs, Body, Timeout, Options).
+    request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options).
 
 %% @spec (Host, Port, Ssl, Path, Method, Hdrs, RequestBody, Timeout, Options) ->
 %%                                                                        Result
@@ -196,6 +196,8 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% sending a request if the connection is closed after the data has been
 %% sent. The default value is 1.
 %% @end
+-spec request(string(), 1..65535, true | false, string(), atom() | string(),
+    headers(), iolist(), pos_integer(), [option()]) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options, []),
     Args = [self(), Host, Port, Ssl, Path, Method, Hdrs, Body, Options],
