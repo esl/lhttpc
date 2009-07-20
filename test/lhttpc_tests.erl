@@ -475,16 +475,16 @@ read_partial_body(Pid, Size) ->
 
 read_partial_body(Pid, Size, Acc) ->
     case lhttpc:get_body_part(Pid) of
-        {ok, http_eob} ->
+        {ok, {http_eob, []}} ->
             list_to_binary(Acc);
         {ok, Bin} ->
             if
                 Size =:= infinity ->
                     ok;
                 Size =/= infinity ->
-                    ?assert(Size >= Bin)
+                    ?assert(Size >= iolist_size(Bin))
             end,
-            read_partial_body(Pid, [Acc, Bin])
+            read_partial_body(Pid, Size, [Acc, Bin])
     end.
 
 simple(Method) ->
