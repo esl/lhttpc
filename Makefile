@@ -35,7 +35,7 @@ $(APP_FILE): src/$(APPLICATION).app.src
 
 ebin/%.beam: src/%.erl $(HEADERS) $(filter-out $(wildcard ebin), ebin)
 	@echo Compiling $<
-	@erlc +debug_info -o ebin/ $<
+	@erlc +debug_info +warn_missing_spec -o ebin/ $<
 
 ebin:
 	@echo Creating ebin/
