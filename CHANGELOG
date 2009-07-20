@@ -1,3 +1,6 @@
+Version 1.2.1:
+* Fix confusion of arguments in request/9 (introduced in 1.2.0)
+
 Version 1.2.0:
 * Add support for options
     * {connect_timeout, Milliseconds}: Aborts the connect phase after Milliseconds
