@@ -34,6 +34,7 @@
 -export([request/4, request/5, request/6]).
 -export([send_body_part/2, send_body_part/3, 
         send_trailers/2, send_trailers/3]).
+-export([get_body_part/1]).
 -export([start/2, stop/1]).
 
 -include("lhttpc_types.hrl").
@@ -337,6 +338,16 @@ read_response(Pid, Timeout) ->
         kill_client(Pid)
     end.
 
+get_body_part(Pid) ->
+    receive
+        {body_part, Pid, Bin} ->
+            Pid ! {ack, self()},
+            {ok, Bin};
+        {response, Pid, {ok, {http_eob, Trailers}}} ->
+            {ok, {http_eob, Trailers}};
+        Else ->
+            erlang:error({malformed_message, Else})
+    end.
 %%% Internal functions
 
 kill_client(Pid) ->

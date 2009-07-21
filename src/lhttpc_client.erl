@@ -52,7 +52,7 @@
         partial_download = false :: true | false,
         download_window = infinity :: timeout(),
         receiver :: pid(),
-        max_part_size :: non_neg_integer() | infinity
+        part_size :: non_neg_integer() | infinity
         %% in case of infinity we read whatever data we can get from
         %% the wire at that point or 
         %% in case of chunked one chunk
@@ -118,7 +118,7 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
         partial_download = PartialDownload,
         download_window = proplists:get_value(window_size, 
             PartialDownloadOptions, infinity),
-        max_part_size = proplists:get_value(part_size,
+        part_size = proplists:get_value(part_size,
             PartialDownloadOptions, infinity), 
         receiver = proplists:get_value(receiver,
             PartialDownloadOptions, From)
@@ -272,11 +272,11 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
             read_response(State, Vsn, Status, [Header | Hdrs], Body);
         {ok, http_eoh} ->
+            lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             if 
                 State#client_state.partial_download ->
-                    send_partial_response(State,Vsn,Status,Hdrs);
+                    send_partial_response(State, Vsn, Status, Hdrs);
                 not State#client_state.partial_download ->
-                    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
                     {NewBody, NewHdrs} = read_body(
                         Vsn, Hdrs, Ssl, Socket, response_type(Hdrs)),
                     Response = {Status, NewHdrs, NewBody},
@@ -302,8 +302,12 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
     end.
 
 send_partial_response(State, Vsn, Status, Hdrs) ->
-    Response = {response, self(), {Status, Hdrs, self()}},
-    State#client_state.requester ! Response,
+    Response = {response, self(), {ok, {Status, Hdrs, self()}}},
+    State#client_state.requester ! Response, 
+    %% Header delivered to the requester,
+    %% The body is delivered to the specified receiver
+    %% TODO:Does this make sense? There might be information in the headers
+    %% which are needed for the receiver (like Content-Encoding etc).
     read_partial_body(State, Vsn, Hdrs, response_type(Hdrs)).
 
 read_partial_body(State, _Vsn, _Hdrs, chunked) ->
@@ -343,12 +347,12 @@ read_body(Vsn, Hdrs, Ssl, Socket, infinite) ->
 read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
     read_length(Hdrs, Ssl, Socket, ContentLength).
 
-read_partial_body(State, 0, _Window) ->
-    {http_eob, State#client_state.socket};
+read_partial_body(State = #client_state{}, 0, _Window) ->
+    send_end_of_body(State, [], State#client_state.socket);
 read_partial_body(State = #client_state{receiver = To}, ContentLength, 0) ->
     receive
         {ack, To} -> read_partial_body(State, ContentLength, 1)
-        %%TODO: Timeout??
+        %%TODO: Timeout or monitor receiver process??
     end;
 read_partial_body(State = #client_state{receiver = To}, ContentLength, Window) 
         when Window >= 0->
@@ -362,24 +366,29 @@ read_partial_body(State = #client_state{receiver = To}, ContentLength, Window)
             lhttpc_lib:dec(Window))
     end.
 
-read_body_part(#client_state{socket = Socket, ssl = Ssl, 
-    max_part_size = infinity}, _ContentLength) ->
-    case lhttpc_sock:recv(Socket, 0, Ssl) of
+read_body_part(State = #client_state{socket = Socket, ssl = Ssl, 
+        part_size = infinity}, ContentLength) ->
+    case lhttpc_sock:recv(Socket, Ssl) of
+        {ok, <<>>} -> 
+            %% There was nothing on the wire
+            %% wait and retry
+            timer:sleep(100), %%TODO: Maybe an option to specify timeout?
+            read_body_part(State, ContentLength);
         {ok, Data} ->
             Data;
         {error, Reason} ->
             erlang:error(Reason)
     end; 
-read_body_part(#client_state{socket = Socket, ssl = Ssl, 
-    max_part_size = MaxSize}, ContentLength) when MaxSize =< ContentLength ->
-    case lhttpc_sock:recv(Socket, MaxSize, Ssl) of
+read_body_part(#client_state{socket = Socket, ssl = Ssl, part_size = PartSize},
+        ContentLength) when PartSize =< ContentLength ->
+    case lhttpc_sock:recv(Socket, PartSize, Ssl) of
         {ok, Data} ->
             Data;
         {error, Reason} ->
             erlang:error(Reason)
     end;
-read_body_part(#client_state{socket = Socket, ssl = Ssl, 
-    max_part_size = MaxSize}, ContentLength) when MaxSize > ContentLength ->
+read_body_part(#client_state{socket = Socket, ssl = Ssl, part_size = PartSize},
+        ContentLength) when PartSize > ContentLength ->
     case lhttpc_sock:recv(Socket, ContentLength, Ssl) of
         {ok, Data} ->
             Data;
@@ -448,6 +457,16 @@ read_trailers(Socket, Ssl, Hdrs) ->
             erlang:error({bad_trailer, Data})
     end.
 
+send_end_of_body(#client_state{receiver = Receiver, 
+        requester = Requester}, Trailers, Socket) ->
+    if
+        Receiver =/=  Requester ->
+            Receiver ! {response, self(), {ok, {http_eob, Trailers}}};
+        Receiver =:= Requester ->
+            ok
+    end,
+    {{http_eob, Trailers}, Socket}.
+    
 read_partial_infinite_body(State = #client_state{receiver = To}, 0) ->
     receive
         {ack, To} -> read_partial_infinite_body(State, 1)
@@ -455,18 +474,31 @@ read_partial_infinite_body(State = #client_state{receiver = To}, 0) ->
     end;
 read_partial_infinite_body(State = #client_state{receiver = To}, Window) 
         when Window >= 0 ->
-    Bin = read_infinite_body_part(State),
-    State#client_state.receiver ! {body_part, self(), Bin},
-    receive
-        {ack, To} -> read_partial_infinite_body(State, Window)
-    after 0 ->
-        read_partial_infinite_body(State, lhttpc_lib:dec(Window))
+    case read_infinite_body_part(State) of
+        http_eob -> send_end_of_body(State, [], undefined);
+        Bin ->
+            State#client_state.receiver ! {body_part, self(), Bin},
+            receive
+                {ack, To} -> read_partial_infinite_body(State, Window)
+            after 0 ->
+                read_partial_infinite_body(State, lhttpc_lib:dec(Window))
+            end
     end.
-%% TODO:
 
-read_infinite_body_part(State) ->
-    %%TODO: if {error, closed} http_eob ...
-    ok.
+read_infinite_body_part(State = #client_state{socket = Socket, ssl = Ssl}) ->
+    case lhttpc_sock:recv(Socket, Ssl) of
+        {ok, <<>>} -> 
+            %% There was nothing on the wire
+            %% wait and retry
+            timer:sleep(100), %%TODO: Maybe an option to specify timeout?
+            read_infinite_body_part(State);
+        {ok, Data} ->
+            Data;
+        {error, closed} ->
+            http_eob;
+        {error, Reason} ->
+            erlang:error(Reason)
+    end.
 
 check_infinite_response({1, Minor}, Hdrs) when Minor >= 1 ->
     HdrValue = lhttpc_lib:header_value("connection", Hdrs, "keep-alive"),
