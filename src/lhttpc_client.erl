@@ -52,7 +52,6 @@
         upload_window :: non_neg_integer() | infinity,
         partial_download = false :: true | false,
         download_window = infinity :: timeout(),
-        receiver :: pid(),
         part_size :: non_neg_integer() | infinity
         %% in case of infinity we read whatever data we can get from
         %% the wire at that point or 
@@ -122,9 +121,7 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         download_window = proplists:get_value(window_size, 
             PartialDownloadOptions, infinity),
         part_size = proplists:get_value(part_size,
-            PartialDownloadOptions, infinity), 
-        receiver = proplists:get_value(receiver,
-            PartialDownloadOptions, From)
+            PartialDownloadOptions, infinity) 
     },
     Response = case send_request(State) of
         {R, undefined} ->
@@ -255,8 +252,10 @@ read_response(State, Vsn, Status, Hdrs) ->
             read_response(State, Vsn, Status, [Header | Hdrs]);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            {_, NewHdrs, _} = Response = handle_response_body(State, Vsn,
-                Status, Hdrs),
+            case Response = handle_response_body(State, Vsn, Status, Hdrs) of
+                {_, NewHdrs, _} -> ok;
+                Else -> NewHdrs = Hdrs
+            end,
             ReqHdrs = State#client_state.request_headers,
             NewSocket = maybe_close_socket(Socket, Ssl, Vsn, ReqHdrs, NewHdrs),
             {Response, NewSocket};
@@ -276,7 +275,7 @@ read_response(State, Vsn, Status, Hdrs) ->
             erlang:error(Reason)
     end.
 
-handle_response_body(#client_state{partial_download = false} = State,
+handle_response_body(State = #client_state{partial_download = false},
         Vsn, Status, Hdrs) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
@@ -293,11 +292,6 @@ handle_response_body(#client_state{partial_download = true} = State,
         true ->
             Response = {ok, {Status, Hdrs, self()}},
             State#client_state.requester ! {response, self(), Response},
-            %% Header delivered to the requester,
-            %% The body is delivered to the specified receiver
-            %% TODO:Does this make sense? There might be information in the
-            %% headers which are needed for the receiver (like
-            %% Content-Encoding etc).
             read_partial_body(State, Vsn, Hdrs, body_type(Hdrs));
         false ->
             {Status, Hdrs, undefined}
@@ -359,15 +353,15 @@ read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
 
 read_partial_body(State = #client_state{}, 0, _Window) ->
     send_end_of_body(State, [], State#client_state.socket);
-read_partial_body(State = #client_state{receiver = To}, ContentLength, 0) ->
+read_partial_body(State = #client_state{requester = To}, ContentLength, 0) ->
     receive
         {ack, To} -> read_partial_body(State, ContentLength, 1)
-        %%TODO: Timeout or monitor receiver process??
+        %%TODO: Timeout or monitor requester process??
     end;
-read_partial_body(State = #client_state{receiver = To}, ContentLength, Window) 
+read_partial_body(State = #client_state{requester = To}, ContentLength, Window) 
         when Window >= 0->
     Bin = read_body_part(State, ContentLength),
-    State#client_state.receiver ! {body_part, self(), Bin},
+    State#client_state.requester ! {body_part, self(), Bin},
     receive
         {ack, To} -> read_partial_body(State, ContentLength - iolist_size(Bin),
                         Window)
@@ -461,27 +455,20 @@ read_trailers(Socket, Ssl, Hdrs) ->
             erlang:error({bad_trailer, Data})
     end.
 
-send_end_of_body(#client_state{receiver = Receiver, 
-        requester = Requester}, Trailers, Socket) ->
-    if
-        Receiver =/=  Requester ->
-            Receiver ! {response, self(), {ok, {http_eob, Trailers}}};
-        Receiver =:= Requester ->
-            ok
-    end,
+send_end_of_body(#client_state{}, Trailers, Socket) ->
     {{http_eob, Trailers}, Socket}.
     
-read_partial_infinite_body(State = #client_state{receiver = To}, 0) ->
+read_partial_infinite_body(State = #client_state{requester = To}, 0) ->
     receive
         {ack, To} -> read_partial_infinite_body(State, 1)
         %%TODO: Timeout??
     end;
-read_partial_infinite_body(State = #client_state{receiver = To}, Window) 
+read_partial_infinite_body(State = #client_state{requester = To}, Window) 
         when Window >= 0 ->
     case read_infinite_body_part(State) of
         http_eob -> send_end_of_body(State, [], undefined);
         Bin ->
-            State#client_state.receiver ! {body_part, self(), Bin},
+            State#client_state.requester ! {body_part, self(), Bin},
             receive
                 {ack, To} -> read_partial_infinite_body(State, Window)
             after 0 ->

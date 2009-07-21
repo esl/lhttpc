@@ -450,8 +450,6 @@ bad_options(Errors) ->
 verify_partial_download([{window_size, Size} | Options], Errors) when
         is_integer(Size), Size >= 0 ->
     verify_partial_download(Options, Errors);
-verify_partial_download([{receiver, Pid} | Options], Errors) when is_pid(Pid) ->
-    verify_partial_download(Options, Errors);
 verify_partial_download([{part_size, Size} | Options], Errors) when
         is_integer(Size), Size >= 0 ->
     verify_partial_download(Options, Errors);

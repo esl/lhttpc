@@ -452,8 +452,7 @@ partial_download_identity() ->
     Port = start(gen_tcp, [fun large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-        {receiver, self()}
+        {window_size, 1}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, {Status, _, Pid}} =
@@ -466,8 +465,7 @@ partial_download_no_content() ->
     Port = start(gen_tcp, [fun no_content_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-        {receiver, self()}
+        {window_size, 1}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, {Status, _, Body}} =
@@ -480,7 +478,6 @@ limited_partial_download_identity() ->
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
         {window_size, 1},
-        {receiver, self()},
         {part_size, 512} % bytes
     ],
     Options = [{partial_download, PartialDownload}],
@@ -494,8 +491,7 @@ partial_download_chunked() ->
     Port = start(gen_tcp, [fun large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-        {receiver, self()}
+        {window_size, 1}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, {Status, _, Pid}} =
