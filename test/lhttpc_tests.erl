@@ -268,14 +268,22 @@ pre_1_1_server_connection() ->
     receive closed -> ok end.
 
 pre_1_1_server_keep_alive() ->
-    Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
+    Port = start(gen_tcp, [
+            fun pre_1_1_server_keep_alive/5,
+            fun pre_1_1_server/5
+        ]),
     URL = url(Port, "/close"),
+    Body = pid_to_list(self()),
     {ok, Response1} = lhttpc:request(URL, get, [], [], 1000),
-    {ok, Response2} = lhttpc:request(URL, get, [], [], 1000),
+    {ok, Response2} = lhttpc:request(URL, put, [], Body, 1000),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
-    ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)).
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
+    % Wait for the server to see that socket has been closed.
+    % The socket should be closed by us since the server responded with a
+    % 1.0 version, and not the Connection: keep-alive header.
+    receive closed -> ok end.
 
 simple_put() ->
     simple(put),
@@ -713,6 +721,16 @@ pre_1_1_server(Module, Socket, _, _, Body) ->
     {error, closed} = Module:recv(Socket, 0),
     Pid ! closed,
     Module:close(Socket).
+
+pre_1_1_server_keep_alive(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.0 200 OK\r\n"
+        "Content-type: text/plain\r\n"
+        "Connection: Keep-Alive\r\n"
+        "Content-length: 14\r\n\r\n"
+        ?DEFAULT_STRING
+    ).
 
 very_slow_response(Module, Socket, _, _, _) ->
     timer:sleep(1000),
