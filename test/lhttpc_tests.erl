@@ -92,7 +92,9 @@
     ).
 
 test_no(N, Tests) ->
-	setelement(4, Tests, lists:nth(N, element(4, Tests))).
+	setelement(2, Tests,
+        setelement(4, element(2, Tests),
+            lists:nth(N, element(4, element(2, Tests))))).
 
 %%% Eunit setup stuff
 
