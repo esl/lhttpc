@@ -107,40 +107,51 @@ stop_app(_) ->
     ok = application:stop(crypto).
 
 tcp_test_() ->
-    {setup, fun start_app/0, fun stop_app/1, [
-            ?_test(simple_get()),
-            ?_test(empty_get()),
-            ?_test(get_with_mandatory_hdrs()),
-            ?_test(no_content_length()),
-            ?_test(no_content_length_1_0()),
-            ?_test(server_connection_close()),
-            ?_test(client_connection_close()),
-            ?_test(pre_1_1_server_connection()),
-            ?_test(pre_1_1_server_keep_alive()),
-            ?_test(simple_put()),
-            ?_test(post()),
-            ?_test(bad_url()),
-            ?_test(persistent_connection()),
-            ?_test(request_timeout()),
-            ?_test(connection_timeout()),
-            ?_test(suspended_manager()),
-            ?_test(chunked_encoding()),
-            ?_test(partial_upload_identity()),
-            ?_test(partial_upload_chunked()),
-            ?_test(partial_download_identity()),
-            ?_test(limited_partial_download_identity()),
-            ?_test(partial_download_chunked()),
-            ?_test(close_connection()),
-            ?_test(connection_count()) % just check that it's 0 (last)
-        ]}.
+    {inorder, 
+        {setup, fun start_app/0, fun stop_app/1, [
+                ?_test(simple_get()),
+                ?_test(empty_get()),
+                ?_test(get_with_mandatory_hdrs()),
+                ?_test(no_content_length()),
+                ?_test(no_content_length_1_0()),
+                ?_test(simple_head()),
+                ?_test(simple_head_atom()),
+                ?_test(delete_no_content()),
+                ?_test(delete_content()),
+                ?_test(options_content()),
+                ?_test(options_no_content()),
+                ?_test(server_connection_close()),
+                ?_test(client_connection_close()),
+                ?_test(pre_1_1_server_connection()),
+                ?_test(pre_1_1_server_keep_alive()),
+                ?_test(simple_put()),
+                ?_test(post()),
+                ?_test(bad_url()),
+                ?_test(persistent_connection()),
+                ?_test(request_timeout()),
+                ?_test(connection_timeout()),
+                ?_test(suspended_manager()),
+                ?_test(chunked_encoding()),
+                ?_test(partial_upload_identity()),
+                ?_test(partial_upload_chunked()),
+                ?_test(partial_upload_chunked_no_trailer()),
+                ?_test(partial_download_identity()),
+                ?_test(limited_partial_download_identity()),
+                ?_test(partial_download_chunked()),
+                ?_test(close_connection()),
+                ?_test(connection_count()) % just check that it's 0 (last)
+            ]}
+    }.
 
 ssl_test_() ->
-    {setup, fun start_app/0, fun stop_app/1, [
-            ?_test(ssl_get()),
-            ?_test(ssl_post()),
-            ?_test(ssl_chunked()),
-            ?_test(connection_count()) % just check that it's 0 (last)
-        ]}.
+    {inorder,
+        {setup, fun start_app/0, fun stop_app/1, [
+                ?_test(ssl_get()),
+                ?_test(ssl_post()),
+                ?_test(ssl_chunked()),
+                ?_test(connection_count()) % just check that it's 0 (last)
+            ]}
+    }.
 
 other_test_() ->
     [
@@ -183,6 +194,48 @@ no_content_length_1_0() ->
     Port = start(gen_tcp, [fun no_content_length_1_0/5]),
     URL = url(Port, "/no_cl"),
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+simple_head() ->
+    Port = start(gen_tcp, [fun head_response/5]),
+    URL = url(Port, "/HEAD"),
+    {ok, Response} = lhttpc:request(URL, "HEAD", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+simple_head_atom() ->
+    Port = start(gen_tcp, [fun head_response/5]),
+    URL = url(Port, "/head"),
+    {ok, Response} = lhttpc:request(URL, head, [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+delete_no_content() ->
+    Port = start(gen_tcp, [fun no_content_response/5]),
+    URL = url(Port, "/delete_no_content"),
+    {ok, Response} = lhttpc:request(URL, delete, [], 1000),
+    ?assertEqual({204, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+delete_content() ->
+    Port = start(gen_tcp, [fun simple_response/5]),
+    URL = url(Port, "/delete_content"),
+    {ok, Response} = lhttpc:request(URL, "DELETE", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+options_no_content() ->
+    Port = start(gen_tcp, [fun head_response/5]),
+    URL = url(Port, "/options_no_content"),
+    {ok, Response} = lhttpc:request(URL, "OPTIONS", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
+
+options_content() ->
+    Port = start(gen_tcp, [fun simple_response/5]),
+    URL = url(Port, "/options_content"),
+    {ok, Response} = lhttpc:request(URL, "OPTIONS", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
@@ -245,7 +298,7 @@ post() ->
     ?assertEqual(iolist_to_binary(Body), body(Response)).
 
 bad_url() ->
-    ?assertExit(_, lhttpc:request(ost, "GET", [], 100)).
+    ?assertError(_, lhttpc:request(ost, "GET", [], 100)).
 
 persistent_connection() ->
     Port = start(gen_tcp, [
@@ -368,6 +421,21 @@ partial_upload_chunked() ->
         lhttpc_lib:header_value("x-test-orig-body", headers(Response2))),
     ?assertEqual(element(2, Trailer), 
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response2))).
+
+partial_upload_chunked_no_trailer() ->
+    Port = start(gen_tcp, [fun chunked_upload/5]),
+    URL = url(Port, "/partial_upload_chunked_no_trailer"),
+    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
+    Options = [{partial_upload, 1}],
+    {ok, UploadState1} = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
+    {ok, Response} = lhttpc:send_body_part(
+        lists:foldl(fun upload_parts/2, UploadState1, tl(Body)),
+        http_eob
+    ),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)),
+    ?assertEqual("This is chunky stuff!",
+        lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
 
 partial_download_identity() ->
     Port = start(gen_tcp, [fun large_response/5]),
@@ -571,6 +639,20 @@ chunked_upload(Module, Socket, _, Headers, <<>>) ->
             "X-Test-Orig-Body: ", Body, "\r\n\r\n"
             ?DEFAULT_STRING
         ]
+    ).
+
+head_response(Module, Socket, _Request, _Headers, _Body) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Server: Test server!\r\n\r\n"
+    ).
+
+no_content_response(Module, Socket, _Request, _Headers, _Body) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 204 OK\r\n"
+        "Server: Test server!\r\n\r\n"
     ).
 
 empty_body(Module, Socket, _, _, _) ->

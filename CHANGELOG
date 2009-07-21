@@ -1,3 +1,6 @@
+Version 1.2.1:
+* Fix confusion of arguments in request/9 (introduced in 1.2.0)
+
 Version 1.2.0:
 * Add support for options
     * {connect_timeout, Milliseconds}: Aborts the connect phase after Milliseconds
@@ -15,6 +18,9 @@ Version 1.2.0:
       clients can choose to not use persistent connections
 * RFC Compliance
     * Fix reading of chunked encoding since section 3.6 claims that "All transfer-coding values are case-insensitive"
+    * Support for responses that doesn't have an entity body (thanks to Steve Ellis)
+        * No body for the HEAD and OPTIONS (unless indicated for the latter) methods
+        * Don't try to read a body when receiving a 204 status
 
 Version 1.1.2:
 * Fix minor error with {active, once} instead of {active, true} in manager

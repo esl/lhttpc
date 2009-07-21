@@ -31,9 +31,13 @@
 -module(lhttpc).
 -behaviour(application).
 
--export([request/4, request/5, request/6]).
--export([send_body_part/2, send_body_part/3, 
-        send_trailers/2, send_trailers/3]).
+-export([request/4, request/5, request/6, request/9]).
+-export([
+        send_body_part/2,
+        send_body_part/3, 
+        send_trailers/2,
+        send_trailers/3
+    ]).
 -export([get_body_part/1]).
 -export([start/2, stop/1]).
 
@@ -127,8 +131,54 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   ResponseBody = binary()
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
+%% Would be the same as calling <pre>
+%% {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
+%% request(Host, Port, Path, Ssl, Method, Hdrs, Body, Timeout, Options).
+%% </pre>
+%%
 %% `URL' is expected to be a valid URL: 
 %% `scheme://host[:port][/path]'.
+%% @end
+-spec request(string(), string() | atom(), headers(), iolist(),
+        pos_integer() | infinity, [option()]) -> result().
+request(URL, Method, Hdrs, Body, Timeout, Options) ->
+    {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
+    request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options).
+
+%% @spec (Host, Port, Ssl, Path, Method, Hdrs, RequestBody, Timeout, Options) ->
+%%                                                                        Result
+%%   Host = string()
+%%   Port = integer()
+%%   Ssl = boolean()
+%%   Path = string()
+%%   Method = string() | atom()
+%%   Hdrs = [{Header, Value}]
+%%   Header = string() | binary() | atom()
+%%   Value = string() | binary()
+%%   RequestBody = iolist()
+%%   Timeout = integer() | infinity
+%%   Options = [Option]
+%%   Option = {connect_timeout, Milliseconds | infinity} |
+%%            {send_retry, integer()}
+%%   Milliseconds = integer()
+%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
+%%            | {error, Reason}
+%%   StatusCode = integer()
+%%   ReasonPhrase = string()
+%%   ResponseBody = binary()
+%%   Reason = connection_closed | connect_timeout | timeout
+%% @doc Sends a request with a body.
+%%
+%% Instead of building and parsing URLs the target server is specified with
+%% a host, port, weither SSL should be used or not and a path on the server.
+%% For instance, if you want to request http://example.com/foobar you would
+%% use the following:<br/>
+%% `Host' = `"example.com"'<br/>
+%% `Port' = `80'<br/>
+%% `Ssl' = `false'<br/>
+%% `Path' = `"/foobar"'<br/>
+%% `Path' must begin with a forward slash `/'.
+%% 
 %% `Method' is either a string, stating the HTTP method exactly as in the
 %% protocol, i.e: `"POST"' or `"GET"'. It could also be an atom, which is
 %% then made in to uppercase, if it isn't already.
@@ -175,11 +225,11 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% memory but can also be used when the complete size of the body isn't known
 %% when the request is started.
 %% @end
--spec request(string(), string() | atom(), headers(), iolist(),
-        pos_integer() | infinity, [option()]) -> result().
-request(URL, Method, Hdrs, Body, Timeout, Options) ->
+-spec request(string(), 1..65535, true | false, string(), atom() | string(),
+    headers(), iolist(), pos_integer(), [option()]) -> result().
+request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options, []),
-    Args = [self(), URL, Method, Hdrs, Body, Options],
+    Args = [self(), Host, Port, Ssl, Path, Method, Hdrs, Body, Options],
     Pid = spawn_link(lhttpc_client, request, Args),
     receive
         {response, Pid, R} ->

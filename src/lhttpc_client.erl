@@ -32,7 +32,7 @@
 %%% @end
 -module(lhttpc_client).
 
--export([request/6]).
+-export([request/9]).
 
 -include("lhttpc_types.hrl").
 
@@ -40,6 +40,7 @@
         host :: string(),
         port = 80 :: integer(),
         ssl = false :: true | false,
+        method :: string(),
         request :: iolist(),
         request_headers :: headers(),
         socket,
@@ -61,11 +62,13 @@
 -define(CONNECTION_HDR(HDRS, DEFAULT),
     string:to_lower(lhttpc_lib:header_value("connection", HDRS, DEFAULT))).
 
--spec request(pid(), string(), string() | atom(), headers(),
-        iolist(), [option()]) -> no_return().
-%% @spec (From, URL, Method, Hdrs, Body, Options) -> ok
+-spec request(pid(), string(), 1..65535, true | false, string(),
+        string() | atom(), headers(), iolist(), [option()]) -> no_return().
+%% @spec (From, Host, Port, Ssl, Path, Method, Hdrs, RequestBody, Options) -> ok
 %%    From = pid()
-%%    URL = string()
+%%    Host = string()
+%%    Port = integer()
+%%    Ssl = boolean()
 %%    Method = atom() | string()
 %%    Hdrs = [Header]
 %%    Header = {string() | atom(), string()}
@@ -73,9 +76,9 @@
 %%    Options = [Option]
 %%    Option = {connect_timeout, Milliseconds}
 %% @end
-request(From, URL, Method, Hdrs, Body, Options) ->
+request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     Result = try
-        execute(From, URL, Method, Hdrs, Body, Options)
+        execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options)
     catch 
         Reason ->
             {response, self(), {error, Reason}};
@@ -87,15 +90,14 @@ request(From, URL, Method, Hdrs, Body, Options) ->
     From ! Result,
     ok.
 
-execute(From, URL, Method, Hdrs, Body, Options) ->
-    {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
+execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     UploadWindowSize = proplists:get_value(partial_upload, Options),
     PartialUpload = proplists:is_defined(partial_upload, Options),
     PartialDownload = proplists:is_defined(partial_download, Options),
     PartialDownloadOptions = proplists:get_value(partial_download, Options, []),
-    {ChunkedUpload, Request} = 
-        lhttpc_lib:format_request(
-         Path, Method, Hdrs, Host, Body, PartialUpload),
+    NormalizedMethod = lhttpc_lib:normalize_method(Method),
+    {ChunkedUpload, Request} = lhttpc_lib:format_request(Path, NormalizedMethod,
+        Hdrs, Host, Body, PartialUpload),
     SocketRequest = {socket, self(), Host, Port, Ssl},
     Socket = case gen_server:call(lhttpc_manager, SocketRequest, infinity) of
         {ok, S}   -> S; % Re-using HTTP/1.1 connections
@@ -105,6 +107,7 @@ execute(From, URL, Method, Hdrs, Body, Options) ->
         host = Host,
         port = Port,
         ssl = Ssl,
+        method = NormalizedMethod,
         request = Request,
         requester = From,
         request_headers = Hdrs,
@@ -192,7 +195,7 @@ send_request(State) ->
 partial_upload(State) ->
     Response = {ok, {self(), State#client_state.upload_window}},
     State#client_state.requester ! {response, self(), Response},
-    upload_loop(State#client_state{attempts = 1, request = undefined}).
+    partial_upload_loop(State#client_state{attempts = 1, request = undefined}).
 
 partial_upload_loop(State = #client_state{requester = Pid}) ->
     receive
@@ -205,7 +208,7 @@ partial_upload_loop(State = #client_state{requester = Pid}) ->
         {body_part, Pid, Data} ->
             send_body_part(State, Data),
             Pid ! {ack, self()},
-            upload_loop(State)
+            partial_upload_loop(State)
     end.
 
 send_body_part(State = #client_state{socket = Socket, ssl = Ssl}, BodyPart) ->
@@ -238,32 +241,21 @@ check_send_result(#client_state{socket = Sock, ssl = Ssl}, {error, Reason}) ->
  
 read_response(#client_state{socket = Socket, ssl = Ssl} = State) ->
     lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
-    read_response(State, nil, nil, [], <<>>).
+    read_response(State, nil, nil, []).
 
-read_response(State, Vsn, Status, Hdrs, Body) ->
+read_response(State, Vsn, Status, Hdrs) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
     case lhttpc_sock:recv(Socket, Ssl) of
         {ok, {http_response, NewVsn, StatusCode, Reason}} ->
             NewStatus = {StatusCode, Reason},
-            read_response(State, NewVsn, NewStatus, Hdrs, Body);
+            read_response(State, NewVsn, NewStatus, Hdrs);
         {ok, {http_header, _, Name, _, Value}} ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            read_response(State, Vsn, Status, [Header | Hdrs], Body);
+            read_response(State, Vsn, Status, [Header | Hdrs]);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            if 
-                State#client_state.partial_download ->
-                    send_partial_response(State, Vsn, Status, Hdrs);
-                not State#client_state.partial_download ->
-                    {NewBody, NewHdrs} = read_body(
-                        Vsn, Hdrs, Ssl, Socket, response_type(Hdrs)),
-                    Response = {Status, NewHdrs, NewBody},
-                    RequestHdrs = State#client_state.request_headers,
-                    NewSocket = maybe_close_socket(
-                        Socket, Ssl, Vsn, RequestHdrs, NewHdrs),
-                    {Response, NewSocket}
-            end;
+            handle_response_body(State, Vsn, Status, Hdrs);
         {error, closed} ->
             % Either we only noticed that the socket was closed after we
             % sent the request, the server closed it just after we put
@@ -280,24 +272,49 @@ read_response(State, Vsn, Status, Hdrs, Body) ->
             erlang:error(Reason)
     end.
 
-send_partial_response(State, Vsn, Status, Hdrs) ->
-    Response = {response, self(), {ok, {Status, Hdrs, self()}}},
-    State#client_state.requester ! Response, 
+handle_response_body(#client_state{partial_download = false} = State,
+        Vsn, Status, Hdrs) ->
+    Socket = State#client_state.socket,
+    Ssl = State#client_state.ssl,
+    Method = State#client_state.method,
+    {Body, NewHdrs} =
+        maybe_read_body(Method, element(1, Status), Vsn, Hdrs, Ssl, Socket),
+    Response = {Status, NewHdrs, Body},
+    RequestHdrs = State#client_state.request_headers,
+    NewSocket = maybe_close_socket(Socket, Ssl, Vsn, RequestHdrs, NewHdrs),
+    {Response, NewSocket};
+handle_response_body(#client_state{partial_download = true} = State,
+        Vsn, Status, Hdrs) ->
+    Response = {ok, {Status, Hdrs, self()}},
+    State#client_state.requester ! {response, self(), Response}, 
     %% Header delivered to the requester,
     %% The body is delivered to the specified receiver
     %% TODO:Does this make sense? There might be information in the headers
     %% which are needed for the receiver (like Content-Encoding etc).
-    read_partial_body(State, Vsn, Hdrs, response_type(Hdrs)).
+    read_partial_body(State, Vsn, Hdrs, body_type(Hdrs)).
 
-read_partial_body(State, _Vsn, _Hdrs, chunked) ->
-    read_partial_chunked_body(State);
-read_partial_body(State, Vsn, Hdrs, infinite) ->
-    check_infinite_response(Vsn, Hdrs),
-    read_partial_infinite_body(State, State#client_state.download_window);
-read_partial_body(State, _Vsn, _Hdrs, {fixed_length, ContentLength}) ->
-    read_partial_body(State, ContentLength, State#client_state.download_window).
+maybe_read_body("HEAD", _, _, Hdrs, _, _) ->
+    % HEAD responses aren't allowed to include a body
+    {<<>>, Hdrs};
+maybe_read_body("OPTIONS", _, Vsn, Hdrs, Ssl, Socket) ->
+    % OPTIONS can include a body, if Content-Length or Transfer-Encoding
+    % indicates it.
+    ContentLength = lhttpc_lib:header_value("content-length", Hdrs),
+    TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Hdrs),
+    case {ContentLength, TransferEncoding} of
+        {undefined, undefined} ->
+            {<<>>, Hdrs};
+        {_, _} ->
+            read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs))
+    end;
+maybe_read_body(_, StatusCode, Vsn, Hdrs, Ssl, Socket) ->
+    % All other requests should have a body, unless indicated otherwise 
+    case StatusCode of
+        204 -> {<<>>, Hdrs};
+        _   -> read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs))
+    end.
 
-response_type(Hdrs) ->
+body_type(Hdrs) ->
     % Find out how to read the entity body from the request.
     % * If we have a Content-Length, just use that and read the complete
     %   entity.
@@ -317,6 +334,14 @@ response_type(Hdrs) ->
         ContentLength ->
             {fixed_length, list_to_integer(ContentLength)}
     end.
+
+read_partial_body(State, _Vsn, _Hdrs, chunked) ->
+    read_partial_chunked_body(State);
+read_partial_body(State, Vsn, Hdrs, infinite) ->
+    check_infinite_response(Vsn, Hdrs),
+    read_partial_infinite_body(State, State#client_state.download_window);
+read_partial_body(State, _Vsn, _Hdrs, {fixed_length, ContentLength}) ->
+    read_partial_body(State, ContentLength, State#client_state.download_window).
     
 read_body(_Vsn, Hdrs, Ssl, Socket, chunked) ->
     read_chunked_body(Socket, Ssl, Hdrs, []);
@@ -374,7 +399,6 @@ read_body_part(#client_state{socket = Socket, ssl = Ssl, part_size = PartSize},
         {error, Reason} ->
             erlang:error(Reason)
     end.
- 
 
 read_length(Hdrs, Ssl, Socket, Length) ->
     case lhttpc_sock:recv(Socket, Length, Ssl) of
