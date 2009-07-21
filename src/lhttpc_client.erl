@@ -370,14 +370,9 @@ read_partial_body(State = #client_state{receiver = To}, ContentLength, Window)
             lhttpc_lib:dec(Window))
     end.
 
-read_body_part(State = #client_state{socket = Socket, ssl = Ssl, 
-        part_size = infinity}, ContentLength) ->
+read_body_part(#client_state{socket = Socket, ssl = Ssl, part_size = infinity},
+        _ContentLength) ->
     case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, <<>>} -> 
-            %% There was nothing on the wire
-            %% wait and retry
-            timer:sleep(100), %%TODO: Maybe an option to specify timeout?
-            read_body_part(State, ContentLength);
         {ok, Data} ->
             Data;
         {error, Reason} ->
@@ -488,13 +483,8 @@ read_partial_infinite_body(State = #client_state{receiver = To}, Window)
             end
     end.
 
-read_infinite_body_part(State = #client_state{socket = Socket, ssl = Ssl}) ->
+read_infinite_body_part(#client_state{socket = Socket, ssl = Ssl}) ->
     case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, <<>>} -> 
-            %% There was nothing on the wire
-            %% wait and retry
-            timer:sleep(100), %%TODO: Maybe an option to specify timeout?
-            read_infinite_body_part(State);
         {ok, Data} ->
             Data;
         {error, closed} ->
