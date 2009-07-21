@@ -367,11 +367,21 @@ send_trailers({Pid, Window}, Trailers) ->
 send_trailers({Pid, _Window}, Trailers, Timeout)
         when is_list(Trailers), is_pid(Pid) ->
     Pid ! {trailers, self(), Trailers},
-    % XXX: You claimed earlier in the docs that if the window size would be
-    % 0 we would block, but we don't. I can't see why it would make any
-    % sense waiting for an ack here though since we're blocked in
-    % read_response any way.
     read_response(Pid, Timeout).
+
+-spec get_body_part(pid()) -> {ok, binary()} | {ok, {http_eob, headers()}}.
+get_body_part(Pid) ->
+    receive
+        {body_part, Pid, Bin} ->
+            Pid ! {ack, self()},
+            {ok, Bin};
+        {response, Pid, {ok, {http_eob, Trailers}}} ->
+            {ok, {http_eob, Trailers}};
+        Else ->
+            erlang:error({malformed_message, Else})
+    end.
+
+%%% Internal functions
 
 -spec read_response(pid(), timeout()) -> result().
 read_response(Pid, Timeout) ->
@@ -387,19 +397,6 @@ read_response(Pid, Timeout) ->
     after Timeout ->
         kill_client(Pid)
     end.
-
--spec get_body_part(pid()) -> {ok, binary()} | {ok, {http_eob, headers()}}.
-get_body_part(Pid) ->
-    receive
-        {body_part, Pid, Bin} ->
-            Pid ! {ack, self()},
-            {ok, Bin};
-        {response, Pid, {ok, {http_eob, Trailers}}} ->
-            {ok, {http_eob, Trailers}};
-        Else ->
-            erlang:error({malformed_message, Else})
-    end.
-%%% Internal functions
 
 kill_client(Pid) ->
     Monitor = erlang:monitor(process, Pid),
