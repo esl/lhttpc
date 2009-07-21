@@ -388,6 +388,7 @@ read_response(Pid, Timeout) ->
         kill_client(Pid)
     end.
 
+-spec get_body_part(pid()) -> {ok, binary()} | {ok, {http_eob, headers()}}.
 get_body_part(Pid) ->
     receive
         {body_part, Pid, Bin} ->
