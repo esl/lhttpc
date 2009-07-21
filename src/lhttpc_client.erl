@@ -255,7 +255,11 @@ read_response(State, Vsn, Status, Hdrs) ->
             read_response(State, Vsn, Status, [Header | Hdrs]);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            handle_response_body(State, Vsn, Status, Hdrs);
+            {_, NewHdrs, _} = Response = handle_response_body(State, Vsn,
+                Status, Hdrs),
+            ReqHdrs = State#client_state.request_headers,
+            NewSocket = maybe_close_socket(Socket, Ssl, Vsn, ReqHdrs, NewHdrs),
+            {Response, NewSocket};
         {error, closed} ->
             % Either we only noticed that the socket was closed after we
             % sent the request, the server closed it just after we put
@@ -277,42 +281,44 @@ handle_response_body(#client_state{partial_download = false} = State,
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
     Method = State#client_state.method,
-    {Body, NewHdrs} =
-        maybe_read_body(Method, element(1, Status), Vsn, Hdrs, Ssl, Socket),
-    Response = {Status, NewHdrs, Body},
-    RequestHdrs = State#client_state.request_headers,
-    NewSocket = maybe_close_socket(Socket, Ssl, Vsn, RequestHdrs, NewHdrs),
-    {Response, NewSocket};
+    {Body, NewHdrs} = case has_body(Method, element(1, Status), Hdrs) of
+        true  -> read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs));
+        false -> {<<>>, Hdrs}
+    end,
+    {Status, NewHdrs, Body};
 handle_response_body(#client_state{partial_download = true} = State,
         Vsn, Status, Hdrs) ->
-    Response = {ok, {Status, Hdrs, self()}},
-    State#client_state.requester ! {response, self(), Response}, 
-    %% Header delivered to the requester,
-    %% The body is delivered to the specified receiver
-    %% TODO:Does this make sense? There might be information in the headers
-    %% which are needed for the receiver (like Content-Encoding etc).
-    read_partial_body(State, Vsn, Hdrs, body_type(Hdrs)).
+    Method = State#client_state.method,
+    case has_body(Method, element(1, Status), Hdrs) of
+        true ->
+            Response = {ok, {Status, Hdrs, self()}},
+            State#client_state.requester ! {response, self(), Response},
+            %% Header delivered to the requester,
+            %% The body is delivered to the specified receiver
+            %% TODO:Does this make sense? There might be information in the
+            %% headers which are needed for the receiver (like
+            %% Content-Encoding etc).
+            read_partial_body(State, Vsn, Hdrs, body_type(Hdrs));
+        false ->
+            {Status, Hdrs, undefined}
+    end.
 
-maybe_read_body("HEAD", _, _, Hdrs, _, _) ->
+has_body("HEAD", _, _) ->
     % HEAD responses aren't allowed to include a body
-    {<<>>, Hdrs};
-maybe_read_body("OPTIONS", _, Vsn, Hdrs, Ssl, Socket) ->
+    false;
+has_body("OPTIONS", _, Hdrs) ->
     % OPTIONS can include a body, if Content-Length or Transfer-Encoding
     % indicates it.
     ContentLength = lhttpc_lib:header_value("content-length", Hdrs),
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Hdrs),
     case {ContentLength, TransferEncoding} of
-        {undefined, undefined} ->
-            {<<>>, Hdrs};
-        {_, _} ->
-            read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs))
+        {undefined, undefined} -> false;
+        {_, _}                 -> true
     end;
-maybe_read_body(_, StatusCode, Vsn, Hdrs, Ssl, Socket) ->
-    % All other requests should have a body, unless indicated otherwise 
-    case StatusCode of
-        204 -> {<<>>, Hdrs};
-        _   -> read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs))
-    end.
+has_body(_, 204, _) ->
+    false; % 204 No content can't have a body
+has_body(_, _, _) ->
+    true. % All other responses are assumed to have a body
 
 body_type(Hdrs) ->
     % Find out how to read the entity body from the request.
