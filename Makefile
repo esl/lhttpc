@@ -22,8 +22,9 @@ all: $(APPLICATION) doc
 $(APPLICATION): $(BEAMS) $(APP_FILE)
 
 test: $(APPLICATION) $(TEST_BEAMS)
+	@erlc -o util/ util/run_test.erl
 	@echo Running tests
-	@erl -pa ebin/ -pa test/ -noinput -eval 'run_test:run()' -s erlang halt
+	@erl -pa util/ -pa ebin/ -pa test/ -noinput -s run_test run
 
 test_shell: $(APPLICATION) $(TEST_BEAMS)
 	@echo Starting a shell with test paths included
@@ -52,10 +53,14 @@ dialyzer:
 	@dialyzer --src -r src/
 
 doc/edoc-info: doc/overview.edoc $(SOURCES) 
+	@erlc -o util/ util/make_doc.erl
 	@echo Generating documentation from edoc
-	@erl -noinput -eval 'edoc:application(lhttpc, "./", [{doc, "doc/"}])' -s erlang halt
+	@erl -pa util/ -noinput -s make_doc edoc
 
 clean:
 	@echo Cleaning
 	@rm -f ebin/*.{beam,app} test/*.beam doc/*.{html,css,png} doc/edoc-info
 	@rm -r cover_report
+
+release: clean all test dialyzer
+	@util/releaser $(APPLICATION) $(VSN)
