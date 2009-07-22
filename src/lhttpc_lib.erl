@@ -203,7 +203,7 @@ add_content_headers("POST", Hdrs, Body, PartialUpload) ->
 add_content_headers("PUT", Hdrs, Body, PartialUpload) ->
     add_content_headers(Hdrs, Body, PartialUpload);
 add_content_headers(_, Hdrs, _, _PartialUpload) ->
-    Hdrs. %%TODO:No body here or need to be explicitly specified???
+    Hdrs.
 
 add_content_headers(Hdrs, Body, false) ->
     case header_value("content-length", Hdrs) of
@@ -218,8 +218,11 @@ add_content_headers(Hdrs, _Body, true) ->
          header_value("transfer-encoding", Hdrs)} of
         {undefined, undefined} ->
             [{"Transfer-Encoding", "chunked"} | Hdrs];
-        {undefined, _TransferEncoding} ->%%HTTP RFC:It must start with "chunked"
-            Hdrs;
+        {undefined, TransferEncoding} ->
+            case string:to_lower(TransferEncoding) of
+            "chunked" -> Hdrs;
+            _ -> erlang:error({error, unsupported_transfer_encoding})
+            end;
         {_Length, undefined} ->
             Hdrs;
         {_Length, _TransferEncoding} -> %% have both cont.length and chunked 
@@ -237,9 +240,11 @@ add_host(Hdrs, Host) ->
     end.
 
 is_chunked(Hdrs) ->
-    case header_value("transfer-encoding", Hdrs) of
-        undefined -> false;
-        _ -> true %% chunked is mandatory with Transfer-Enncoding
+    TransferEncoding = string:to_lower(
+        header_value("transfer-encoding", Hdrs, "undefined")),
+    case TransferEncoding of
+        "chunked" -> true;
+        _ -> false
     end.
 
 -spec dec(timeout()) -> timeout().
