@@ -375,7 +375,7 @@ get_body_part(Pid) ->
         {body_part, Pid, Bin} ->
             Pid ! {ack, self()},
             {ok, Bin};
-        {response, Pid, {ok, {http_eob, Trailers}}} ->
+        {http_eob, Pid, Trailers} ->
             {ok, {http_eob, Trailers}};
         Else ->
             erlang:error({malformed_message, Else})

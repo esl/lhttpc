@@ -86,7 +86,10 @@ request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         error:Error ->
             {exit, self(), {Error, erlang:get_stacktrace()}}
     end,
-    From ! Result,
+    case Result of
+        {response, _, {ok, {no_return, _}}} -> ok;
+        _Else -> From ! Result
+    end,
     ok.
 
 execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
@@ -254,7 +257,7 @@ read_response(State, Vsn, Status, Hdrs) ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             case Response = handle_response_body(State, Vsn, Status, Hdrs) of
                 {_, NewHdrs, _} -> ok;
-                Else -> NewHdrs = Hdrs
+                {no_return, NewHdrs} -> ok
             end,
             ReqHdrs = State#client_state.request_headers,
             NewSocket = maybe_close_socket(Socket, Ssl, Vsn, ReqHdrs, NewHdrs),
@@ -339,9 +342,10 @@ read_partial_body(State, _Vsn, _Hdrs, chunked) ->
     read_partial_chunked_body(State);
 read_partial_body(State, Vsn, Hdrs, infinite) ->
     check_infinite_response(Vsn, Hdrs),
-    read_partial_infinite_body(State, State#client_state.download_window);
-read_partial_body(State, _Vsn, _Hdrs, {fixed_length, ContentLength}) ->
-    read_partial_body(State, ContentLength, State#client_state.download_window).
+    read_partial_infinite_body(State, Hdrs, State#client_state.download_window);
+read_partial_body(State, _Vsn, Hdrs, {fixed_length, ContentLength}) ->
+    read_partial_finite_body(State, Hdrs, ContentLength, 
+        State#client_state.download_window).
     
 read_body(_Vsn, Hdrs, Ssl, Socket, chunked) ->
     read_chunked_body(Socket, Ssl, Hdrs, []);
@@ -351,22 +355,23 @@ read_body(Vsn, Hdrs, Ssl, Socket, infinite) ->
 read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
     read_length(Hdrs, Ssl, Socket, ContentLength).
 
-read_partial_body(State = #client_state{}, 0, _Window) ->
-    send_end_of_body(State, [], State#client_state.socket);
-read_partial_body(State = #client_state{requester = To}, ContentLength, 0) ->
+read_partial_finite_body(State = #client_state{}, Hdrs, 0, _Window) ->
+    send_end_of_body(State, [], Hdrs);
+read_partial_finite_body(State = #client_state{requester = To}, Hdrs, 
+        ContentLength, 0) ->
     receive
-        {ack, To} -> read_partial_body(State, ContentLength, 1)
+        {ack, To} -> read_partial_finite_body(State, Hdrs, ContentLength, 1)
         %%TODO: Timeout or monitor requester process??
     end;
-read_partial_body(State = #client_state{requester = To}, ContentLength, Window) 
-        when Window >= 0->
+read_partial_finite_body(State = #client_state{requester = To}, Hdrs, 
+        ContentLength, Window) when Window >= 0->
     Bin = read_body_part(State, ContentLength),
     State#client_state.requester ! {body_part, self(), Bin},
     receive
-        {ack, To} -> read_partial_body(State, ContentLength - iolist_size(Bin),
-                        Window)
+        {ack, To} -> read_partial_finite_body(State, Hdrs, 
+                        ContentLength - iolist_size(Bin), Window)
     after 0 ->
-        read_partial_body(State, ContentLength - iolist_size(Bin), 
+        read_partial_finite_body(State, Hdrs, ContentLength - iolist_size(Bin), 
             lhttpc_lib:dec(Window))
     end.
 
@@ -455,24 +460,25 @@ read_trailers(Socket, Ssl, Hdrs) ->
             erlang:error({bad_trailer, Data})
     end.
 
-send_end_of_body(#client_state{}, Trailers, Socket) ->
-    {{http_eob, Trailers}, Socket}.
+send_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
+    Requester ! {http_eob, self(), Trailers},
+    {no_return, Hdrs}.
     
-read_partial_infinite_body(State = #client_state{requester = To}, 0) ->
+read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, 0) ->
     receive
-        {ack, To} -> read_partial_infinite_body(State, 1)
+        {ack, To} -> read_partial_infinite_body(State, Hdrs, 1)
         %%TODO: Timeout??
     end;
-read_partial_infinite_body(State = #client_state{requester = To}, Window) 
+read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, Window) 
         when Window >= 0 ->
     case read_infinite_body_part(State) of
-        http_eob -> send_end_of_body(State, [], undefined);
+        http_eob -> send_end_of_body(State, [], Hdrs);
         Bin ->
             State#client_state.requester ! {body_part, self(), Bin},
             receive
-                {ack, To} -> read_partial_infinite_body(State, Window)
+                {ack, To} -> read_partial_infinite_body(State, Hdrs, Window)
             after 0 ->
-                read_partial_infinite_body(State, lhttpc_lib:dec(Window))
+                read_partial_infinite_body(State, Hdrs, lhttpc_lib:dec(Window))
             end
     end.
 
