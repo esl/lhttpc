@@ -49,8 +49,9 @@ dialyzer:
 	@dialyzer --src -r src/
 
 doc/edoc-info: doc/overview.edoc $(SOURCES) 
+	@erlc -o util/ util/make_doc.erl
 	@echo Generating documentation from edoc
-	@erl -noinput -eval 'edoc:application(lhttpc, "./", [{doc, "doc/"}])' -s erlang halt
+	@erl -pa util/ -noinput -s make_doc edoc
 
 clean:
 	@echo Cleaning
