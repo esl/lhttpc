@@ -21,8 +21,7 @@ all: $(APPLICATION) doc
 
 $(APPLICATION): $(BEAMS) $(APP_FILE)
 
-test: $(APPLICATION) $(TEST_BEAMS)
-	@erlc -o util/ util/run_test.erl
+test: $(APPLICATION) $(TEST_BEAMS) util/run_test.beam
 	@echo Running tests
 	@erl -pa util/ -pa ebin/ -pa test/ -noinput -s run_test run
 
@@ -53,10 +52,14 @@ doc/edoc-info: doc/overview.edoc $(SOURCES)
 	@echo Generating documentation from edoc
 	@erl -pa util/ -noinput -s make_doc edoc
 
+util/%.beam: util/%.erl
+	@erlc -o util/ util/run_test.erl
+
 clean:
 	@echo Cleaning
 	@rm -f ebin/*.{beam,app} test/*.beam doc/*.{html,css,png} doc/edoc-info
 	@rm -r cover_report
+	@rm -f util/*.beam
 
 release: clean all test dialyzer
 	@util/releaser $(APPLICATION) $(VSN)
