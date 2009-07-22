@@ -27,22 +27,8 @@
 # Script for making a release of lhttpc. Or any program in hg really. Check
 # the Makefile target release for how to use it.
 
-if ! hg identify 1>/dev/null 2>&1; then
-    echo "No hg repository here..."
-    exit 1
-fi
-
-if ! [ "$(hg identify | awk '{print $2};')" = "tip" ]; then
-    if ! yesno "Repository is not at tip, do you want to continue?"; then
-        exit 1
-    fi
-fi
-
-
 NAME=$1
 VSN=$2
-TAGS=$(hg tags | awk '{print $1 };' | grep -v "^tip$")
-LATEST_TAG=$(echo "$TAGS" | head -n 1)
 
 yesno() {
     prompt=$1
@@ -91,6 +77,20 @@ get_version() {
     done
     echo $release_vsn
 }
+
+if ! hg identify 1>/dev/null 2>&1; then
+    echo "No hg repository here..."
+    exit 1
+fi
+
+if ! [ "$(hg identify | awk '{print $2};')" = "tip" ]; then
+    if ! yesno "Repository is not at tip, do you want to continue?"; then
+        exit 1
+    fi
+fi
+
+TAGS=$(hg tags | awk '{print $1 };' | grep -v "^tip$")
+LATEST_TAG=$(echo "$TAGS" | head -n 1)
 
 
 RELEASE_VSN=$(get_version)
