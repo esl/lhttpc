@@ -293,7 +293,10 @@ handle_response_body(#client_state{partial_download = true} = State,
         true ->
             Response = {ok, {Status, Hdrs, self()}},
             State#client_state.requester ! {response, self(), Response},
-            read_partial_body(State, Vsn, Hdrs, body_type(Hdrs));
+            MonRef = erlang:monitor(process, State#client_state.requester),
+            Res = read_partial_body(State, Vsn, Hdrs, body_type(Hdrs)),
+            erlang:demonitor(MonRef, [flush]),
+            Res;
         false ->
             {Status, Hdrs, undefined}
     end.
@@ -358,8 +361,8 @@ read_partial_finite_body(State = #client_state{}, Hdrs, 0, _Window) ->
 read_partial_finite_body(State = #client_state{requester = To}, Hdrs, 
         ContentLength, 0) ->
     receive
-        {ack, To} -> read_partial_finite_body(State, Hdrs, ContentLength, 1)
-        %%TODO: Timeout or monitor requester process??
+        {ack, To} -> read_partial_finite_body(State, Hdrs, ContentLength, 1);
+        {'DOWN', _, process, To, _} -> exit(normal)
     end;
 read_partial_finite_body(State = #client_state{requester = To}, Hdrs, 
         ContentLength, Window) when Window >= 0->
@@ -367,7 +370,8 @@ read_partial_finite_body(State = #client_state{requester = To}, Hdrs,
     State#client_state.requester ! {body_part, self(), Bin},
     receive
         {ack, To} -> read_partial_finite_body(State, Hdrs, 
-                        ContentLength - iolist_size(Bin), Window)
+                        ContentLength - iolist_size(Bin), Window);
+        {'DOWN', _, process, To, _} -> exit(normal)
     after 0 ->
         read_partial_finite_body(State, Hdrs, ContentLength - iolist_size(Bin), 
             lhttpc_lib:dec(Window))
@@ -464,8 +468,8 @@ send_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
     
 read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, 0) ->
     receive
-        {ack, To} -> read_partial_infinite_body(State, Hdrs, 1)
-        %%TODO: Timeout??
+        {ack, To} -> read_partial_infinite_body(State, Hdrs, 1);
+        {'DOWN', _, process, To, _} -> exit(normal)
     end;
 read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, Window) 
         when Window >= 0 ->
@@ -474,7 +478,8 @@ read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, Window)
         Bin ->
             State#client_state.requester ! {body_part, self(), Bin},
             receive
-                {ack, To} -> read_partial_infinite_body(State, Hdrs, Window)
+                {ack, To} -> read_partial_infinite_body(State, Hdrs, Window);
+                {'DOWN', _, process, To, _} -> exit(normal)
             after 0 ->
                 read_partial_infinite_body(State, Hdrs, lhttpc_lib:dec(Window))
             end
