@@ -33,8 +33,7 @@ if ! hg identify 1>/dev/null 2>&1; then
 fi
 
 if ! [ "$(hg identify | awk '{print $2};')" = "tip" ]; then
-    echo "Repository is not at tip, do you want to continue?"
-    if ! yesno; then
+    if ! yesno "Repository is not at tip, do you want to continue?"; then
         exit 1
     fi
 fi
