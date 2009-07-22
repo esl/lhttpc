@@ -89,9 +89,23 @@ if ! [ "$(hg identify | awk '{print $2};')" = "tip" ]; then
     fi
 fi
 
+if ! yesno "Did the compilation run without warnings?"; then
+    "Try again..."
+    exit 1
+fi
+
+if ! yesno "Is the changelog up to date?"; then
+    "Try again..."
+    exit 1
+fi
+
+if ! yesno "Did dialyzer run without warnings?"; then
+    "Try again..."
+    exit 1
+fi
+
 TAGS=$(hg tags | awk '{print $1 };' | grep -v "^tip$")
 LATEST_TAG=$(echo "$TAGS" | head -n 1)
-
 
 RELEASE_VSN=$(get_version)
 echo "Creating a release for $NAME-$RELEASE_VSN now."

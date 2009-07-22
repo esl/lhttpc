@@ -57,5 +57,4 @@ clean:
 	@rm -r cover_report
 
 release: clean all test dialyzer
-	@echo All tests and dialyzer passed, starting releaser
 	@util/releaser $(APPLICATION) $(VSN)
