@@ -22,8 +22,9 @@ all: $(APPLICATION) doc
 $(APPLICATION): $(BEAMS) $(APP_FILE)
 
 test: $(APPLICATION) $(TEST_BEAMS)
+	@erlc -o util/ util/run_test.erl
 	@echo Running tests
-	@erl -pa ebin/ -pa test/ -noinput -eval 'run_test:run()' -s erlang halt
+	@erl -pa util/ -pa ebin/ -pa test/ -noinput -s run_test run
 
 test/%.beam: test/%.erl
 	@echo Compiling $<

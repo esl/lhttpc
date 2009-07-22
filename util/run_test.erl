@@ -29,18 +29,41 @@
 -export([run/0]).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("stdlib/include/ms_transform.hrl").
 
+-define(TEST_LOG, "test/error_logger.log").
+-define(SASL_LOG, "test/sasl.log").
 -define(FILE_NAME(MODULE),
     "cover_report/" ++ atom_to_list(MODULE) ++ ".html").
 
 run() ->
     Modules = get_modules(),
     ok = cover_compile(Modules),
-    eunit:test(?MODULE),
+    start_logging(),
+    Result = eunit:test(?MODULE, [verbose]),
     filelib:ensure_dir("cover_report/index.html"),
     html_report(Modules),
     write_report(Modules),
-    io:format("Cover report in cover_report/index.html~n").
+    stop_logging(),
+    io:format("Cover report in cover_report/index.html~n"),
+    io:format("Test logs in ~s and ~s~n", [?TEST_LOG, ?SASL_LOG]),
+    if
+        Result =:= ok -> halt(0);
+        Result =/= ok -> halt(1)
+    end.
+
+start_logging() ->
+    application:load(sasl),
+    application:set_env(sasl, sasl_error_logger, {file, ?SASL_LOG}),
+    file:delete(?TEST_LOG),
+    file:delete(?SASL_LOG),
+    error_logger:tty(false),
+    error_logger:logfile({open, ?TEST_LOG}),
+    application:start(sasl).
+
+stop_logging() ->
+    error_logger:logfile(close),
+    application:stop(sasl).
 
 html_report([Module | Modules]) ->
     cover:analyse_to_file(Module, ?FILE_NAME(Module), [html]),

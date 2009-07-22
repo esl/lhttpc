@@ -10,6 +10,7 @@ erl_crash.dump
 
 ebin/{*.beam,lhttpc.app}
 test/*.beam
+util/*.beam
 doc/{edoc-info,*.{png,css,html}}
 cover_report/*
 
