@@ -255,10 +255,8 @@ read_response(State, Vsn, Status, Hdrs) ->
             read_response(State, Vsn, Status, [Header | Hdrs]);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            case Response = handle_response_body(State, Vsn, Status, Hdrs) of
-                {_, NewHdrs, _} -> ok;
-                {no_return, NewHdrs} -> ok
-            end,
+            Response = handle_response_body(State, Vsn, Status, Hdrs),
+            NewHdrs = element(2, Response),
             ReqHdrs = State#client_state.request_headers,
             NewSocket = maybe_close_socket(Socket, Ssl, Vsn, ReqHdrs, NewHdrs),
             {Response, NewSocket};
