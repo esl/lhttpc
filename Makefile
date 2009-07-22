@@ -57,3 +57,7 @@ clean:
 	@echo Cleaning
 	@rm -f ebin/*.{beam,app} test/*.beam doc/*.{html,css,png} doc/edoc-info
 	@rm -r cover_report
+
+release: clean all test dialyzer
+	@echo All tests and dialyzer passed, starting releaser
+	@util/releaser $(APPLICATION) $(VSN)
