@@ -30,7 +30,7 @@
 %%% @end
 -module(webserver).
 
--export([start/2]).
+-export([start/2, read_chunked/3]).
 -export([accept_connection/4]).
 
 start(Module, Responders) ->
