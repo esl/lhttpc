@@ -90,6 +90,9 @@ request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         {response, _, {ok, {no_return, _}}} -> ok;
         _Else -> From ! Result
     end,
+    % Don't send back {'EXIT', self(), normal} if the process
+    % calling us is trapping exits
+    unlink(From), 
     ok.
 
 execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->

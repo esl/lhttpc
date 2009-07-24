@@ -30,17 +30,18 @@
 %%% @end
 -module(webserver).
 
--export([start/2, read_chunked/3]).
--export([accept_connection/3]).
+-export([start/2]).
+-export([accept_connection/4]).
 
 start(Module, Responders) ->
     LS = listen(Module),
-    spawn_link(?MODULE, accept_connection, [Module, LS, Responders]),
+    spawn_link(?MODULE, accept_connection, [self(), Module, LS, Responders]),
     port(Module, LS).
 
-accept_connection(Module, ListenSocket, Responders) ->
+accept_connection(Parent, Module, ListenSocket, Responders) ->
     Socket = accept(Module, ListenSocket),
-    server_loop(Module, Socket, nil, [], Responders).
+    server_loop(Module, Socket, nil, [], Responders),
+    unlink(Parent).
 
 read_chunked(Module, Socket, Headers) ->
     Body = read_chunks(Module, Socket, []),

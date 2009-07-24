@@ -15,3 +15,4 @@ test/*.log
 doc/{edoc-info,*.{png,css,html}}
 cover_report/*
 
+*.orig

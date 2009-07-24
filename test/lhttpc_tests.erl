@@ -142,6 +142,7 @@ tcp_test_() ->
                 ?_test(limited_partial_download_identity()),
                 ?_test(partial_download_chunked()),
                 ?_test(close_connection()),
+                ?_test(message_queue()),
                 ?_test(connection_count()) % just check that it's 0 (last)
             ]}
     }.
@@ -162,6 +163,9 @@ other_test_() ->
     ].
 
 %%% Tests
+
+message_queue() ->
+    receive X -> erlang:error({unexpected_message, X}) after 0 -> ok end.
 
 simple_get() ->
     simple(get),
