@@ -339,8 +339,9 @@ body_type(Hdrs) ->
             {fixed_length, list_to_integer(ContentLength)}
     end.
 
-read_partial_body(State, _Vsn, _Hdrs, chunked) ->
-    read_partial_chunked_body(State);
+read_partial_body(State, _Vsn, Hdrs, chunked) ->
+    read_partial_chunked_body(State, Hdrs, State#client_state.download_window, 
+        0, [], 0);
 read_partial_body(State, Vsn, Hdrs, infinite) ->
     check_infinite_response(Vsn, Hdrs),
     read_partial_infinite_body(State, Hdrs, State#client_state.download_window);
@@ -410,24 +411,85 @@ read_length(Hdrs, Ssl, Socket, Length) ->
             erlang:error(Reason)
     end.
 
-read_partial_chunked_body(State) -> 
-    ok. %%TODO
+read_partial_chunked_body(State = #client_state{socket = Socket, ssl = Ssl, 
+        part_size = PartSize}, Hdrs, Window, CurrentSize, CurrentData, 0) -> 
+    case read_chunk_size(Socket, Ssl) of
+    0 -> 
+        send_chunked_body_part(State, CurrentData, Window, CurrentSize),
+        {Trailers, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
+        send_end_of_body(State, Trailers, NewHdrs);
+    ChunkSize when PartSize =:= infinity ->
+        Chunk = read_chunk(Socket, Ssl, ChunkSize),
+        NewWindow = send_chunked_body_part(State, [Chunk | CurrentData], Window,
+            not_empty),
+        read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], 0);
+    ChunkSize when CurrentSize + ChunkSize >= PartSize ->
+        {Chunk, RestChunkSize} = 
+            read_partial_chunk(Socket, Ssl, PartSize - CurrentSize, ChunkSize),
+        NewWindow = send_chunked_body_part(State, [Chunk | CurrentData], Window,
+            not_empty),
+        read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], RestChunkSize);
+    ChunkSize ->
+        Chunk = read_chunk(Socket, Ssl, ChunkSize),
+        read_partial_chunked_body(State, Hdrs, Window, CurrentSize + ChunkSize,
+            [Chunk | CurrentData], 0)
+    end;
+read_partial_chunked_body(State = #client_state{socket = Socket, ssl = Ssl,
+        part_size = PartSize}, Hdrs, Window, CurrentSize, CurrentData, 
+        RestChunkSize) ->
+    if 
+        CurrentSize + RestChunkSize >= PartSize ->
+            {Chunk, NewRestChunkSize} = 
+                read_partial_chunk(Socket, Ssl, PartSize - CurrentSize, 
+                    RestChunkSize),
+            NewWindow = send_chunked_body_part(State, [Chunk | CurrentData], 
+                Window, not_empty),
+            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], 
+                NewRestChunkSize);            
+        CurrentSize + RestChunkSize < PartSize ->
+            Chunk = read_chunk(Socket, Ssl, RestChunkSize),
+            read_partial_chunked_body(State, Hdrs, Window, 
+                CurrentSize + RestChunkSize, [Chunk | CurrentData], 0)
+    end.             
 
-read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
+read_chunk_size(Socket, Ssl) ->
     lhttpc_sock:setopts(Socket, [{packet, line}], Ssl),
     case lhttpc_sock:recv(Socket, Ssl) of
         {ok, ChunkSizeExt} ->
-            case chunk_size(ChunkSizeExt) of
-                0 ->
-                    Body = list_to_binary(lists:reverse(Chunks)),
-                    lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
-                    {Body, read_trailers(Socket, Ssl, Hdrs)};
-                Size ->
-                    Chunk = read_chunk(Socket, Ssl, Size),
-                    read_chunked_body(Socket, Ssl, Hdrs, [Chunk | Chunks])
-            end;
+            chunk_size(ChunkSizeExt);
         {error, Reason} ->
             erlang:error(Reason)
+    end.
+
+
+send_chunked_body_part(_State, _Bin, Window, 0) -> 
+    Window;
+send_chunked_body_part(State = #client_state{requester = Pid}, Bin, 0, Size) ->
+    receive
+        {ack, Pid} -> send_chunked_body_part(State, Bin, 1, Size);
+        {'DOWN', _, process, Pid, _} -> exit(normal)
+    end;
+send_chunked_body_part(#client_state{requester = Pid}, Bin, Window, _Size) ->
+    Pid ! {body_part, self(), preformat(Bin)},
+    receive
+        {ack, Pid} ->  Window; 
+        {'DOWN', _, process, Pid, _} -> exit(normal)
+    after 0 ->
+        lhttpc_lib:dec(Window)
+    end.
+            
+preformat(Bin) when is_list(Bin) -> lists:reverse(Bin); 
+%%Maybe turn it to one binary
+preformat(Bin) -> Bin.                
+
+read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
+    case read_chunk_size(Socket, Ssl) of
+        0 ->    
+            Body = list_to_binary(lists:reverse(Chunks)),
+            {Body, read_trailers(Socket, Ssl, Hdrs)};
+        Size ->
+            Chunk = read_chunk(Socket, Ssl, Size),
+            read_chunked_body(Socket, Ssl, Hdrs, [Chunk | Chunks])
     end.
 
 chunk_size(Bin) ->
@@ -440,6 +502,17 @@ chunk_size(<<"\r\n", _/binary>>, Chars) ->
 chunk_size(<<Char, Binary/binary>>, Chars) ->
     chunk_size(Binary, [Char | Chars]).
 
+read_partial_chunk(Socket, Ssl, ChunkSize, ChunkSize) ->
+    {read_chunk(Socket, Ssl, ChunkSize), 0};
+read_partial_chunk(Socket, Ssl, Size, ChunkSize) ->
+    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+    case lhttpc_sock:recv(Socket, Size, Ssl) of
+        {ok, Chunk} ->
+            {Chunk, ChunkSize - Size};
+        {error, Reason} ->
+            erlang:error(Reason)
+    end.
+
 read_chunk(Socket, Ssl, Size) ->
     lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
     case lhttpc_sock:recv(Socket, Size + 2, Ssl) of
@@ -451,7 +524,20 @@ read_chunk(Socket, Ssl, Size) ->
             erlang:error(Reason)
     end.
 
+read_trailers(Socket, Ssl, Trailers, Hdrs) ->
+    lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
+    case lhttpc_sock:recv(Socket, Ssl) of
+        {ok, http_eoh} ->
+            {Trailers, Hdrs};
+        {ok, {http_header, _, Name, _, Value}} ->
+            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
+            read_trailers(Socket, Ssl, [Header | Trailers], [Header | Hdrs]);
+        {error, {http_error, Data}} ->
+            erlang:error({bad_trailer, Data})
+    end.
+    
 read_trailers(Socket, Ssl, Hdrs) ->
+    lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
     case lhttpc_sock:recv(Socket, Ssl) of
         {ok, http_eoh} ->
             Hdrs;
