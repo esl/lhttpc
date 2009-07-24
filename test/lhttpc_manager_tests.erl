@@ -46,17 +46,19 @@ stop_app(_) ->
     ok = application:stop(crypto).
 
 manager_test_() ->
-    {setup, fun start_app/0, fun stop_app/1, [
-            ?_test(empty_manager()),
-            ?_test(one_socket()),
-            ?_test(many_sockets()),
-            ?_test(closed_race_cond())
-        ]}.
+    {inorder,
+        {setup, fun start_app/0, fun stop_app/1, [
+                ?_test(empty_manager()),
+                ?_test(one_socket()),
+                ?_test(many_sockets()),
+                ?_test(closed_race_cond())
+            ]}
+    }.
 
 %%% Tests
 
 empty_manager() ->
-    ?assertEqual(no_socket,  gen_server:call(lhttpc_manager,
+    ?assertEqual(no_socket, gen_server:call(lhttpc_manager,
             {socket, self(), ?HOST, ?PORT, ?SSL})).
 
 one_socket() ->
