@@ -28,7 +28,7 @@
 -module(socket_server).
 
 -export([open/0, connect/1, listen/0, accept/1]).
--export([do_accept/1]).
+-export([do_accept/2]).
 
 open() ->
     {LS, Port} = listen(),
@@ -47,8 +47,11 @@ listen() ->
     {LS, Port}.
 
 accept(LS) ->
-    spawn_link(?MODULE, do_accept, [LS]).
+    Pid = spawn_link(?MODULE, do_accept, [LS, self()]),
+    receive in_accept -> ok end,
+    Pid.
 
-do_accept(LS) ->
+do_accept(LS, Parent) ->
+    erlang:send_after(50, Parent, in_accept),
     {ok, S} = gen_tcp:accept(LS),
     {error, closed} = gen_tcp:recv(S, 0).
