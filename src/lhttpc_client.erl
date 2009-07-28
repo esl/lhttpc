@@ -276,6 +276,9 @@ chunk_size(<<$;, _/binary>>, Chars) ->
     Chars;
 chunk_size(<<"\r\n", _/binary>>, Chars) ->
     Chars;
+chunk_size(<<$\s, Binary/binary>>, Chars) ->
+    %% Facebook's HTTP server returns a chunk size like "6  \r\n"
+    chunk_size(Binary, Chars);
 chunk_size(<<Char, Binary/binary>>, Chars) ->
     chunk_size(Binary, [Char | Chars]).
 

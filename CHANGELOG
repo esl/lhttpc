@@ -1,4 +1,7 @@
 Version ?:
+* Fix for decoding chunked HTTP responses with extraneous whitespace
+    * api.facebook.com includes extra whitespace in its chunked HTTP response
+      length, e.g. "6  \r\n" instead of "6\r\n".
 * Fix for unexpected messages after request has been completed
     * When the client process is trapping exits (which some eunit versions seem
       to be doing by default) there would be {'EXIT', Pid, normal} messages left
