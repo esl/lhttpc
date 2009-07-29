@@ -38,7 +38,10 @@
         send_trailers/2,
         send_trailers/3
     ]).
--export([get_body_part/1]).
+-export([
+        get_body_part/1,
+        get_body_part/2
+        ]).
 -export([start/2, stop/1]).
 
 -include("lhttpc_types.hrl").
@@ -103,8 +106,8 @@ request(URL, Method, Hdrs, Timeout) ->
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling
-%% `request(URL, Method, Hdrs, Body, Timeout, [])', that is {@link request/6} with
-%% no options.
+%% `request(URL, Method, Hdrs, Body, Timeout, [])', that is {@link request/6}
+%% with no options.
 %% @end
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity) -> result().
@@ -159,13 +162,20 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
-%%            {send_retry, integer()}
+%%            {send_retry, integer()} |
+%%            {partial_upload, WindowSize} |
+%%            {partial_download, PartialDowloadOptions}
 %%   Milliseconds = integer()
+%%   WindowSize = integer()
+%%   PartialDownloadOptions = [PartialDownloadOption]
+%%   PartialDowloadOption = {window_size, WindowSize} |
+%%                          {part_size, PartSize}
+%%   PartSize = integer()
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
-%%            | {error, Reason}
+%%          | {error, Reason}
 %%   StatusCode = integer()
 %%   ReasonPhrase = string()
-%%   ResponseBody = binary()
+%%   ResponseBody = binary() | pid() | undefined
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %%
@@ -224,6 +234,28 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% Partial upload is intended to avoid keeping large request bodies in
 %% memory but can also be used when the complete size of the body isn't known
 %% when the request is started.
+%%
+%% `{partial_download, PartialDownloadOptions}' means that the response body
+%% will be supplied in parts by the client to the calling process. The partial
+%% download option `{window_size, WindowSize}' specifies how many part will be
+%% sent to the calling process before waiting for an acknowledgement. This is
+%% to create a kind of internal flow control if the calling process is slow to
+%% process the body part and the network is considerably faster. Flow control
+%% is disabled if `WindowSize' is `infinity'. If `WindowSize' is an integer it
+%% must be >=0. The partial download option `{part_size, PartSize}' specifies
+%% the size the body parts should come in. Note however that if the body size
+%% is not determinable (e.g entity body is termintated by closing the socket)
+%% it will be delivered in pieces as it is read from the wire. There is no
+%% caching of the body parts until the amount reaches body size. If the body
+%% size is bounded (e.g `Content-Length' specified or
+%% `Transfer-Encoding: chunked' specified) it will be delivered in `PartSize'
+%% pieces. Note however that the last piece might be smaller than `PartSize'.
+%% Size bounded entity bodies are handled the same way as unbounded ones if
+%% `PartSize' is `infinity'. If `PartSize' is integer it must be >= 0.
+%% If `{partial_download, PartialDownloadOptions}' is specified the 
+%% `ResponseBody' is going to be a `pid()' unless the response has no body
+%% (for example in case of `HEAD' requests). In that case it is going to be
+%% `undefined'. 
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
     headers(), iolist(), pos_integer(), [option()]) -> result().
@@ -369,16 +401,44 @@ send_trailers({Pid, _Window}, Trailers, Timeout)
     Pid ! {trailers, self(), Trailers},
     read_response(Pid, Timeout).
 
+%% @spec (HTTPClient :: pid()) -> Result
+%%   Result = {ok, Bin} | {ok, {http_eob, Trailers}} 
+%%   Trailers = [{Header, Value}]
+%%   Header = string() | binary() | atom()
+%%   Value = string() | binary()
+%% @doc Reads a body part from an ongoing response when
+%% `{partial_download, PartialDownloadOptions}' is used. The default timeout,
+%% `infinity' will be used. 
+%% Would be the same as calling
+%% `get_body_part(HTTPClient, infinity)'.
+%% @end
 -spec get_body_part(pid()) -> {ok, binary()} | {ok, {http_eob, headers()}}.
 get_body_part(Pid) ->
+    get_body_part(Pid, infinity).
+
+%% @spec (HTTPClient :: pid(), Timeout:: Timeout) -> Result
+%%   Timeout = integer() | infinity
+%%   Result = {ok, Bin} | {ok, {http_eob, Trailers}} 
+%%   Trailers = [{Header, Value}]
+%%   Header = string() | binary() | atom()
+%%   Value = string() | binary()
+%% @doc Reads a body part from an ongoing response when
+%% `{partial_download, PartialDownloadOptions}' is used.
+%% `Timeout' is the timeout for reading the next body part in milliseconds. 
+%% `http_eob' marks the end of the body. If there were Trailers in the
+%% response those are returned with `http_eob' as well. 
+%% @end
+-spec get_body_part(pid(), timeout()) -> 
+        {ok, binary()} | {ok, {http_eob, headers()}}.
+get_body_part(Pid, Timeout) ->
     receive
         {body_part, Pid, Bin} ->
             Pid ! {ack, self()},
             {ok, Bin};
         {http_eob, Pid, Trailers} ->
-            {ok, {http_eob, Trailers}};
-        Else ->
-            erlang:error({malformed_message, Else})
+            {ok, {http_eob, Trailers}}
+    after Timeout ->
+        kill_client(Pid)
     end.
 
 %%% Internal functions
