@@ -507,7 +507,6 @@ bad_options(Errors) ->
     erlang:error({bad_options, Errors}).
 
 -spec verify_partial_download(options(), options()) -> options().
-
 verify_partial_download([{window_size, infinity} | Options], Errors)->
     verify_partial_download(Options, Errors);
 verify_partial_download([{window_size, Size} | Options], Errors) when
