@@ -101,10 +101,10 @@ test_no(N, Tests) ->
 start_app() ->
     ok = application:start(crypto),
     ok = application:start(ssl),
-    ok = application:start(lhttpc).
+    ok = lhttpc:start().
 
 stop_app(_) ->
-    ok = application:stop(lhttpc),
+    ok = lhttpc:stop(),
     ok = application:stop(ssl),
     ok = application:stop(crypto).
 
