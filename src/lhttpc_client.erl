@@ -48,14 +48,13 @@
         attempts :: integer(),
         requester :: pid(), 
         partial_upload = false :: true | false,
-        chunked_upload = false ::true | false,
+        chunked_upload = false :: true | false,
         upload_window :: non_neg_integer() | infinity,
         partial_download = false :: true | false,
         download_window = infinity :: timeout(),
         part_size :: non_neg_integer() | infinity
         %% in case of infinity we read whatever data we can get from
-        %% the wire at that point or 
-        %% in case of chunked one chunk
+        %% the wire at that point or in case of chunked one chunk
     }).
 
 -define(CONNECTION_HDR(HDRS, DEFAULT),
