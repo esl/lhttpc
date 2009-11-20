@@ -30,6 +30,7 @@
 %%% This module implements wrappers for socket operations.
 %%% Makes it possible to have the same interface to ssl and tcp sockets.
 %%% @end
+%%% @type boolean() = bool().
 -module(lhttpc_sock).
 
 -export([
@@ -49,7 +50,7 @@
 %%   Port = integer()
 %%   Options = [{atom(), term()} | atom()]
 %%   Timeout = infinity | integer()
-%%   SslFlag = bool()
+%%   SslFlag = boolean()
 %%   Socket = socket()
 %%   Reason = atom()
 %% @doc
@@ -67,7 +68,7 @@ connect(Host, Port, Options, Timeout, false) ->
 %% @spec (Socket, SslFlag) -> {ok, Data} | {error, Reason}
 %%   Socket = socket()
 %%   Length = integer()
-%%   SslFlag = bool()
+%%   SslFlag = boolean()
 %%   Data = term()
 %%   Reason = atom()
 %% @doc
@@ -85,7 +86,7 @@ recv(Socket, false) ->
 %% @spec (Socket, Length, SslFlag) -> {ok, Data} | {error, Reason}
 %%   Socket = socket()
 %%   Length = integer()
-%%   SslFlag = bool()
+%%   SslFlag = boolean()
 %%   Data = term()
 %%   Reason = atom()
 %% @doc
@@ -103,7 +104,7 @@ recv(Socket, Length, false) ->
 %% @spec (Socket, Data, SslFlag) -> ok | {error, Reason}
 %%   Socket = socket()
 %%   Data = iolist()
-%%   SslFlag = bool()
+%%   SslFlag = boolean()
 %%   Reason = atom()
 %% @doc
 %% Sends data on a socket.
@@ -119,7 +120,7 @@ send(Socket, Request, false) ->
 %% @spec (Socket, Pid, SslFlag) -> ok | {error, Reason}
 %%   Socket = socket()
 %%   Pid = pid()
-%%   SslFlag = bool()
+%%   SslFlag = boolean()
 %%   Reason = atom()
 %% @doc
 %% Sets the controlling proces for the `Socket'.
@@ -134,7 +135,7 @@ controlling_process(Socket, Pid, false) ->
 %% @spec (Socket, Options, SslFlag) -> ok | {error, Reason}
 %%   Socket = socket()
 %%   Options = [atom() | {atom(), term()}]
-%%   SslFlag = bool()
+%%   SslFlag = boolean()
 %%   Reason = atom()
 %% @doc
 %% Sets options for a socket. Look in `inet:setopts/2' for more info.
@@ -148,7 +149,7 @@ setopts(Socket, Options, false) ->
 
 %% @spec (Socket, SslFlag) -> ok | {error, Reason}
 %%   Socket = socket()
-%%   SslFlag = bool()
+%%   SslFlag = boolean()
 %%   Reason = atom()
 %% @doc
 %% Closes a socket.

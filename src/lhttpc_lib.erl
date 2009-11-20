@@ -29,6 +29,7 @@
 %%% @doc
 %%% This module implements various library functions used in lhttpc.
 %%% @end
+%%% @type boolean() = boolean().
 -module(lhttpc_lib).
 
 -export([
@@ -97,7 +98,7 @@ maybe_atom_to_list(List) when is_list(List) ->
 %%   Host = string()
 %%   Port = integer()
 %%   Path = string()
-%%   Ssl = bool()
+%%   Ssl = boolean()
 %% @doc
 -spec parse_url(string()) -> {string(), integer(), string(), boolean()}.
 parse_url(URL) ->
