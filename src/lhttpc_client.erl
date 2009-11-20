@@ -278,8 +278,8 @@ read_response(State, Vsn, Status, Hdrs) ->
             erlang:error(Reason)
     end.
 
-handle_response_body(State = #client_state{partial_download = false},
-        Vsn, Status, Hdrs) ->
+handle_response_body(#client_state{partial_download = false} = State, Vsn,
+        Status, Hdrs) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
     Method = State#client_state.method,
@@ -288,8 +288,8 @@ handle_response_body(State = #client_state{partial_download = false},
         false -> {<<>>, Hdrs}
     end,
     {Status, NewHdrs, Body};
-handle_response_body(#client_state{partial_download = true} = State,
-        Vsn, Status, Hdrs) ->
+handle_response_body(#client_state{partial_download = true} = State, Vsn,
+        Status, Hdrs) ->
     Method = State#client_state.method,
     case has_body(Method, element(1, Status), Hdrs) of
         true ->
