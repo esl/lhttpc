@@ -29,6 +29,7 @@
 %%% See {@link request/4}, {@link request/5} and {@link request/6} functions.
 %%% @end
 %%% @type boolean() = bool().
+%%% @type iolist() = [] | binary() | [char() | binary() | iolist()].
 -module(lhttpc).
 -behaviour(application).
 
