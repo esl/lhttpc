@@ -138,6 +138,8 @@ tcp_test_() ->
                 ?_test(partial_upload_chunked()),
                 ?_test(partial_upload_chunked_no_trailer()),
                 ?_test(partial_download_identity()),
+                ?_test(partial_download_infinity_window()),
+                ?_test(partial_download_no_content_length()),
                 ?_test(partial_download_no_content()),
                 ?_test(limited_partial_download_identity()),
                 ?_test(partial_download_chunked()),
@@ -464,6 +466,32 @@ partial_download_identity() ->
     Body = read_partial_body(Pid),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
+partial_download_infinity_window() ->
+    Port = start(gen_tcp, [fun large_response/5]),
+    URL = url(Port, "/partial_download_identity"),
+    PartialDownload = [
+        {window_size, infinity}
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} =
+        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
+partial_download_no_content_length() ->
+    Port = start(gen_tcp, [fun no_content_length/5]),
+    URL = url(Port, "/no_cl"),
+    PartialDownload = [
+        {window_size, 1}
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} =
+        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?DEFAULT_STRING>>, Body).
 
 partial_download_no_content() ->
     Port = start(gen_tcp, [fun no_content_response/5]),
