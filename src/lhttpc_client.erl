@@ -342,8 +342,8 @@ body_type(Hdrs) ->
     end.
 
 read_partial_body(State, _Vsn, Hdrs, chunked) ->
-    read_partial_chunked_body(State, Hdrs, State#client_state.download_window,
-        0, [], 0);
+    Window = State#client_state.download_window,
+    read_partial_chunked_body(State, Hdrs, Window, 0, [], 0);
 read_partial_body(State, Vsn, Hdrs, infinite) ->
     check_infinite_response(Vsn, Hdrs),
     read_partial_infinite_body(State, Hdrs, State#client_state.download_window);
@@ -360,7 +360,7 @@ read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
     read_length(Hdrs, Ssl, Socket, ContentLength).
 
 read_partial_finite_body(State = #client_state{}, Hdrs, 0, _Window) ->
-    send_end_of_body(State, [], Hdrs);
+    reply_end_of_body(State, [], Hdrs);
 read_partial_finite_body(State = #client_state{requester = To}, Hdrs,
         ContentLength, 0) ->
     receive
@@ -413,45 +413,47 @@ read_length(Hdrs, Ssl, Socket, Length) ->
             erlang:error(Reason)
     end.
 
-read_partial_chunked_body(State = #client_state{socket = Socket, ssl = Ssl,
-        part_size = PartSize}, Hdrs, Window, BufferSize, Buffer, 0) ->
+read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, 0) ->
+    Socket = State#client_state.socket,
+    Ssl = State#client_state.ssl,
+    PartSize = State#client_state.part_size,
     case read_chunk_size(Socket, Ssl) of
         0 ->
-            send_chunked_body_part(State, Buffer, Window, BufferSize),
+            reply_chunked_part(State, Buffer, Window, BufferSize),
             {Trailers, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
-            send_end_of_body(State, Trailers, NewHdrs);
+            reply_end_of_body(State, Trailers, NewHdrs);
         ChunkSize when PartSize =:= infinity ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
-            NewWindow = send_chunked_body_part(State, [Chunk | Buffer], Window,
+            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window,
                 not_empty),
             read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], 0);
         ChunkSize when BufferSize + ChunkSize >= PartSize ->
-            {Chunk, RestChunkSize} =
-                read_partial_chunk(Socket, Ssl, PartSize - BufferSize, ChunkSize),
-            NewWindow = send_chunked_body_part(State, [Chunk | Buffer], Window,
+            {Chunk, RemSize} = read_partial_chunk(Socket, Ssl,
+                PartSize - BufferSize, ChunkSize),
+            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window,
                 not_empty),
-            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], RestChunkSize);
+            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], RemSize);
         ChunkSize ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
-            read_partial_chunked_body(State, Hdrs, Window, BufferSize + ChunkSize,
-                [Chunk | Buffer], 0)
-    end;
-read_partial_chunked_body(State = #client_state{socket = Socket, ssl = Ssl,
-        part_size = PartSize}, Hdrs, Window, BufferSize, Buffer,
-        RestChunkSize) ->
-    if
-        BufferSize + RestChunkSize >= PartSize ->
-            {Chunk, NewRestChunkSize} =
-                read_partial_chunk(Socket, Ssl, PartSize - BufferSize,
-                    RestChunkSize),
-            NewWindow = send_chunked_body_part(State, [Chunk | Buffer],
-                Window, not_empty),
-            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [],
-                NewRestChunkSize);
-        BufferSize + RestChunkSize < PartSize ->
-            Chunk = read_chunk(Socket, Ssl, RestChunkSize),
             read_partial_chunked_body(State, Hdrs, Window,
-                BufferSize + RestChunkSize, [Chunk | Buffer], 0)
+                BufferSize + ChunkSize, [Chunk | Buffer], 0)
+    end;
+read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, RemSize) ->
+    Socket = State#client_state.socket,
+    Ssl = State#client_state.ssl,
+    PartSize = State#client_state.part_size,
+    if
+        BufferSize + RemSize >= PartSize ->
+            {Chunk, NewRemSize} =
+                read_partial_chunk(Socket, Ssl, PartSize - BufferSize, RemSize),
+            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window,
+                not_empty),
+            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [],
+                NewRemSize);
+        BufferSize + RemSize < PartSize ->
+            Chunk = read_chunk(Socket, Ssl, RemSize),
+            read_partial_chunked_body(State, Hdrs, Window, BufferSize + RemSize,
+                [Chunk | Buffer], 0)
     end.
 
 read_chunk_size(Socket, Ssl) ->
@@ -463,17 +465,16 @@ read_chunk_size(Socket, Ssl) ->
             erlang:error(Reason)
     end.
 
-
-send_chunked_body_part(_State, _Buffer, Window, 0) ->
+reply_chunked_part(_State, _Buffer, Window, 0) ->
     Window;
-send_chunked_body_part(State = #client_state{requester = Pid}, Buff, 0, Size) ->
+reply_chunked_part(State = #client_state{requester = Pid}, Buff, 0, Size) ->
     receive
         {ack, Pid} ->
-            send_chunked_body_part(State, Buff, 1, Size);
+            reply_chunked_part(State, Buff, 1, Size);
         {'DOWN', _, process, Pid, _} ->
             exit(normal)
     end;
-send_chunked_body_part(#client_state{requester = Pid}, Buffer, Window, _Size) ->
+reply_chunked_part(#client_state{requester = Pid}, Buffer, Window, _Size) ->
     Pid ! {body_part, self(), list_to_binary(lists:reverse(Buffer))},
     receive
         {ack, Pid} ->  Window;
@@ -551,7 +552,7 @@ read_trailers(Socket, Ssl, Hdrs) ->
             erlang:error({bad_trailer, Data})
     end.
 
-send_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
+reply_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
     Requester ! {http_eob, self(), Trailers},
     {no_return, Hdrs}.
 
@@ -563,7 +564,7 @@ read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, 0) ->
 read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, Window)
         when Window >= 0 ->
     case read_infinite_body_part(State) of
-        http_eob -> send_end_of_body(State, [], Hdrs);
+        http_eob -> reply_end_of_body(State, [], Hdrs);
         Bin ->
             State#client_state.requester ! {body_part, self(), Bin},
             receive
