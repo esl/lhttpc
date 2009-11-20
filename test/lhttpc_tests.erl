@@ -92,7 +92,7 @@
     ).
 
 test_no(N, Tests) ->
-	setelement(2, Tests,
+    setelement(2, Tests,
         setelement(4, element(2, Tests),
             lists:nth(N, element(4, element(2, Tests))))).
 
@@ -424,7 +424,7 @@ partial_upload_chunked() ->
     ?assertEqual(element(2, Trailer), 
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response1))),
     % Make sure it works with no body part in the original request as well
-	Headers = [{"Transfer-Encoding", "chunked"}],
+    Headers = [{"Transfer-Encoding", "chunked"}],
     {ok, UploadState2} = lhttpc:request(URL, post, Headers, [], 1000, Options),
     {ok, Response2} = lhttpc:send_trailers(
         lists:foldl(fun upload_parts/2, UploadState2, Body),
@@ -650,14 +650,14 @@ large_chunked_response(Module, Socket, _, _, _) ->
 chunked_upload(Module, Socket, _, Headers, <<>>) ->
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
     {Body, HeadersAndTrailers} =
-		webserver:read_chunked(Module, Socket, Headers),
+        webserver:read_chunked(Module, Socket, Headers),
     Trailer1 = lhttpc_lib:header_value("x-trailer-1", HeadersAndTrailers,
-		"undefined"),
+        "undefined"),
     Module:send(
         Socket,
         [
             "HTTP/1.1 200 OK\r\n"
-			"Content-Length: 14\r\n"
+            "Content-Length: 14\r\n"
             "X-Test-Orig-Trailer-1:", Trailer1, "\r\n"
             "X-Test-Orig-Enc: ", TransferEncoding, "\r\n"
             "X-Test-Orig-Body: ", Body, "\r\n\r\n"

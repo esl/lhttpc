@@ -82,7 +82,7 @@ stop(_) ->
 %% @end
 -spec start() -> ok | {error, any()}.
 start() ->
-	application:start(lhttpc).
+    application:start(lhttpc).
 
 %% @spec () -> ok | {error, Reason}
 %%   Reason = term()
@@ -94,7 +94,7 @@ start() ->
 %% @end
 -spec stop() -> ok | {error, any()}.
 stop() ->
-	application:stop(lhttpc).
+    application:stop(lhttpc).
 
 %% @spec (URL, Method, Hdrs, Timeout) -> Result
 %%   URL = string()
