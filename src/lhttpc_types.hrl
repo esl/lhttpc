@@ -44,3 +44,6 @@
 %%-type timeout() :: non_neg_integer() | infinity.
 
 -type window_size() :: non_neg_integer() | infinity.
+
+%%in R13B bool() is now called boolean()
+-type boolean() :: bool().

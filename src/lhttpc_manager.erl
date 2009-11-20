@@ -75,7 +75,7 @@ connection_count() ->
 %% @doc Returns the number of active connections to the specific
 %% `Destination' maintained by the httpc manager.
 %% @end
--spec connection_count({string(), pos_integer(), bool()}) ->
+-spec connection_count({string(), pos_integer(), boolean()}) ->
     non_neg_integer().
 connection_count({Host, Port, Ssl}) ->
     Destination = {string:to_lower(Host), Port, Ssl},
