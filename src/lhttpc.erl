@@ -31,7 +31,8 @@
 -module(lhttpc).
 -behaviour(application).
 
--export([request/4, request/5, request/6, request/9]).
+-export([start/0, stop/0, request/4, request/5, request/6, request/9]).
+-export([start/2, stop/1]).
 -export([
         send_body_part/2,
         send_body_part/3, 
@@ -42,7 +43,6 @@
         get_body_part/1,
         get_body_part/2
         ]).
--export([start/2, stop/1]).
 
 -include("lhttpc_types.hrl").
 
@@ -67,6 +67,28 @@ start(_, _) ->
 -spec stop(any()) -> ok.
 stop(_) ->
     ok.
+
+%% @spec () -> ok
+%% @doc
+%% Start the application.
+%% This is a helper function that will call `application:start(lhttpc)' to
+%% allow the library to be started using the `-s' flag.
+%% For instance:
+%% `$ erl -s crypto -s ssl -s lhttpc'
+%% @end
+-spec start() -> ok.
+start() ->
+	application:start(lhttpc),
+	ok.
+
+%% @spec () -> ok
+%% @doc
+%% Stops the application.
+%% This is a helper function that will call `application:stop(lhttpc)'.
+%% @end
+-spec stop() -> ok.
+stop() ->
+	application:stop(lhttpc).
 
 %% @spec (URL, Method, Hdrs, Timeout) -> Result
 %%   URL = string()
