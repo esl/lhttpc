@@ -424,7 +424,8 @@ send_trailers({Pid, _Window}, Trailers, Timeout)
     read_response(Pid, Timeout).
 
 %% @spec (HTTPClient :: pid()) -> Result
-%%   Result = {ok, Bin} | {ok, {http_eob, Trailers}} 
+%%   Result = {ok, BodyPart} | {ok, {http_eob, Trailers}}
+%%   BodyPart = binary()
 %%   Trailers = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
@@ -440,7 +441,8 @@ get_body_part(Pid) ->
 
 %% @spec (HTTPClient :: pid(), Timeout:: Timeout) -> Result
 %%   Timeout = integer() | infinity
-%%   Result = {ok, Bin} | {ok, {http_eob, Trailers}} 
+%%   Result = {ok, BodyPart} | {ok, {http_eob, Trailers}}
+%%   BodyPart = binary()
 %%   Trailers = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
