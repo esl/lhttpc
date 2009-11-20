@@ -47,4 +47,3 @@
 
 %%in R13B bool() is now called boolean()
 -type boolean() :: bool().
-%% @type boolean() = bool().
