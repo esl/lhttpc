@@ -69,25 +69,30 @@ start(_, _) ->
 stop(_) ->
     ok.
 
-%% @spec () -> ok
+%% @spec () -> ok | {error, Reason}
+%%   Reason = term()
 %% @doc
 %% Start the application.
 %% This is a helper function that will call `application:start(lhttpc)' to
 %% allow the library to be started using the `-s' flag.
 %% For instance:
 %% `$ erl -s crypto -s ssl -s lhttpc'
+%%
+%% For more info on possible return values the `application' module.
 %% @end
--spec start() -> ok.
+-spec start() -> ok | {error, any()}.
 start() ->
-	application:start(lhttpc),
-	ok.
+	application:start(lhttpc).
 
-%% @spec () -> ok
+%% @spec () -> ok | {error, Reason}
+%%   Reason = term()
 %% @doc
 %% Stops the application.
 %% This is a helper function that will call `application:stop(lhttpc)'.
+%%
+%% For more info on possible return values the `application' module.
 %% @end
--spec stop() -> ok.
+-spec stop() -> ok | {error, any()}.
 stop() ->
 	application:stop(lhttpc).
 
