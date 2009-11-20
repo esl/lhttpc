@@ -366,40 +366,48 @@ read_partial_finite_body(State = #client_state{}, Hdrs, 0, _Window) ->
 read_partial_finite_body(State = #client_state{requester = To}, Hdrs,
         ContentLength, 0) ->
     receive
-        {ack, To} -> read_partial_finite_body(State, Hdrs, ContentLength, 1);
-        {'DOWN', _, process, To, _} -> exit(normal)
+        {ack, To} ->
+            read_partial_finite_body(State, Hdrs, ContentLength, 1);
+        {'DOWN', _, process, To, _} ->
+            exit(normal)
     end;
 read_partial_finite_body(State = #client_state{requester = To}, Hdrs,
         ContentLength, Window) when Window >= 0->
     Bin = read_body_part(State, ContentLength),
     State#client_state.requester ! {body_part, self(), Bin},
     receive
-        {ack, To} -> read_partial_finite_body(State, Hdrs,
-                        ContentLength - iolist_size(Bin), Window);
-        {'DOWN', _, process, To, _} -> exit(normal)
+        {ack, To} ->
+            Length = ContentLength - iolist_size(Bin),
+            read_partial_finite_body(State, Hdrs, Length, Window);
+        {'DOWN', _, process, To, _} ->
+            exit(normal)
     after 0 ->
-        read_partial_finite_body(State, Hdrs, ContentLength - iolist_size(Bin),
-            lhttpc_lib:dec(Window))
+            Length = ContentLength - iolist_size(Bin),
+        read_partial_finite_body(State, Hdrs, Length, lhttpc_lib:dec(Window))
     end.
 
-read_body_part(#client_state{socket = Socket, ssl = Ssl, part_size = infinity},
-        _ContentLength) ->
-    case lhttpc_sock:recv(Socket, Ssl) of
+read_body_part(#client_state{part_size = infinity} = State, _ContentLength) ->
+    case lhttpc_sock:recv(State#client_state.socket, State#client_state.ssl) of
         {ok, Data} ->
             Data;
         {error, Reason} ->
             erlang:error(Reason)
     end;
-read_body_part(#client_state{socket = Socket, ssl = Ssl, part_size = PartSize},
-        ContentLength) when PartSize =< ContentLength ->
+read_body_part(#client_state{part_size = PartSize} = State, ContentLength)
+        when PartSize =< ContentLength ->
+    Socket = State#client_state.socket, 
+    Ssl = State#client_state.ssl,
+    PartSize = State#client_state.part_size,
     case lhttpc_sock:recv(Socket, PartSize, Ssl) of
         {ok, Data} ->
             Data;
         {error, Reason} ->
             erlang:error(Reason)
     end;
-read_body_part(#client_state{socket = Socket, ssl = Ssl, part_size = PartSize},
-        ContentLength) when PartSize > ContentLength ->
+read_body_part(#client_state{part_size = PartSize} = State, ContentLength)
+        when PartSize > ContentLength ->
+    Socket = State#client_state.socket, 
+    Ssl = State#client_state.ssl,
     case lhttpc_sock:recv(Socket, ContentLength, Ssl) of
         {ok, Data} ->
             Data;
@@ -560,8 +568,10 @@ reply_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
 
 read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, 0) ->
     receive
-        {ack, To} -> read_partial_infinite_body(State, Hdrs, 1);
-        {'DOWN', _, process, To, _} -> exit(normal)
+        {ack, To} ->
+            read_partial_infinite_body(State, Hdrs, 1);
+        {'DOWN', _, process, To, _} ->
+            exit(normal)
     end;
 read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, Window)
         when Window >= 0 ->
@@ -570,8 +580,10 @@ read_partial_infinite_body(State = #client_state{requester = To}, Hdrs, Window)
         Bin ->
             State#client_state.requester ! {body_part, self(), Bin},
             receive
-                {ack, To} -> read_partial_infinite_body(State, Hdrs, Window);
-                {'DOWN', _, process, To, _} -> exit(normal)
+                {ack, To} ->
+                    read_partial_infinite_body(State, Hdrs, Window);
+                {'DOWN', _, process, To, _} ->
+                    exit(normal)
             after 0 ->
                 read_partial_infinite_body(State, Hdrs, lhttpc_lib:dec(Window))
             end
