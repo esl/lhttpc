@@ -137,6 +137,7 @@ tcp_test_() ->
                 ?_test(partial_upload_identity()),
                 ?_test(partial_upload_chunked()),
                 ?_test(partial_upload_chunked_no_trailer()),
+                ?_test(partial_download_illegal_option()),
                 ?_test(partial_download_identity()),
                 ?_test(partial_download_infinity_window()),
                 ?_test(partial_download_no_content_length()),
@@ -456,6 +457,11 @@ partial_upload_chunked_no_trailer() ->
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)),
     ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
+
+partial_download_illegal_option() ->
+    ?assertError({bad_options, [{partial_download, [{foo, bar}]}]},
+        lhttpc:request("http://localhost/", get, [], <<>>, 1000,
+            [{partial_download, [{foo, bar}]}])).
 
 partial_download_identity() ->
     Port = start(gen_tcp, [fun large_response/5]),
