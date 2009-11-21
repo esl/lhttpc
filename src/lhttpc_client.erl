@@ -371,10 +371,10 @@ read_partial_finite_body(State = #client_state{requester = To}, Hdrs,
         {'DOWN', _, process, To, _} ->
             exit(normal)
     end;
-read_partial_finite_body(State = #client_state{requester = To}, Hdrs,
-        ContentLength, Window) when Window >= 0->
+read_partial_finite_body(State, Hdrs, ContentLength, Window) when Window >= 0->
     Bin = read_body_part(State, ContentLength),
     State#client_state.requester ! {body_part, self(), Bin},
+    To = State#client_state.requester,
     receive
         {ack, To} ->
             Length = ContentLength - iolist_size(Bin),
@@ -429,19 +429,17 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, 0) ->
     PartSize = State#client_state.part_size,
     case read_chunk_size(Socket, Ssl) of
         0 ->
-            reply_chunked_part(State, Buffer, Window, BufferSize),
+            reply_chunked_part(State, Buffer, Window),
             {Trailers, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
             reply_end_of_body(State, Trailers, NewHdrs);
         ChunkSize when PartSize =:= infinity ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
-            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window,
-                not_empty),
+            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window),
             read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], 0);
         ChunkSize when BufferSize + ChunkSize >= PartSize ->
             {Chunk, RemSize} = read_partial_chunk(Socket, Ssl,
                 PartSize - BufferSize, ChunkSize),
-            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window,
-                not_empty),
+            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window),
             read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], RemSize);
         ChunkSize ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
@@ -456,8 +454,7 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, RemSize) ->
         BufferSize + RemSize >= PartSize ->
             {Chunk, NewRemSize} =
                 read_partial_chunk(Socket, Ssl, PartSize - BufferSize, RemSize),
-            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window,
-                not_empty),
+            NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window),
             read_partial_chunked_body(State, Hdrs, NewWindow, 0, [],
                 NewRemSize);
         BufferSize + RemSize < PartSize ->
@@ -475,16 +472,16 @@ read_chunk_size(Socket, Ssl) ->
             erlang:error(Reason)
     end.
 
-reply_chunked_part(_State, _Buffer, Window, 0) ->
+reply_chunked_part(_State, [], Window) ->
     Window;
-reply_chunked_part(State = #client_state{requester = Pid}, Buff, 0, Size) ->
+reply_chunked_part(State = #client_state{requester = Pid}, Buff, 0) ->
     receive
         {ack, Pid} ->
-            reply_chunked_part(State, Buff, 1, Size);
+            reply_chunked_part(State, Buff, 1);
         {'DOWN', _, process, Pid, _} ->
             exit(normal)
     end;
-reply_chunked_part(#client_state{requester = Pid}, Buffer, Window, _Size) ->
+reply_chunked_part(#client_state{requester = Pid}, Buffer, Window) ->
     Pid ! {body_part, self(), list_to_binary(lists:reverse(Buffer))},
     receive
         {ack, Pid} ->  Window;
