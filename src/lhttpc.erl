@@ -153,8 +153,10 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
+%%            {connect_options, [ConnectOptions]] |
 %%            {send_retry, integer()} | {partial_upload, WindowSize}
 %%   Milliseconds = integer()
+%%   ConnectOptions = term()
 %%   WindowSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}} |
 %%            {ok, UploadState} | {error, Reason}
@@ -239,6 +241,17 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% client will also give up. The default value is infinity, which means that
 %% it will either give up when the TCP stack gives up, or when the overall
 %% request timeout is reached. 
+%%
+%% `{connect_options, Options}' specifies options to pass to the socket at
+%% connect time. This makes it possible to specify both SSL options and
+%% regular socket options, such as which IP/Port to connect from etc. Note
+%% that some options shouldn't be included here, namely the mode, `binary'
+%% or `list', `{active, boolean()}', `{active, once}' or `{packet, Packet}'.
+%% These options would confuse the client if they are included.
+%% Please note that these options will only be included for *new*
+%% connections, and it isn't possible for different requests
+%% to the same host uses different options, unless using HTTP/1.0 since tha
+%% would open a new socket for each request.
 %%
 %% `{send_retry, N}' specifies how many times the client should retry
 %% sending a request if the connection is closed after the data has been
@@ -521,6 +534,9 @@ verify_options([{partial_download, DownloadOptions} | Options], Errors)
             NewErrors = [{partial_download, OptionErrors} | Errors],
             verify_options(Options, NewErrors)
     end;
+verify_options([{connect_options, List} | Options], Errors)
+        when is_list(List) ->
+    verify_options(Options, Errors);
 verify_options([Option | Options], Errors) ->
     verify_options(Options, [Option | Errors]);
 verify_options([], []) ->

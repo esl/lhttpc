@@ -47,6 +47,7 @@
         request_headers :: headers(),
         socket,
         connect_timeout = infinity :: timeout(),
+        connect_options = [] :: [any()],
         attempts :: integer(),
         requester :: pid(),
         partial_upload = false :: true | false,
@@ -120,6 +121,7 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         socket = Socket,
         connect_timeout = proplists:get_value(connect_timeout, Options,
             infinity),
+        connect_options = proplists:get_value(connect_options, Options, []),
         attempts = 1 + proplists:get_value(send_retry, Options, 1),
         partial_upload = PartialUpload,
         upload_window = UploadWindowSize,
@@ -162,7 +164,8 @@ send_request(#client_state{socket = undefined} = State) ->
     Port = State#client_state.port,
     Ssl = State#client_state.ssl,
     Timeout = State#client_state.connect_timeout,
-    SocketOptions = [binary, {packet, http}, {active, false}],
+    ConnectOptions = State#client_state.connect_options,
+    SocketOptions = [binary, {packet, http}, {active, false} | ConnectOptions],
     case lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
         {ok, Socket} ->
             send_request(State#client_state{socket = Socket});
