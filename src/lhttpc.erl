@@ -153,7 +153,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
-%%            {connect_options, [ConnectOptions]] |
+%%            {connect_options, [ConnectOptions]} |
 %%            {send_retry, integer()} | {partial_upload, WindowSize}
 %%   Milliseconds = integer()
 %%   ConnectOptions = term()
