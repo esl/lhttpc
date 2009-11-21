@@ -321,10 +321,10 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
 %% Would be the same as calling
 %% `send_body_part(UploadState, BodyPart, infinity)'.
 %% @end
--spec send_body_part({pid(), window_size()}, binary()) -> 
+-spec send_body_part({pid(), window_size()}, iolist()) -> 
         {pid(), window_size()} | result().
-send_body_part({Pid, Window}, Bin) ->
-    send_body_part({Pid, Window}, Bin, infinity).
+send_body_part({Pid, Window}, IoList) ->
+    send_body_part({Pid, Window}, IoList, infinity).
 
 %% @spec (UploadState :: UploadState, BodyPart :: BodyPart, Timeout) -> Result
 %%   BodyPart = iolist() | binary()
@@ -347,13 +347,15 @@ send_body_part({Pid, Window}, Bin) ->
 %% there is no response within `Timeout' milliseconds, the request is
 %% canceled and `{error, timeout}' is returned.
 %% @end
--spec send_body_part({pid(), window_size()}, binary(), timeout()) -> 
+-spec send_body_part({pid(), window_size()}, iolist(), timeout()) -> 
         {ok, {pid(), window_size()}} | result().
-send_body_part({Pid, 0}, Bin, Timeout) 
-        when is_binary(Bin), is_pid(Pid) ->
+send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
+    Pid ! {body_part, self(), http_eob},
+    read_response(Pid, Timeout);
+send_body_part({Pid, 0}, IoList, Timeout) when is_pid(Pid) ->
     receive
         {ack, Pid} ->
-            send_body_part({Pid, 1}, Bin, Timeout);
+            send_body_part({Pid, 1}, IoList, Timeout);
         {response, Pid, R} ->
             R;
         {exit, Pid, Reason} ->
@@ -363,9 +365,9 @@ send_body_part({Pid, 0}, Bin, Timeout)
     after Timeout ->
         kill_client(Pid)
     end;
-send_body_part({Pid, Window}, Bin, _Timeout) 
-        when Window > 0, is_binary(Bin), is_pid(Pid) ->
-    Pid ! {body_part, self(), Bin},
+send_body_part({Pid, Window}, IoList, _Timeout) when Window > 0, is_pid(Pid) ->
+                                                     % atom > 0 =:= true
+    Pid ! {body_part, self(), IoList},
     receive
         {ack, Pid} ->
             %% body_part ACK
@@ -381,10 +383,7 @@ send_body_part({Pid, Window}, Bin, _Timeout)
             exit(Reason)
     after 0 ->
         {ok, {Pid, lhttpc_lib:dec(Window)}}
-    end;
-send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
-    Pid ! {body_part, self(), http_eob},
-    read_response(Pid, Timeout).
+    end.
 
 %% @spec (UploadState :: UploadState, Trailers) -> Result
 %%   Header = string() | binary() | atom()
