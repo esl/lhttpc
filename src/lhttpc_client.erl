@@ -497,7 +497,8 @@ read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
     case read_chunk_size(Socket, Ssl) of
         0 ->
             Body = list_to_binary(lists:reverse(Chunks)),
-            {Body, read_trailers(Socket, Ssl, Hdrs)};
+            {_, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
+            {Body, NewHdrs};
         Size ->
             Chunk = read_chunk(Socket, Ssl, Size),
             read_chunked_body(Socket, Ssl, Hdrs, [Chunk | Chunks])
@@ -546,18 +547,6 @@ read_trailers(Socket, Ssl, Trailers, Hdrs) ->
         {ok, {http_header, _, Name, _, Value}} ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
             read_trailers(Socket, Ssl, [Header | Trailers], [Header | Hdrs]);
-        {error, {http_error, Data}} ->
-            erlang:error({bad_trailer, Data})
-    end.
-
-read_trailers(Socket, Ssl, Hdrs) ->
-    lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
-    case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, http_eoh} ->
-            Hdrs;
-        {ok, {http_header, _, Name, _, Value}} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            read_trailers(Socket, Ssl, [Header | Hdrs]);
         {error, {http_error, Data}} ->
             erlang:error({bad_trailer, Data})
     end.
