@@ -114,6 +114,7 @@ tcp_test_() ->
                 ?_test(simple_get()),
                 ?_test(empty_get()),
                 ?_test(get_with_mandatory_hdrs()),
+                ?_test(get_with_connect_options()),
                 ?_test(no_content_length()),
                 ?_test(no_content_length_1_0()),
                 ?_test(simple_head()),
@@ -196,6 +197,14 @@ get_with_mandatory_hdrs() ->
     {ok, Response} = lhttpc:request(URL, "POST", Hdrs, Body, 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+get_with_connect_options() ->
+    Port = start(gen_tcp, [fun empty_body/5]),
+    URL = url(Port, "/empty"),
+    Options = [{connect_options, [{ip, {127, 0, 0, 1}}, {port, 0}]}],
+    {ok, Response} = lhttpc:request(URL, "GET", [], [], 1000, Options),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
 
 no_content_length() ->
     Port = start(gen_tcp, [fun no_content_length/5]),
