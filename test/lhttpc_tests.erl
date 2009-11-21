@@ -144,6 +144,7 @@ tcp_test_() ->
                 ?_test(limited_partial_download_identity()),
                 ?_test(partial_download_chunked()),
                 ?_test(partial_download_chunked_infinite_part()),
+                ?_test(partial_download_smallish_chunks()),
                 ?_test(partial_download_slow_chunks()),
                 ?_test(close_connection()),
                 ?_test(message_queue()),
@@ -539,6 +540,20 @@ partial_download_chunked_infinite_part() ->
     PartialDownload = [
         {window_size, 1},
         {part_size, infinity}
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} =
+        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
+partial_download_smallish_chunks() ->
+    Port = start(gen_tcp, [fun large_chunked_response/5]),
+    URL = url(Port, "/partial_download_identity"),
+    PartialDownload = [
+        {window_size, 1},
+        {part_size, length(?LONG_BODY_PART) - 1}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, {Status, _, Pid}} =
