@@ -114,6 +114,7 @@ stop() ->
 %% Would be the same as calling `request(URL, Method, Hdrs, [], Timeout)',
 %% that is {@link request/5} with an empty body (`Body' could also be `<<>>').
 %% @end
+%% @see request/9
 -spec request(string(), string() | atom(), headers(), pos_integer() |
         infinity) -> result().
 request(URL, Method, Hdrs, Timeout) ->
@@ -138,6 +139,7 @@ request(URL, Method, Hdrs, Timeout) ->
 %% `request(URL, Method, Hdrs, Body, Timeout, [])', that is {@link request/6}
 %% with no options.
 %% @end
+%% @see request/9
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity) -> result().
 request(URL, Method, Hdrs, Body, Timeout) ->
@@ -154,10 +156,16 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
 %%            {connect_options, [ConnectOptions]} |
-%%            {send_retry, integer()} | {partial_upload, WindowSize}
+%%            {send_retry, integer()} |
+%%            {partial_upload, WindowSize} |
+%%            {partial_download, PartialDownloadOptions}
 %%   Milliseconds = integer()
 %%   ConnectOptions = term()
 %%   WindowSize = integer() | infinity
+%%   PartialDownloadOptions = [PartialDownloadOption]
+%%   PartialDowloadOption = {window_size, WindowSize} |
+%%                          {part_size, PartSize}
+%%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}} |
 %%            {ok, UploadState} | {error, Reason}
 %%   StatusCode = integer()
@@ -173,6 +181,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% `URL' is expected to be a valid URL: 
 %% `scheme://host[:port][/path]'.
 %% @end
+%% @see request/9
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity, [option()]) -> result().
 request(URL, Method, Hdrs, Body, Timeout, Options) ->
@@ -193,9 +202,10 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
+%%            {connect_options, [ConnectOptions]} |
 %%            {send_retry, integer()} |
 %%            {partial_upload, WindowSize} |
-%%            {partial_download, PartialDowloadOptions}
+%%            {partial_download, PartialDownloadOptions}
 %%   Milliseconds = integer()
 %%   WindowSize = integer()
 %%   PartialDownloadOptions = [PartialDownloadOption]
