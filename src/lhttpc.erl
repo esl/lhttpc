@@ -199,7 +199,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%   PartialDownloadOptions = [PartialDownloadOption]
 %%   PartialDowloadOption = {window_size, WindowSize} |
 %%                          {part_size, PartSize}
-%%   PartSize = integer()
+%%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%          | {error, Reason}
 %%   StatusCode = integer()
@@ -545,6 +545,8 @@ verify_partial_download([{window_size, Size} | Options], Errors) when
     verify_partial_download(Options, Errors);
 verify_partial_download([{part_size, Size} | Options], Errors) when
         is_integer(Size), Size >= 0 ->
+    verify_partial_download(Options, Errors);
+verify_partial_download([{part_size, infinity} | Options], Errors) ->
     verify_partial_download(Options, Errors);
 verify_partial_download([Option | Options], Errors) ->
     verify_partial_download(Options, [Option | Errors]);
