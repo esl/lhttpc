@@ -135,6 +135,7 @@ tcp_test_() ->
                 ?_test(suspended_manager()),
                 ?_test(chunked_encoding()),
                 ?_test(partial_upload_identity()),
+                ?_test(partial_upload_identity_iolist()),
                 ?_test(partial_upload_chunked()),
                 ?_test(partial_upload_chunked_no_trailer()),
                 ?_test(partial_download_illegal_option()),
@@ -412,10 +413,32 @@ partial_upload_identity() ->
     ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response2))).
 
+partial_upload_identity_iolist() ->
+    Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
+    URL = url(Port, "/partial_upload"),
+    Body = ["This", [<<" ">>, $i, $s, [" "]], <<"chunky">>, [<<" stuff!">>]],
+    Hdrs = [{"Content-Length", integer_to_list(iolist_size(Body))}],
+    Options = [{partial_upload, 1}],
+    {ok, UploadState1} = lhttpc:request(URL, post, Hdrs, hd(Body), 1000, Options),
+    Response1 = lists:foldl(fun upload_parts/2, UploadState1,
+        tl(Body) ++ [http_eob]),
+    ?assertEqual({200, "OK"}, status(Response1)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
+    ?assertEqual("This is chunky stuff!",
+        lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
+    % Make sure it works with no body part in the original request as well
+    {ok, UploadState2} = lhttpc:request(URL, post, Hdrs, [], 1000, Options),
+    Response2 = lists:foldl(fun upload_parts/2, UploadState2,
+        Body ++ [http_eob]),
+    ?assertEqual({200, "OK"}, status(Response2)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
+    ?assertEqual("This is chunky stuff!",
+        lhttpc_lib:header_value("x-test-orig-body", headers(Response2))).
+
 partial_upload_chunked() ->
     Port = start(gen_tcp, [fun chunked_upload/5, fun chunked_upload/5]),
     URL = url(Port, "/partial_upload_chunked"),
-    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
+    Body = ["This", [<<" ">>, $i, $s, [" "]], <<"chunky">>, [<<" stuff!">>]],
     Options = [{partial_upload, 1}],
     {ok, UploadState1} = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
     Trailer = {"X-Trailer-1", "my tail is tailing me...."},
