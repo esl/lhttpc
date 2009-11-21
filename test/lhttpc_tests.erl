@@ -143,6 +143,8 @@ tcp_test_() ->
                 ?_test(partial_download_no_content()),
                 ?_test(limited_partial_download_identity()),
                 ?_test(partial_download_chunked()),
+                ?_test(partial_download_chunked_infinite_part()),
+                ?_test(partial_download_slow_chunks()),
                 ?_test(close_connection()),
                 ?_test(message_queue()),
                 ?_test(connection_count()) % just check that it's 0 (last)
@@ -474,8 +476,7 @@ partial_download_infinity_window() ->
         {window_size, infinity}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} =
-        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    {ok, {Status, _, Pid}} = lhttpc:request(URL, get, [], <<>>, 1000, Options),
     Body = read_partial_body(Pid),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
@@ -487,8 +488,7 @@ partial_download_no_content_length() ->
         {window_size, 1}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} =
-        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    {ok, {Status, _, Pid}} = lhttpc:request(URL, get, [], <<>>, 1000, Options),
     Body = read_partial_body(Pid),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(<<?DEFAULT_STRING>>, Body).
@@ -523,7 +523,8 @@ partial_download_chunked() ->
     Port = start(gen_tcp, [fun large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1}
+        {window_size, 1},
+        {part_size, length(?LONG_BODY_PART) * 3}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, {Status, _, Pid}} =
@@ -531,6 +532,33 @@ partial_download_chunked() ->
     Body = read_partial_body(Pid),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
+partial_download_chunked_infinite_part() ->
+    Port = start(gen_tcp, [fun large_chunked_response/5]),
+    URL = url(Port, "/partial_download_identity"),
+    PartialDownload = [
+        {window_size, 1},
+        {part_size, infinity}
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} =
+        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
+
+partial_download_slow_chunks() ->
+    Port = start(gen_tcp, [fun slow_chunked_response/5]),
+    URL = url(Port, "/slow"),
+    PartialDownload = [
+        {window_size, 1},
+        {part_size, length(?LONG_BODY_PART) div 2}
+    ],
+    Options = [{partial_download, PartialDownload}],
+    {ok, {Status, _, Pid}} = lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Pid),
+    ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(<<?LONG_BODY_PART ?LONG_BODY_PART>>, Body).
 
 close_connection() ->
     Port = start(gen_tcp, [fun close_connection/5]),
@@ -674,6 +702,21 @@ large_chunked_response(Module, Socket, _, _, _) ->
     Module:send(Socket, Chunk),
     Module:send(Socket, Chunk),
     Module:send(Socket, "0\r\n\r\n").
+
+slow_chunked_response(Module, Socket, _, _, _) ->
+    ChunkSize = erlang:integer_to_list(length(?LONG_BODY_PART) * 2, 16),
+    Module:send(
+        Socket,
+        [
+            "HTTP/1.1 200 OK\r\n"
+            "Content-type: text/plain\r\n"
+            "Transfer-Encoding: chunked\r\n\r\n"
+        ]),
+    Module:send(Socket, [ChunkSize, "\r\n", <<?LONG_BODY_PART>>]),
+    timer:sleep(200),
+    Module:send(Socket, [<<?LONG_BODY_PART>>, "\r\n"]),
+    Module:send(Socket, "0\r\n\r\n").
+
 
 chunked_upload(Module, Socket, _, Headers, <<>>) ->
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Headers),
