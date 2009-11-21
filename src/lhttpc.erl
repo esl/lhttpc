@@ -370,12 +370,8 @@ send_body_part({Pid, Window}, IoList, _Timeout) when Window > 0, is_pid(Pid) ->
     Pid ! {body_part, self(), IoList},
     receive
         {ack, Pid} ->
-            %% body_part ACK
             {ok, {Pid, Window}};
         {reponse, Pid, R} ->
-            %% something went wrong in the client
-            %% for example the connection died or
-            %% the last body part has been sent 
             R;
         {exit, Pid, Reason} ->
             exit(Reason);
