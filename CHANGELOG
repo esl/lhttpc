@@ -1,3 +1,6 @@
+Version 1.2.2:
+* Fix Host header, add port number (reported by Benoit Chesneau)
+
 Version 1.2.1:
 * Fix confusion of arguments in request/9 (introduced in 1.2.0)
 
