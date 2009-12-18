@@ -82,7 +82,7 @@ request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
 execute(Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     NormalizedMethod = lhttpc_lib:normalize_method(Method),
     Request = lhttpc_lib:format_request(Path, NormalizedMethod, Hdrs, Host,
-        Body),
+        Port, Body),
     SocketRequest = {socket, self(), Host, Port, Ssl},
     Socket = case gen_server:call(lhttpc_manager, SocketRequest, infinity) of
         {ok, S}   -> S; % Re-using HTTP/1.1 connections

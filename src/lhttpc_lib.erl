@@ -33,7 +33,7 @@
 
 -export([
         parse_url/1,
-        format_request/5,
+        format_request/6,
         header_value/2,
         header_value/3,
         normalize_method/1
@@ -134,18 +134,19 @@ split_port(_,[$/ | _] = Path, Port) ->
 split_port(Scheme, [P | T], Port) ->
     split_port(Scheme, T, [P | Port]).
 
-%% @spec (Path, Method, Headers, Host, Body) -> Request
+%% @spec (Path, Method, Headers, Host, Port, Body) -> Request
 %% Path = iolist()
 %% Method = atom() | string()
 %% Headers = [{atom() | string(), string()}]
 %% Host = string()
+%% Port = integer()
 %% Body = iolist()
 -spec format_request(iolist(), atom() | string(), headers(), string(),
-    iolist()) -> iolist().
-format_request(Path, Method, Hdrs, Host, Body) ->
+    integer(), iolist()) -> iolist().
+format_request(Path, Method, Hdrs, Host, Port, Body) ->
     [
         Method, " ", Path, " HTTP/1.1\r\n",
-        format_hdrs(add_mandatory_hdrs(Method, Hdrs, Host, Body), []),
+        format_hdrs(add_mandatory_hdrs(Method, Hdrs, Host, Port, Body), []),
         Body
     ].
 
@@ -170,8 +171,8 @@ format_hdrs([{Hdr, Value} | T], Acc) ->
 format_hdrs([], Acc) ->
     [Acc, "\r\n"].
 
-add_mandatory_hdrs(Method, Hdrs, Host, Body) ->
-    add_host(add_content_length(Method, Hdrs, Body), Host).
+add_mandatory_hdrs(Method, Hdrs, Host, Port, Body) ->
+    add_host(add_content_length(Method, Hdrs, Body), Host, Port).
 
 add_content_length("POST", Hdrs, Body) ->
     add_content_length(Hdrs, Body);
@@ -189,10 +190,13 @@ add_content_length(Hdrs, Body) ->
             Hdrs
     end.
 
-add_host(Hdrs, Host) ->
+add_host(Hdrs, Host, Port) ->
     case header_value("host", Hdrs) of
         undefined ->
-            [{"Host", Host } | Hdrs];
+            [{"Host", host(Host, Port) } | Hdrs];
         _ -> % We have a host
             Hdrs
     end.
+
+host(Host, 80)   -> Host;
+host(Host, Port) -> [Host, $:, integer_to_list(Port)].
