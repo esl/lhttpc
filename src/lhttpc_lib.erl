@@ -35,7 +35,7 @@
 
 -export([
         parse_url/1,
-        format_request/6,
+        format_request/7,
         header_value/2,
         header_value/3,
         normalize_method/1
@@ -138,17 +138,18 @@ split_port(_,[$/ | _] = Path, Port) ->
 split_port(Scheme, [P | T], Port) ->
     split_port(Scheme, T, [P | Port]).
 
-%% @spec (Path, Method, Headers, Host, Body, PartialUpload) -> Request
+%% @spec (Path, Method, Headers, Host, Port, Body, PartialUpload) -> Request
 %% Path = iolist()
 %% Method = atom() | string()
 %% Headers = [{atom() | string(), string()}]
 %% Host = string()
+%% Port = integer()
 %% Body = iolist()
 %% PartialUpload = true | false
 -spec format_request(iolist(), atom() | string(), headers(), string(),
-    iolist(), true | false ) -> {true | false, iolist()}.
-format_request(Path, Method, Hdrs, Host, Body, PartialUpload) ->
-    AllHdrs = add_mandatory_hdrs(Method, Hdrs, Host, Body, PartialUpload),
+    integer(), iolist(), true | false ) -> {true | false, iolist()}.
+format_request(Path, Method, Hdrs, Host, Port, Body, PartialUpload) ->
+    AllHdrs = add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload),
     IsChunked = is_chunked(AllHdrs),
     {
         IsChunked,
@@ -197,8 +198,9 @@ format_body(Body, true) ->
             ]
     end.
 
-add_mandatory_hdrs(Method, Hdrs, Host, Body, PartialUpload) ->
-    add_host(add_content_headers(Method, Hdrs, Body, PartialUpload), Host).
+add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload) ->
+    ContentHdrs = add_content_headers(Method, Hdrs, Body, PartialUpload),  
+    add_host(ContentHdrs, Host, Port).
 
 add_content_headers("POST", Hdrs, Body, PartialUpload) ->
     add_content_headers(Hdrs, Body, PartialUpload);
@@ -231,12 +233,10 @@ add_content_headers(Hdrs, _Body, true) ->
             erlang:error({error, bad_header})
     end.
 
-
-
-add_host(Hdrs, Host) ->
+add_host(Hdrs, Host, Port) ->
     case header_value("host", Hdrs) of
         undefined ->
-            [{"Host", Host } | Hdrs];
+            [{"Host", host(Host, Port) } | Hdrs];
         _ -> % We have a host
             Hdrs
     end.
@@ -253,3 +253,5 @@ is_chunked(Hdrs) ->
 dec(Num) when is_integer(Num) -> Num - 1;
 dec(Else)                     -> Else.
 
+host(Host, 80)   -> Host;
+host(Host, Port) -> [Host, $:, integer_to_list(Port)].

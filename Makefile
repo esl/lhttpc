@@ -33,7 +33,7 @@ test/%.beam: test/%.erl
 	@echo Compiling $<
 	@erlc +debug_info -o test/ $<
 
-$(APP_FILE): src/$(APPLICATION).app.src
+$(APP_FILE): src/$(APPLICATION).app.src vsn.mk 
 	@echo Generating $@
 	@sed -e 's/@MODULES@/$(MODULELIST)/' -e 's/@VSN@/$(VSN)/' $< > $@
 
