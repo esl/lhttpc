@@ -129,6 +129,7 @@ tcp_test_() ->
                 ?_test(pre_1_1_server_keep_alive()),
                 ?_test(simple_put()),
                 ?_test(post()),
+                ?_test(post_100_continue()),
                 ?_test(bad_url()),
                 ?_test(persistent_connection()),
                 ?_test(request_timeout()),
@@ -314,6 +315,22 @@ simple_put() ->
 
 post() ->
     Port = start(gen_tcp, [fun copy_body/5]),
+    URL = url(Port, "/post"),
+    {X, Y, Z} = now(),
+    Body = [
+        "This is a rather simple post :)",
+        integer_to_list(X),
+        integer_to_list(Y),
+        integer_to_list(Z)
+    ],
+    {ok, Response} = lhttpc:request(URL, "POST", [], Body, 1000),
+    {StatusCode, ReasonPhrase} = status(Response),
+    ?assertEqual(200, StatusCode),
+    ?assertEqual("OK", ReasonPhrase),
+    ?assertEqual(iolist_to_binary(Body), body(Response)).
+
+post_100_continue() ->
+    Port = start(gen_tcp, [fun copy_body_100_continue/5]),
     URL = url(Port, "/post"),
     {X, Y, Z} = now(),
     Body = [
@@ -814,6 +831,18 @@ copy_body(Module, Socket, _, _, Body) ->
     Module:send(
         Socket,
         [
+            "HTTP/1.1 200 OK\r\n"
+            "Content-type: text/plain\r\nContent-length: "
+            ++ integer_to_list(size(Body)) ++ "\r\n\r\n",
+            Body
+        ]
+    ).
+
+copy_body_100_continue(Module, Socket, _, _, Body) ->
+    Module:send(
+        Socket,
+        [
+            "HTTP/1.1 100 Continue\r\n\r\n"
             "HTTP/1.1 200 OK\r\n"
             "Content-type: text/plain\r\nContent-length: "
             ++ integer_to_list(size(Body)) ++ "\r\n\r\n",

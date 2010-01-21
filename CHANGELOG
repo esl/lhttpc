@@ -15,6 +15,9 @@ Version ?:
       after completing requests which came from the lhttpc_client process.
       These are now avoided.
 
+Version 1.2.3:
+* Fix handling of unexpected 100 Continue response (patch by Magnus Henoch)
+ 
 Version 1.2.2:
 * Fix Host header, add port number (reported by Benoit Chesneau)
 

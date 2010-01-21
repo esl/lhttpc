@@ -248,18 +248,26 @@ check_send_result(#client_state{socket = Sock, ssl = Ssl}, {error, Reason}) ->
 
 read_response(#client_state{socket = Socket, ssl = Ssl} = State) ->
     lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
-    read_response(State, nil, nil, []).
+    read_response(State, nil, {nil, nil}, []).
 
-read_response(State, Vsn, Status, Hdrs) ->
+read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
     case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, {http_response, NewVsn, StatusCode, Reason}} ->
-            NewStatus = {StatusCode, Reason},
+        {ok, {http_response, NewVsn, NewStatusCode, Reason}} ->
+            NewStatus = {NewStatusCode, Reason},
             read_response(State, NewVsn, NewStatus, Hdrs);
         {ok, {http_header, _, Name, _, Value}} ->
             Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
             read_response(State, Vsn, Status, [Header | Hdrs]);
+        {ok, http_eoh} when StatusCode >= 100, StatusCode =< 199 ->
+            % RFC 2616, section 10.1:
+            % A client MUST be prepared to accept one or more
+            % 1xx status responses prior to a regular
+            % response, even if the client does not expect a
+            % 100 (Continue) status message. Unexpected 1xx
+            % status responses MAY be ignored by a user agent.
+            read_response(State, nil, {nil, nil}, []);
         {ok, http_eoh} ->
             lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             Response = handle_response_body(State, Vsn, Status, Hdrs),
