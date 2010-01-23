@@ -1,15 +1,15 @@
 -module(simple_load).
 -behaviour(gen_httpd).
 
--export([start_client/1, start_client/3]).
+-export([start_client/2, start_client/3]).
 -export([client/2]).
 
--export([start_server/1]).
+-export([start_server/0]).
 -export([init/2, handle_continue/5, handle_request/6, terminate/2]).
 
 %%% Client part
-start_client(Clients) ->
-	start_client("localhost", 9999, Clients).
+start_client(Port, Clients) ->
+	start_client("localhost", Port, Clients).
 
 start_client(Host, Port, Clients) when Clients > 0 ->
 	process_flag(trap_exit, true),
@@ -44,9 +44,10 @@ client(URL, Body) ->
 	end.
 
 %%% Server part
-start_server(Port) ->
+start_server() ->
 	SockOpts = [{backlog, 10000}],
-	gen_httpd:start_link(?MODULE, nil, Port, 600000, SockOpts).
+	{ok, Pid} = gen_httpd:start_link(?MODULE, nil, 0, 600000, SockOpts),
+	gen_httpd:port(Pid).
 
 init(_, _) ->
 	{ok, nil}.
