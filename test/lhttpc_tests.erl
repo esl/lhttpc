@@ -53,6 +53,7 @@ tcp_test_() ->
                 ?_test(get_with_mandatory_hdrs()),
                 ?_test(no_content_length()),
                 ?_test(no_content_length_1_0()),
+                ?_test(get_not_modified()),
                 ?_test(simple_head()),
                 ?_test(simple_head_atom()),
                 ?_test(delete_no_content()),
@@ -130,6 +131,13 @@ no_content_length_1_0() ->
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+get_not_modified() ->
+    Port = start(gen_tcp, [fun not_modified_response/5]),
+    URL = url(Port, "/not_modified"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], [], 1000),
+    ?assertEqual({304, "Not Modified"}, status(Response)),
+    ?assertEqual(<<>>, body(Response)).
 
 simple_head() ->
     Port = start(gen_tcp, [fun head_response/5]),
@@ -550,3 +558,12 @@ close_connection(Module, Socket, _, _, _) ->
         "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
     ),
     Module:close(Socket).
+
+not_modified_response(Module, Socket, _Request, _Headers, _Body) ->
+    Module:send(
+        Socket,
+		[
+			"HTTP/1.1 304 Not Modified\r\n"
+			"Date: Tue, 15 Nov 1994 08:12:31 GMT\r\n\r\n"
+		]
+    ).
