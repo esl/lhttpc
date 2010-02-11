@@ -321,7 +321,7 @@ has_body("HEAD", _, _) ->
     false;
 has_body("OPTIONS", _, Hdrs) ->
     % OPTIONS can include a body, if Content-Length or Transfer-Encoding
-    % indicates it.
+    % indicates it
     ContentLength = lhttpc_lib:header_value("content-length", Hdrs),
     TransferEncoding = lhttpc_lib:header_value("transfer-encoding", Hdrs),
     case {ContentLength, TransferEncoding} of
@@ -329,7 +329,9 @@ has_body("OPTIONS", _, Hdrs) ->
         {_, _}                 -> true
     end;
 has_body(_, 204, _) ->
-    false; % 204 No content can't have a body
+    false; % RFC 2616 10.2.5: 204 No Content
+has_body(_, 304, _) ->
+    false; % RFC 2616 10.3.5: 304 Not Modified
 has_body(_, _, _) ->
     true. % All other responses are assumed to have a body
 
