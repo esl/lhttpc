@@ -223,7 +223,8 @@ maybe_read_body("OPTIONS", _, Vsn, Hdrs, Ssl, Socket) ->
 maybe_read_body(_, StatusCode, Vsn, Hdrs, Ssl, Socket) ->
     % All other requests should have a body, unless indicated otherwise 
     case StatusCode of
-        204 -> {<<>>, Hdrs};
+        204 -> {<<>>, Hdrs}; % RFC 2616 10.2.5
+		304 -> {<<>>, Hdrs}; % RFC 2616 10.3.5
         _   -> read_body(Vsn, Hdrs, Ssl, Socket)
     end.
 
