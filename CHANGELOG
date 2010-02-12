@@ -1,4 +1,7 @@
 Version 1.2.3:
+* Fix handling of HTTP response code 304 (patch by Ben Slavin)
+
+Version 1.2.3:
 * Fix handling of unexpected 100 Continue response (patch by Magnus Henoch)
  
 Version 1.2.2:
