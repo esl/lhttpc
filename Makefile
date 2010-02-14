@@ -54,7 +54,7 @@ doc/edoc-info: doc/overview.edoc $(SOURCES)
 clean:
 	@echo Cleaning
 	@rm -f ebin/*.{beam,app} test/*.beam doc/*.{html,css,png} doc/edoc-info
-	@rm -r cover_report
+	@rm -rf cover_report
 
 release: clean all test dialyzer
 	@util/releaser $(APPLICATION) $(VSN)
