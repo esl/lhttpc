@@ -89,8 +89,6 @@ if ! [ "$(hg identify | awk '{print $2};')" = "tip" ]; then
     fi
 fi
 
-make clean && make && make dialyzer
-
 if ! yesno "Did the compilation run without warnings?"; then
     echo "Try again..."
     exit 1

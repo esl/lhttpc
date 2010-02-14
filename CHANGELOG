@@ -15,6 +15,9 @@ Version ?:
       after completing requests which came from the lhttpc_client process.
       These are now avoided.
 
+Version 1.2.4:
+* Fix handling of HTTP response code 304 (patch by Ben Slavin)
+
 Version 1.2.3:
 * Fix handling of unexpected 100 Continue response (patch by Magnus Henoch)
  
