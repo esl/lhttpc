@@ -1,4 +1,4 @@
-Version 1.2.3:
+Version 1.2.4:
 * Fix handling of HTTP response code 304 (patch by Ben Slavin)
 
 Version 1.2.3:
