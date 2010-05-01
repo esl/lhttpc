@@ -1,5 +1,6 @@
 Version 1.2.5:
 * Fix for decoding chunked HTTP responses with extraneous whitespace
+  (thanks to Bob Ippolito)
     * api.facebook.com includes extra whitespace in its chunked HTTP response
       length, e.g. "6  \r\n" instead of "6\r\n".
 
