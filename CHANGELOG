@@ -5,15 +5,17 @@ Version ?:
     * Allows the user to specify SSL options during the connect phase
 * Add support for "streaming" of entities
 * Add start/0 and stop/0
-* Fix for decoding chunked HTTP responses with extraneous whitespace
-  (thanks to Bob Ippolito) 
-    * api.facebook.com includes extra whitespace in its chunked HTTP response
-      length, e.g. "6  \r\n" instead of "6\r\n". 
 * Fix for unexpected messages after request has been completed
     * When the client process is trapping exits (which some eunit versions seem
       to be doing by default) there would be {'EXIT', Pid, normal} messages left
       after completing requests which came from the lhttpc_client process.
       These are now avoided.
+
+Version 1.2.5:
+* Fix for decoding chunked HTTP responses with extraneous whitespace
+  (thanks to Bob Ippolito)
+    * api.facebook.com includes extra whitespace in its chunked HTTP response
+      length, e.g. "6  \r\n" instead of "6\r\n". 
 
 Version 1.2.4:
 * Fix handling of HTTP response code 304 (patch by Ben Slavin)
