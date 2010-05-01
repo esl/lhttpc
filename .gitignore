@@ -1,0 +1,10 @@
+ebin/
+
+doc/edoc-info
+doc/*.html
+doc/*.png
+doc/*.css
+util/*.beam
+cover_report/
+test/*.beam
+test/*.log
