@@ -111,8 +111,9 @@ stop() ->
 %%   ResponseBody = binary()
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request without a body.
-%% Would be the same as calling `request(URL, Method, Hdrs, [], Timeout)',
-%% that is {@link request/5} with an empty body (`Body' could also be `<<>>').
+%% Would be the same as calling {@link request/5} with an empty body,
+%% `request(URL, Method, Hdrs, [], Timeout)' or
+%% `request(URL, Method, Hdrs, <<>>, Timeout)'.
 %% @end
 %% @see request/9
 -spec request(string(), string() | atom(), headers(), pos_integer() |
@@ -135,9 +136,8 @@ request(URL, Method, Hdrs, Timeout) ->
 %%   ResponseBody = binary()
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
-%% Would be the same as calling
-%% `request(URL, Method, Hdrs, Body, Timeout, [])', that is {@link request/6}
-%% with no options.
+%% Would be the same as calling {@link request/6} with no options,
+%% `request(URL, Method, Hdrs, Body, Timeout, [])'.
 %% @end
 %% @see request/9
 -spec request(string(), string() | atom(), headers(), iolist(),
@@ -232,13 +232,17 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% 
 %% `Method' is either a string, stating the HTTP method exactly as in the
 %% protocol, i.e: `"POST"' or `"GET"'. It could also be an atom, which is
-%% then made in to uppercase, if it isn't already.
+%% then coverted to an uppercase (if it isn't already) string.
+%%
 %% `Hdrs' is a list of headers to send. Mandatory headers such as
 %% `Host', `Content-Length' or `Transfer-Encoding' (for some requests) 
-%% are added.
+%% are added automatically.
+%%
 %% `Body' is the entity to send in the request. Please don't include entity
 %% bodies where there shouldn't be any (such as for `GET').
+%%
 %% `Timeout' is the timeout for the request in milliseconds.
+%%
 %% `Options' is a list of options.
 %%
 %% Options:
@@ -254,14 +258,16 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%
 %% `{connect_options, Options}' specifies options to pass to the socket at
 %% connect time. This makes it possible to specify both SSL options and
-%% regular socket options, such as which IP/Port to connect from etc. Note
-%% that some options shouldn't be included here, namely the mode, `binary'
+%% regular socket options, such as which IP/Port to connect from etc.
+%% Some options must not be included here, namely the mode, `binary'
 %% or `list', `{active, boolean()}', `{active, once}' or `{packet, Packet}'.
 %% These options would confuse the client if they are included.
-%% Please note that these options will only be included for *new*
+%% Please note that these options will only have an effect on *new*
 %% connections, and it isn't possible for different requests
-%% to the same host uses different options, unless using HTTP/1.0 since tha
-%% would open a new socket for each request.
+%% to the same host uses different options unless the connection is closed
+%% between the requests. Using HTTP/1.0 or including the "Connection: close"
+%% header would make the client close the connection after the first
+%% response is received.
 %%
 %% `{send_retry, N}' specifies how many times the client should retry
 %% sending a request if the connection is closed after the data has been
@@ -270,16 +276,17 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% of the body has been sent since it doesn't keep the whole entitity body
 %% in memory.
 %%
-%% `{partial_upload, WindowSize}' means that the body will be supplied in
-%% parts to the client by the calling process. The `WindowSize' specifies how
-%% many parts can be sent to the process controlling the socket before waiting
-%% for an acknowledgement. This is to create a kind of internal flow control
-%% if the network is slow and the process is blocked by the TCP stack. Flow
-%% control is disabled if `WindowSize' is `infinity'. If `WindowSize' is an
-%% integer, it must be >= 0.  If partial upload is specified and no
-%% `Content-Length' is specified in `Hdrs' the client will use chunked
-%% transfer encoding to send the entity body. If a content length is
-%% specified, this must be the total size of the entity body.
+%% `{partial_upload, WindowSize}' means that the request entity body will be
+%% supplied in parts to the client by the calling process. The `WindowSize'
+%% specifies how many parts can be sent to the process controlling the socket
+%% before waiting for an acknowledgement. This is to create a kind of
+%% internal flow control if the network is slow and the client process is
+%% blocked by the TCP stack. Flow control is disabled if `WindowSize' is
+%% `infinity'. If `WindowSize' is an integer, it must be >= 0. If partial
+%% upload is specified and no `Content-Length' is specified in `Hdrs' the
+%% client will use chunked transfer encoding to send the entity body.
+%% If a content length is specified, this must be the total size of the entity
+%% body.
 %% The call to {@link request/6} will return `{ok, UploadState}'. The
 %% `UploadState' is supposed to be used as the first argument to the {@link
 %% send_body_part/2} or {@link send_body_part/3} functions to send body parts.
@@ -292,22 +299,25 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% download option `{window_size, WindowSize}' specifies how many part will be
 %% sent to the calling process before waiting for an acknowledgement. This is
 %% to create a kind of internal flow control if the calling process is slow to
-%% process the body part and the network is considerably faster. Flow control
-%% is disabled if `WindowSize' is `infinity'. If `WindowSize' is an integer it
-%% must be >=0. The partial download option `{part_size, PartSize}' specifies
-%% the size the body parts should come in. Note however that if the body size
-%% is not determinable (e.g entity body is termintated by closing the socket)
-%% it will be delivered in pieces as it is read from the wire. There is no
-%% caching of the body parts until the amount reaches body size. If the body
-%% size is bounded (e.g `Content-Length' specified or
+%% process the body part and the network and server are considerably faster.
+%% Flow control is disabled if `WindowSize' is `infinity'. If `WindowSize'
+%% is an integer it must be >=0. The partial download option `{part_size,
+%% PartSize}' specifies the size the body parts should come in. Note however
+%% that if the body size is not determinable (e.g entity body is termintated
+%% by closing the socket) it will be delivered in pieces as it is read from
+%% the wire. There is no caching of the body parts until the amount reaches
+%% body size. If the body size is bounded (e.g `Content-Length' specified or
 %% `Transfer-Encoding: chunked' specified) it will be delivered in `PartSize'
 %% pieces. Note however that the last piece might be smaller than `PartSize'.
 %% Size bounded entity bodies are handled the same way as unbounded ones if
 %% `PartSize' is `infinity'. If `PartSize' is integer it must be >= 0.
 %% If `{partial_download, PartialDownloadOptions}' is specified the 
-%% `ResponseBody' is going to be a `pid()' unless the response has no body
-%% (for example in case of `HEAD' requests). In that case it is going to be
+%% `ResponseBody' will be a `pid()' unless the response has no body
+%% (for example in case of `HEAD' requests). In that case it will be be
 %% `undefined'. 
+%%
+%% The functions {@link get_body_part/2} can be used to read body parts in
+%% the calling process.
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
     headers(), iolist(), pos_integer(), [option()]) -> result().
@@ -412,7 +422,7 @@ send_body_part({Pid, Window}, IoList, _Timeout) when Window > 0, is_pid(Pid) ->
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends trailers to an ongoing request when `{partial_upload,
 %% WindowSize}' is used and no `Content-Length' was specified. The default
-%% timout `infinity' will be used. Note that after this the request is
+%% timout `infinity' will be used. Plase note that after this the request is
 %% considered complete and the response will be read from the socket. 
 %% Would be the same as calling
 %% `send_trailers(UploadState, BodyPart, infinity)'.
