@@ -314,10 +314,9 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% If `{partial_download, PartialDownloadOptions}' is specified the 
 %% `ResponseBody' will be a `pid()' unless the response has no body
 %% (for example in case of `HEAD' requests). In that case it will be be
-%% `undefined'. 
-%%
-%% The functions {@link get_body_part/2} can be used to read body parts in
-%% the calling process.
+%% `undefined'. The functions {@link get_body_part/1} and
+%% {@link get_body_part/2} can be used to read body parts in the calling
+%% process.
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
     headers(), iolist(), pos_integer(), [option()]) -> result().
