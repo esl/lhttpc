@@ -25,7 +25,7 @@
 %%% ----------------------------------------------------------------------------
 
 %%% @private
-%%% @author Oscar HellstrÃ¶m <oscar@erlang-consulting.com>
+%%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @doc
 %%% This module implements various library functions used in lhttpc.
 %%% @end
