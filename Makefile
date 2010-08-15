@@ -33,9 +33,9 @@ test/%.beam: test/%.erl
 	@echo Compiling $<
 	@erlc +debug_info -o test/ $<
 
-$(APP_FILE): src/$(APPLICATION).app.src vsn.mk 
+$(APP_FILE): src/$(APPLICATION).app.src 
 	@echo Generating $@
-	@sed -e 's/@MODULES@/$(MODULELIST)/' -e 's/@VSN@/$(VSN)/' $< > $@
+	@sed -e 's/{modules, \[\]}/{modules, \[$(MODULELIST)\]}/' $< > $@
 
 ebin/%.beam: src/%.erl $(HEADERS) $(filter-out $(wildcard ebin), ebin)
 	@echo Compiling $<

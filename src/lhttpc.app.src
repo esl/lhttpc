@@ -29,8 +29,8 @@
 %%% @end
 {application, lhttpc,
     [{description, "Lightweight HTTP Client"},
-        {vsn, "@VSN@"},
-        {modules, [@MODULES@]},
+        {vsn, "1.2.5"},
+        {modules, []},
         {registered, [lhttpc_manager]},
         {applications, [kernel, stdlib, ssl, crypto]},
   {mod, {lhttpc, nil}},
