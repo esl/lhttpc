@@ -1,69 +1,18 @@
-APPLICATION := lhttpc
-APP_FILE := ebin/$(APPLICATION).app
-SOURCES := $(wildcard src/*.erl)
-HEADERS := $(wildcard src/*.hrl)
-MODULES := $(patsubst src/%.erl,%,$(SOURCES))
-BEAMS := $(patsubst %,ebin/%.beam,$(MODULES))
+REBAR := ./rebar
 
-comma := ,
-e :=
-space := $(e) $(e)
-MODULELIST := $(subst $(space),$(comma),$(MODULES))
+.PHONY: all clean test dialyzer
 
-TEST_SOURCES := $(wildcard test/*.erl)
-TEST_BEAMS := $(patsubst %.erl,%.beam, $(TEST_SOURCES))
+all:
+	$(REBAR) compile
 
-include vsn.mk
-
-.PHONY: all clean dialyzer
-
-all: $(APPLICATION) doc
-
-$(APPLICATION): $(BEAMS) $(APP_FILE)
-
-test: $(APPLICATION) $(TEST_BEAMS) util/run_test.beam
-	@echo Running tests
-	@erl -pa util/ -pa ebin/ -pa test/ -noinput -s run_test run
-
-test_shell: $(APPLICATION) $(TEST_BEAMS)
-	@echo Starting a shell with test paths included
-	@erl -pa ebin/ -pa test/
-
-test/%.beam: test/%.erl
-	@echo Compiling $<
-	@erlc +debug_info -o test/ $<
-
-$(APP_FILE): src/$(APPLICATION).app.src 
-	@echo Generating $@
-	@sed -e 's/{modules, \[\]}/{modules, \[$(MODULELIST)\]}/' $< > $@
-
-ebin/%.beam: src/%.erl $(HEADERS) $(filter-out $(wildcard ebin), ebin)
-	@echo Compiling $<
-	@erlc +debug_info +warn_missing_spec -o ebin/ $<
-
-ebin:
-	@echo Creating ebin/
-	@mkdir ebin/
-
-doc: doc/edoc-info
+test:
+	$(REBAR) eunit
 
 dialyzer:
-	@echo Running dialyzer on sources
-	@dialyzer --src -r src/
-
-doc/edoc-info: doc/overview.edoc $(SOURCES) 
-	@erlc -o util/ util/make_doc.erl
-	@echo Generating documentation from edoc
-	@erl -pa util/ -noinput -s make_doc edoc
-
-util/%.beam: util/%.erl
-	@erlc -o util/ util/run_test.erl
+	$(REBAR) analyze
 
 clean:
-	@echo Cleaning
-	@rm -f ebin/*.{beam,app} test/*.beam doc/*.{html,css,png} doc/edoc-info
-	@rm -rf cover_report
-	@rm -f util/*.beam
+	$(REBAR) clean
 
-release: clean all test dialyzer
-	@util/releaser $(APPLICATION) $(VSN)
+release: all dialyzer test
+	$(REBAR) release

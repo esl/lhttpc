@@ -118,8 +118,8 @@ listen(ssl) ->
         {active, false},
         {ip, {127,0,0,1}},
         {verify,0},
-        {keyfile, "test/key.pem"},
-        {certfile, "test/crt.pem"}
+        {keyfile, "../test/key.pem"},
+        {certfile, "../test/crt.pem"}
     ],
     {ok, LS} = ssl:listen(0, Opts),
     LS;
