@@ -10,6 +10,7 @@ Version ?:
       to be doing by default) there would be {'EXIT', Pid, normal} messages left
       after completing requests which came from the lhttpc_client process.
       These are now avoided.
+* Add rebar support (thanks to Benoit Chesneau)
 
 Version 1.2.5:
 * Fix for decoding chunked HTTP responses with extraneous whitespace
