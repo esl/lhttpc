@@ -1,9 +1,14 @@
 REBAR := ./rebar
 
-.PHONY: all clean test dialyzer
+.PHONY: all doc clean test dialyzer
 
-all:
+all: compile doc
+
+compile:
 	$(REBAR) compile
+
+doc:
+	$(REBAR) doc
 
 test:
 	$(REBAR) eunit
@@ -11,8 +16,8 @@ test:
 dialyzer:
 	$(REBAR) analyze
 
-clean:
-	$(REBAR) clean
-
 release: all dialyzer test
 	$(REBAR) release
+
+clean:
+	$(REBAR) clean
