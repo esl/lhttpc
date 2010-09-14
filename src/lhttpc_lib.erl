@@ -179,7 +179,7 @@ format_hdrs(Headers) ->
 
 format_hdrs([{Hdr, Value} | T], Acc) ->
     NewAcc = [
-        maybe_atom_to_list(Hdr), ":", maybe_atom_to_list(Value), "\r\n" | Acc
+        maybe_atom_to_list(Hdr), ": ", maybe_atom_to_list(Value), "\r\n" | Acc
     ],
     format_hdrs(T, NewAcc);
 format_hdrs([], Acc) ->
