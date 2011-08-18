@@ -28,9 +28,6 @@
 %%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @doc
 %%% This module implements various library functions used in lhttpc.
-%%% @end
-%%% @type boolean() = boolean().
-%%% @type iolist() = [] | binary() | [char() | binary() | iolist()].
 -module(lhttpc_lib).
 
 -export([
@@ -179,7 +176,7 @@ format_hdrs(Headers) ->
 
 format_hdrs([{Hdr, Value} | T], Acc) ->
     NewAcc = [
-        maybe_atom_to_list(Hdr), ":", maybe_atom_to_list(Value), "\r\n" | Acc
+        maybe_atom_to_list(Hdr), ": ", maybe_atom_to_list(Value), "\r\n" | Acc
     ],
     format_hdrs(T, NewAcc);
 format_hdrs([], Acc) ->

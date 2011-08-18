@@ -29,9 +29,6 @@
 %%% @doc
 %%% This module implements the HTTP request handling. This should normally
 %%% not be called directly since it should be spawned by the lhttpc module.
-%%% @end
-%%% @type boolean() = bool().
-%%% @type iolist() = [] | binary() | [char() | binary() | iolist()].
 -module(lhttpc_client).
 
 -export([request/9]).
