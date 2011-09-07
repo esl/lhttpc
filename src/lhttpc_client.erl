@@ -571,7 +571,9 @@ read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
 					{Hdrs, Trailers}
 			end;
 		{http_error, Data} ->
-			erlang:error({bad_trailer, Data})
+			erlang:error({bad_trailer, Data});
+		{error, Reason} ->
+			erlang:error({bad_trailer, Reason})
 	end.
 
 reply_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
