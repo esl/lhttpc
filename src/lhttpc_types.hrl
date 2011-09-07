@@ -24,6 +24,12 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
+%% In R13B bool() is now called boolean()
+%% I get lots of questions for this, but it will be removed when R15 comes
+%% out, before that I belive it's more useful than harmful, since it makes
+%% lhttpc compile also with older erlang releases.
+-type boolean() :: bool().
+
 -type header() :: {string() | atom(), string()}.
 -type headers() :: [header()].
 
@@ -42,6 +48,3 @@
 -type socket_options() :: [{atom(), term()} | atom()].
 
 -type window_size() :: non_neg_integer() | infinity.
-
-%% In R13B bool() is now called boolean()
--type boolean() :: bool().
