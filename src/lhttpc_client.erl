@@ -440,7 +440,7 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, 0) ->
     case read_chunk_size(Socket, Ssl) of
         0 ->
             reply_chunked_part(State, Buffer, Window),
-            {Trailers, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
+            {Trailers, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs, <<>>),
             reply_end_of_body(State, Trailers, NewHdrs);
         ChunkSize when PartSize =:= infinity ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
@@ -504,7 +504,7 @@ read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
     case read_chunk_size(Socket, Ssl) of
         0 ->
             Body = list_to_binary(lists:reverse(Chunks)),
-            {_, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
+            {_, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs, <<>>),
             {Body, NewHdrs};
         Size ->
             Chunk = read_chunk(Socket, Ssl, Size),
@@ -546,17 +546,33 @@ read_chunk(Socket, Ssl, Size) ->
             erlang:error(Reason)
     end.
 
-read_trailers(Socket, Ssl, Trailers, Hdrs) ->
-    ok = lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
-    case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, http_eoh} ->
-            {Trailers, Hdrs};
-        {ok, {http_header, _, Name, _, Value}} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            read_trailers(Socket, Ssl, [Header | Trailers], [Header | Hdrs]);
-        {error, {http_error, Data}} ->
-            erlang:error({bad_trailer, Data})
-    end.
+read_trailers(Socket, Ssl, Trailers, Hdrs, <<>>) ->
+	case lhttpc_sock:recv(Socket, Ssl) of
+		{ok, Data} ->
+			read_trailers(Socket, Ssl, Trailers, Hdrs, Data);
+		{error, closed} ->
+			{Hdrs, Trailers}
+	end;
+read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
+	case erlang:decode_packet(httph, Buffer, []) of
+		{ok, {http_header, _, Name, _, Value}, NextBuffer} ->
+			Header = {Name, Value},
+			NTrailers = [Header | Trailers],
+			NHeaders = [Header | Hdrs],
+			read_trailers(Socket, Ssl, NTrailers, NHeaders, NextBuffer);
+		{ok, http_eoh, _} ->
+			{Trailers, Hdrs};
+		{more, _} ->
+			case lhttpc_sock:recv(Socket, Ssl) of
+				{ok, Data} ->
+					BufferAndData = list_to_binary([Buffer, Data]),
+					read_trailers(Socket, Ssl, Trailers, Hdrs, BufferAndData);
+				{error, closed} ->
+					{Hdrs, Trailers}
+			end;
+		{http_error, Data} ->
+			erlang:error({bad_trailer, Data})
+	end.
 
 reply_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
     Requester ! {http_eob, self(), Trailers},
