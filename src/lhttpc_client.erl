@@ -244,7 +244,7 @@ check_send_result(#client_state{socket = Sock, ssl = Ssl}, {error, Reason}) ->
     throw(Reason).
 
 read_response(#client_state{socket = Socket, ssl = Ssl} = State) ->
-    lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
     read_response(State, nil, {nil, nil}, []).
 
 read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
@@ -266,7 +266,7 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
             % status responses MAY be ignored by a user agent.
             read_response(State, nil, {nil, nil}, []);
         {ok, http_eoh} ->
-            lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+            ok = lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             Response = handle_response_body(State, Vsn, Status, Hdrs),
             NewHdrs = element(2, Response),
             ReqHdrs = State#client_state.request_headers,
@@ -474,7 +474,7 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, RemSize) ->
     end.
 
 read_chunk_size(Socket, Ssl) ->
-    lhttpc_sock:setopts(Socket, [{packet, line}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, line}], Ssl),
     case lhttpc_sock:recv(Socket, Ssl) of
         {ok, ChunkSizeExt} ->
             chunk_size(ChunkSizeExt);
@@ -527,7 +527,7 @@ chunk_size(<<Char, Binary/binary>>, Chars) ->
 read_partial_chunk(Socket, Ssl, ChunkSize, ChunkSize) ->
     {read_chunk(Socket, Ssl, ChunkSize), 0};
 read_partial_chunk(Socket, Ssl, Size, ChunkSize) ->
-    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
     case lhttpc_sock:recv(Socket, Size, Ssl) of
         {ok, Chunk} ->
             {Chunk, ChunkSize - Size};
@@ -536,7 +536,7 @@ read_partial_chunk(Socket, Ssl, Size, ChunkSize) ->
     end.
 
 read_chunk(Socket, Ssl, Size) ->
-    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
     case lhttpc_sock:recv(Socket, Size + 2, Ssl) of
         {ok, <<Chunk:Size/binary, "\r\n">>} ->
             Chunk;
@@ -547,7 +547,7 @@ read_chunk(Socket, Ssl, Size) ->
     end.
 
 read_trailers(Socket, Ssl, Trailers, Hdrs) ->
-    lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
     case lhttpc_sock:recv(Socket, Ssl) of
         {ok, http_eoh} ->
             {Trailers, Hdrs};
