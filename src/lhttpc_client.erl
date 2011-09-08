@@ -547,34 +547,34 @@ read_chunk(Socket, Ssl, Size) ->
     end.
 
 read_trailers(Socket, Ssl, Trailers, Hdrs, <<>>) ->
-	case lhttpc_sock:recv(Socket, Ssl) of
-		{ok, Data} ->
-			read_trailers(Socket, Ssl, Trailers, Hdrs, Data);
-		{error, closed} ->
-			{Hdrs, Trailers}
-	end;
+    case lhttpc_sock:recv(Socket, Ssl) of
+        {ok, Data} ->
+            read_trailers(Socket, Ssl, Trailers, Hdrs, Data);
+        {error, closed} ->
+            {Hdrs, Trailers}
+    end;
 read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
-	case erlang:decode_packet(httph, Buffer, []) of
-		{ok, {http_header, _, Name, _, Value}, NextBuffer} ->
-			Header = {Name, Value},
-			NTrailers = [Header | Trailers],
-			NHeaders = [Header | Hdrs],
-			read_trailers(Socket, Ssl, NTrailers, NHeaders, NextBuffer);
-		{ok, http_eoh, _} ->
-			{Trailers, Hdrs};
-		{more, _} ->
-			case lhttpc_sock:recv(Socket, Ssl) of
-				{ok, Data} ->
-					BufferAndData = list_to_binary([Buffer, Data]),
-					read_trailers(Socket, Ssl, Trailers, Hdrs, BufferAndData);
-				{error, closed} ->
-					{Hdrs, Trailers}
-			end;
-		{http_error, Data} ->
-			erlang:error({bad_trailer, Data});
-		{error, Reason} ->
-			erlang:error({bad_trailer, Reason})
-	end.
+    case erlang:decode_packet(httph, Buffer, []) of
+        {ok, {http_header, _, Name, _, Value}, NextBuffer} ->
+            Header = {Name, Value},
+            NTrailers = [Header | Trailers],
+            NHeaders = [Header | Hdrs],
+            read_trailers(Socket, Ssl, NTrailers, NHeaders, NextBuffer);
+        {ok, http_eoh, _} ->
+            {Trailers, Hdrs};
+        {more, _} ->
+            case lhttpc_sock:recv(Socket, Ssl) of
+                {ok, Data} ->
+                    BufferAndData = list_to_binary([Buffer, Data]),
+                    read_trailers(Socket, Ssl, Trailers, Hdrs, BufferAndData);
+                {error, closed} ->
+                    {Hdrs, Trailers}
+            end;
+        {http_error, Data} ->
+            erlang:error({bad_trailer, Data});
+        {error, Reason} ->
+            erlang:error({bad_trailer, Reason})
+    end.
 
 reply_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
     Requester ! {http_eob, self(), Trailers},
