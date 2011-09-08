@@ -551,7 +551,9 @@ read_trailers(Socket, Ssl, Trailers, Hdrs, <<>>) ->
         {ok, Data} ->
             read_trailers(Socket, Ssl, Trailers, Hdrs, Data);
         {error, closed} ->
-            {Hdrs, Trailers}
+            {Hdrs, Trailers};
+        {error, Error} ->
+            erlang:error(Error)
     end;
 read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
     case erlang:decode_packet(httph, Buffer, []) of
@@ -568,7 +570,9 @@ read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
                     BufferAndData = list_to_binary([Buffer, Data]),
                     read_trailers(Socket, Ssl, Trailers, Hdrs, BufferAndData);
                 {error, closed} ->
-                    {Hdrs, Trailers}
+                    {Hdrs, Trailers};
+                {error, Error} ->
+                    erlang:error(Error)
             end;
         {http_error, Data} ->
             erlang:error({bad_trailer, Data});
