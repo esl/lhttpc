@@ -137,6 +137,7 @@ tcp_test_() ->
                 ?_test(connection_timeout()),
                 ?_test(suspended_manager()),
                 ?_test(chunked_encoding()),
+                ?_test(bad_trailers()),
                 ?_test(partial_upload_identity()),
                 ?_test(partial_upload_identity_iolist()),
                 ?_test(partial_upload_chunked()),
@@ -424,6 +425,11 @@ chunked_encoding() ->
             headers(SecondResponse))),
     ?assertEqual("2", lhttpc_lib:header_value("trailer-2",
             headers(SecondResponse))).
+
+bad_trailers() ->
+    Port = start(gen_tcp, [fun chunked_response_bad_t/5]),
+    URL = url(Port, "/chunked"),
+    ?assertExit({{bad_trailer, "Broken-Trailer-1\r\n"}, _}, lhttpc:request(URL, get, [], 50)).
 
 partial_upload_identity() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
@@ -963,6 +969,21 @@ chunked_response_t(Module, Socket, _, _, _) ->
         "great success!\r\n"
         "0\r\n"
         "Trailer-1: 1\r\n"
+        "Trailer-2: 2\r\n"
+        "\r\n"
+    ).
+
+chunked_response_bad_t(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\nTransfer-Encoding: ChUnKeD\r\n\r\n"
+        "7\r\n"
+        "Again, \r\n"
+        "E\r\n"
+        "great success!\r\n"
+        "0\r\n"
+        "Broken-Trailer-1\r\n"
         "Trailer-2: 2\r\n"
         "\r\n"
     ).
