@@ -42,4 +42,3 @@
 -type socket_options() :: [{atom(), term()} | atom()].
 
 -type window_size() :: non_neg_integer() | infinity.
-
