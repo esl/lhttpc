@@ -564,6 +564,8 @@ read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
             read_trailers(Socket, Ssl, NTrailers, NHeaders, NextBuffer);
         {ok, http_eoh, _} ->
             {Trailers, Hdrs};
+		{ok, {http_error, HttpString}, _} ->
+            erlang:error({bad_trailer, HttpString});
         {more, _} ->
             case lhttpc_sock:recv(Socket, Ssl) of
                 {ok, Data} ->
@@ -574,8 +576,6 @@ read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
                 {error, Error} ->
                     erlang:error(Error)
             end;
-        {http_error, Data} ->
-            erlang:error({bad_trailer, Data});
         {error, Reason} ->
             erlang:error({bad_trailer, Reason})
     end.
