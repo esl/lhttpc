@@ -564,7 +564,7 @@ read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
             read_trailers(Socket, Ssl, NTrailers, NHeaders, NextBuffer);
         {ok, http_eoh, _} ->
             {Trailers, Hdrs};
-		{ok, {http_error, HttpString}, _} ->
+        {ok, {http_error, HttpString}, _} ->
             erlang:error({bad_trailer, HttpString});
         {more, _} ->
             case lhttpc_sock:recv(Socket, Ssl) of
