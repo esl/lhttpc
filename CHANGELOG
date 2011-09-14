@@ -1,9 +1,9 @@
-Version ?:
+Version 1.3:
+* Add support for "streaming" of entities
 * Add support for connect_options
     * Enables the user to pass socket options, for instance ip and port,
       that will be used when connecting the socket
     * Allows the user to specify SSL options during the connect phase
-* Add support for "streaming" of entities
 * Add start/0 and stop/0
 * Fix for unexpected messages after request has been completed
     * When the client process is trapping exits (which some eunit versions seem
@@ -11,6 +11,9 @@ Version ?:
       after completing requests which came from the lhttpc_client process.
       These are now avoided.
 * Add rebar support (thanks to Benoit Chesneau)
+* Fix some Edoc warnings (thanks to Richard Carlsson)
+* Follow http spec recomendation and add space after : separator (thanks to
+  Marcus Froberg) 
 
 Version 1.2.5:
 * Fix for decoding chunked HTTP responses with extraneous whitespace

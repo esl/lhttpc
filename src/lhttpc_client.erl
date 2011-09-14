@@ -244,7 +244,7 @@ check_send_result(#client_state{socket = Sock, ssl = Ssl}, {error, Reason}) ->
     throw(Reason).
 
 read_response(#client_state{socket = Socket, ssl = Ssl} = State) ->
-    lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
     read_response(State, nil, {nil, nil}, []).
 
 read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
@@ -266,7 +266,7 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
             % status responses MAY be ignored by a user agent.
             read_response(State, nil, {nil, nil}, []);
         {ok, http_eoh} ->
-            lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+            ok = lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
             Response = handle_response_body(State, Vsn, Status, Hdrs),
             NewHdrs = element(2, Response),
             ReqHdrs = State#client_state.request_headers,
@@ -440,7 +440,7 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, 0) ->
     case read_chunk_size(Socket, Ssl) of
         0 ->
             reply_chunked_part(State, Buffer, Window),
-            {Trailers, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
+            {Trailers, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs, <<>>),
             reply_end_of_body(State, Trailers, NewHdrs);
         ChunkSize when PartSize =:= infinity ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
@@ -474,7 +474,7 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, RemSize) ->
     end.
 
 read_chunk_size(Socket, Ssl) ->
-    lhttpc_sock:setopts(Socket, [{packet, line}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, line}], Ssl),
     case lhttpc_sock:recv(Socket, Ssl) of
         {ok, ChunkSizeExt} ->
             chunk_size(ChunkSizeExt);
@@ -504,7 +504,7 @@ read_chunked_body(Socket, Ssl, Hdrs, Chunks) ->
     case read_chunk_size(Socket, Ssl) of
         0 ->
             Body = list_to_binary(lists:reverse(Chunks)),
-            {_, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
+            {_, NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs, <<>>),
             {Body, NewHdrs};
         Size ->
             Chunk = read_chunk(Socket, Ssl, Size),
@@ -527,7 +527,7 @@ chunk_size(<<Char, Binary/binary>>, Chars) ->
 read_partial_chunk(Socket, Ssl, ChunkSize, ChunkSize) ->
     {read_chunk(Socket, Ssl, ChunkSize), 0};
 read_partial_chunk(Socket, Ssl, Size, ChunkSize) ->
-    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
     case lhttpc_sock:recv(Socket, Size, Ssl) of
         {ok, Chunk} ->
             {Chunk, ChunkSize - Size};
@@ -536,7 +536,7 @@ read_partial_chunk(Socket, Ssl, Size, ChunkSize) ->
     end.
 
 read_chunk(Socket, Ssl, Size) ->
-    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+    ok = lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
     case lhttpc_sock:recv(Socket, Size + 2, Ssl) of
         {ok, <<Chunk:Size/binary, "\r\n">>} ->
             Chunk;
@@ -546,16 +546,38 @@ read_chunk(Socket, Ssl, Size) ->
             erlang:error(Reason)
     end.
 
-read_trailers(Socket, Ssl, Trailers, Hdrs) ->
-    lhttpc_sock:setopts(Socket, [{packet, httph}], Ssl),
+read_trailers(Socket, Ssl, Trailers, Hdrs, <<>>) ->
     case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, http_eoh} ->
+        {ok, Data} ->
+            read_trailers(Socket, Ssl, Trailers, Hdrs, Data);
+        {error, closed} ->
+            {Hdrs, Trailers};
+        {error, Error} ->
+            erlang:error(Error)
+    end;
+read_trailers(Socket, Ssl, Trailers, Hdrs, Buffer) ->
+    case erlang:decode_packet(httph, Buffer, []) of
+        {ok, {http_header, _, Name, _, Value}, NextBuffer} ->
+            Header = {Name, Value},
+            NTrailers = [Header | Trailers],
+            NHeaders = [Header | Hdrs],
+            read_trailers(Socket, Ssl, NTrailers, NHeaders, NextBuffer);
+        {ok, http_eoh, _} ->
             {Trailers, Hdrs};
-        {ok, {http_header, _, Name, _, Value}} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            read_trailers(Socket, Ssl, [Header | Trailers], [Header | Hdrs]);
-        {error, {http_error, Data}} ->
-            erlang:error({bad_trailer, Data})
+        {ok, {http_error, HttpString}, _} ->
+            erlang:error({bad_trailer, HttpString});
+        {more, _} ->
+            case lhttpc_sock:recv(Socket, Ssl) of
+                {ok, Data} ->
+                    BufferAndData = list_to_binary([Buffer, Data]),
+                    read_trailers(Socket, Ssl, Trailers, Hdrs, BufferAndData);
+                {error, closed} ->
+                    {Hdrs, Trailers};
+                {error, Error} ->
+                    erlang:error(Error)
+            end;
+        {error, Reason} ->
+            erlang:error({bad_trailer, Reason})
     end.
 
 reply_end_of_body(#client_state{requester = Requester}, Trailers, Hdrs) ->
