@@ -135,6 +135,20 @@ split_credentials(CredsHostPortPath) ->
             end
     end.
 
+split_host("[" ++ Rest, []) ->
+    % IPv6 address literals are enclosed by square brackets (RFC2732)
+    case string:str(Rest, "]") of
+        0 ->
+            split_host(Rest, "[");
+        N ->
+            {IPv6Address, "]" ++ PortPath0} = lists:split(N - 1, Rest),
+            case PortPath0 of
+                ":" ++ PortPath ->
+                    {IPv6Address, PortPath};
+                _ ->
+                    {IPv6Address, PortPath0}
+            end
+    end;
 split_host([$: | PortPath], Host) ->
     {lists:reverse(Host), PortPath};
 split_host([$/ | _] = PortPath, Host) ->
@@ -274,5 +288,14 @@ is_chunked(Hdrs) ->
 dec(Num) when is_integer(Num) -> Num - 1;
 dec(Else)                     -> Else.
 
-host(Host, 80)   -> Host;
-host(Host, Port) -> [Host, $:, integer_to_list(Port)].
+host(Host, 80)   -> maybe_ipv6_enclose(Host);
+host(Host, Port) -> [maybe_ipv6_enclose(Host), $:, integer_to_list(Port)].
+
+maybe_ipv6_enclose(Host) ->
+    case inet_parse:address(Host) of
+        {ok, {_, _, _, _, _, _, _, _}} ->
+            % IPv6 address literals are enclosed by square brackets (RFC2732)
+            [$[, Host, $]];
+        _ ->
+            Host
+    end.

@@ -162,7 +162,15 @@ send_request(#client_state{socket = undefined} = State) ->
     Port = State#client_state.port,
     Ssl = State#client_state.ssl,
     Timeout = State#client_state.connect_timeout,
-    ConnectOptions = State#client_state.connect_options,
+    ConnectOptions0 = State#client_state.connect_options,
+    ConnectOptions = case (not lists:member(inet, ConnectOptions0)) andalso
+                         (not lists:member(inet6, ConnectOptions0)) andalso
+                         is_ipv6_host(Host) of
+        true ->
+            [inet6 | ConnectOptions0];
+        false ->
+            ConnectOptions0
+    end,
     SocketOptions = [binary, {packet, http}, {active, false} | ConnectOptions],
     case lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
         {ok, Socket} ->
@@ -642,4 +650,25 @@ maybe_close_socket(Socket, Ssl, _, ReqHdrs, RespHdrs) ->
             undefined;
         ClientConnection =/= "close", ServerConnection =:= "keep-alive" ->
             Socket
+    end.
+
+is_ipv6_host(Host) ->
+    case inet_parse:address(Host) of
+        {ok, {_, _, _, _, _, _, _, _}} ->
+            true;
+        {ok, {_, _, _, _}} ->
+            false;
+        _ ->
+            % Prefer IPv4 over IPv6.
+            case inet:getaddr(Host, inet) of
+                {ok, _} ->
+                    false;
+                _ ->
+                    case inet:getaddr(Host, inet6) of
+                        {ok, _} ->
+                            true;
+                        _ ->
+                            false
+                    end
+            end
     end.

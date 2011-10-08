@@ -28,7 +28,7 @@
 -module(lhttpc_tests).
 
 -export([test_no/2]).
--import(webserver, [start/2]).
+-import(webserver, [start/2, start/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -112,6 +112,7 @@ tcp_test_() ->
     {inorder, 
         {setup, fun start_app/0, fun stop_app/1, [
                 ?_test(simple_get()),
+                ?_test(simple_get_ipv6()),
                 ?_test(empty_get()),
                 ?_test(basic_auth()),
                 ?_test(missing_basic_auth()),
@@ -164,6 +165,7 @@ ssl_test_() ->
     {inorder,
         {setup, fun start_app/0, fun stop_app/1, [
                 ?_test(ssl_get()),
+                ?_test(ssl_get_ipv6()),
                 ?_test(ssl_post()),
                 ?_test(ssl_chunked()),
                 ?_test(connection_count()) % just check that it's 0 (last)
@@ -183,6 +185,10 @@ message_queue() ->
 simple_get() ->
     simple(get),
     simple("GET").
+
+simple_get_ipv6() ->
+    simple(get, inet6),
+    simple("GET", inet6).
 
 empty_get() ->
     Port = start(gen_tcp, [fun empty_body/5]),
@@ -681,6 +687,13 @@ ssl_get() ->
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
+ssl_get_ipv6() ->
+    Port = start(ssl, [fun simple_response/5], inet6),
+    URL = ssl_url(inet6, Port, "/simple"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
 ssl_post() ->
     Port = start(ssl, [fun copy_body/5]),
     URL = ssl_url(Port, "/simple"),
@@ -747,23 +760,45 @@ read_partial_body(Pid, Size, Acc) ->
     end.
 
 simple(Method) ->
-    Port = start(gen_tcp, [fun simple_response/5]),
-    URL = url(Port, "/simple"),
-    {ok, Response} = lhttpc:request(URL, Method, [], 1000),
-    {StatusCode, ReasonPhrase} = status(Response),
-    ?assertEqual(200, StatusCode),
-    ?assertEqual("OK", ReasonPhrase),
-    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+    simple(Method, inet).
+
+simple(Method, Family) ->
+    case start(gen_tcp, [fun simple_response/5], Family) of
+        {error, family_not_supported} when Family =:= inet6 ->
+            % Localhost has no IPv6 support - not a big issue.
+            ?debugMsg("WARNING: impossible to test IPv6 support~n");
+        Port when is_number(Port) ->
+            URL = url(Family, Port, "/simple"),
+            {ok, Response} = lhttpc:request(URL, Method, [], 1000),
+            {StatusCode, ReasonPhrase} = status(Response),
+            ?assertEqual(200, StatusCode),
+            ?assertEqual("OK", ReasonPhrase),
+            ?assertEqual(<<?DEFAULT_STRING>>, body(Response))
+    end.
 
 url(Port, Path) ->
-    "http://localhost:" ++ integer_to_list(Port) ++ Path.
+    url(inet, Port, Path).
+
+url(inet, Port, Path) ->
+    "http://localhost:" ++ integer_to_list(Port) ++ Path;
+url(inet6, Port, Path) ->
+    "http://[::1]:" ++ integer_to_list(Port) ++ Path.
 
 url(Port, Path, User, Password) ->
+    url(inet, Port, Path, User, Password).
+
+url(inet, Port, Path, User, Password) ->
     "http://" ++ User ++ ":" ++ Password ++
-        "@localhost:" ++ integer_to_list(Port) ++ Path.
+        "@localhost:" ++ integer_to_list(Port) ++ Path;
+url(inet6, Port, Path, User, Password) ->
+    "http://" ++ User ++ ":" ++ Password ++
+        "@[::1]:" ++ integer_to_list(Port) ++ Path.
 
 ssl_url(Port, Path) ->
     "https://localhost:" ++ integer_to_list(Port) ++ Path.
+
+ssl_url(inet6, Port, Path) ->
+    "https://[::1]:" ++ integer_to_list(Port) ++ Path.
 
 status({Status, _, _}) ->
     Status.

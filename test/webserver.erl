@@ -30,13 +30,21 @@
 %%% @end
 -module(webserver).
 
--export([start/2, read_chunked/3]).
+-export([start/2, start/3, read_chunked/3]).
 -export([accept_connection/4]).
 
 start(Module, Responders) ->
-    LS = listen(Module),
-    spawn_link(?MODULE, accept_connection, [self(), Module, LS, Responders]),
-    port(Module, LS).
+    start(Module, Responders, inet).
+
+start(Module, Responders, Family) ->
+    case get_addr("localhost", Family) of
+        {ok, Addr} ->
+            LS = listen(Module, Addr, Family),
+            spawn_link(?MODULE, accept_connection, [self(), Module, LS, Responders]),
+            port(Module, LS);
+        Error ->
+            Error
+    end.
 
 accept_connection(Parent, Module, ListenSocket, Responders) ->
     Socket = accept(Module, ListenSocket),
@@ -111,26 +119,36 @@ server_loop(Module, Socket, Request, Headers, Responders) ->
             Module:close(Socket)
     end.
 
-listen(ssl) ->
+listen(ssl, Addr, Family) ->
     Opts = [
+        Family,
         {packet, http},
         binary,
         {active, false},
-        {ip, {127,0,0,1}},
+        {ip, Addr},
         {verify,0},
         {keyfile, "../test/key.pem"},
         {certfile, "../test/crt.pem"}
     ],
     {ok, LS} = ssl:listen(0, Opts),
     LS;
-listen(Module) ->
+listen(Module, Addr, Family) ->
     {ok, LS} = Module:listen(0, [
+            Family,
             {packet, http},
             binary,
             {active, false},
-            {ip, {127,0,0,1}}
+            {ip, Addr}
         ]),
     LS.
+
+get_addr(Host, Family) ->
+    case inet:getaddr(Host, Family) of
+        {ok, Addr} ->
+            {ok, Addr};
+        _ ->
+            {error, family_not_supported}
+    end.
 
 accept(ssl, ListenSocket) ->
     {ok, Socket} = ssl:transport_accept(ListenSocket, 10000),
