@@ -44,6 +44,7 @@
         ]).
 
 -include("lhttpc_types.hrl").
+-include("lhttpc.hrl").
 
 -type result() :: {ok, {{pos_integer(), string()}, headers(), binary()}} |
     {error, atom()}.
@@ -163,7 +164,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling <pre>
-%% {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
+%% #lhttpc_url{host = Host, port = Port, path = Path, is_ssl = Ssl} = lhttpc_lib:parse_url(URL),
 %% request(Host, Port, Path, Ssl, Method, Hdrs, Body, Timeout, Options).
 %% </pre>
 %%
@@ -174,8 +175,22 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity, [option()]) -> result().
 request(URL, Method, Hdrs, Body, Timeout, Options) ->
-    {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
-    request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options).
+    #lhttpc_url{
+         host = Host,
+         port = Port,
+         path = Path,
+         is_ssl = Ssl,
+         user = User,
+         password = Passwd
+        } = lhttpc_lib:parse_url(URL),
+    Headers = case User of
+        "" ->
+            Hdrs;
+        _ ->
+            Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
+            lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
+    end,
+    request(Host, Port, Ssl, Path, Method, Headers, Body, Timeout, Options).
 
 %% @spec (Host, Port, Ssl, Path, Method, Hdrs, RequestBody, Timeout, Options) ->
 %%                                                                        Result

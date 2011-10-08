@@ -42,6 +42,7 @@
 -export([format_hdrs/1, dec/1]).
 
 -include("lhttpc_types.hrl").
+-include("lhttpc.hrl").
 
 %% @spec header_value(Header, Headers) -> undefined | term()
 %% Header = string()
@@ -91,25 +92,48 @@ maybe_atom_to_list(Atom) when is_atom(Atom) ->
 maybe_atom_to_list(List) when is_list(List) ->
     List.
 
-%% @spec (URL) -> {Host, Port, Path, Ssl}
+%% @spec (URL) -> #lhttpc_url{}
 %%   URL = string()
-%%   Host = string()
-%%   Port = integer()
-%%   Path = string()
-%%   Ssl = boolean()
 %% @doc
--spec parse_url(string()) -> {string(), integer(), string(), boolean()}.
+-spec parse_url(string()) -> #lhttpc_url{}.
 parse_url(URL) ->
     % XXX This should be possible to do with the re module?
-    {Scheme, HostPortPath} = split_scheme(URL),
+    {Scheme, CredsHostPortPath} = split_scheme(URL),
+    {User, Passwd, HostPortPath} = split_credentials(CredsHostPortPath),
     {Host, PortPath} = split_host(HostPortPath, []),
     {Port, Path} = split_port(Scheme, PortPath, []),
-    {string:to_lower(Host), Port, Path, Scheme =:= https}.
+    #lhttpc_url{
+        host = string:to_lower(Host),
+        port = Port,
+        path = Path,
+        user = User,
+        password = Passwd,
+        is_ssl = (Scheme =:= https)
+    }.
 
 split_scheme("http://" ++ HostPortPath) ->
     {http, HostPortPath};
 split_scheme("https://" ++ HostPortPath) ->
     {https, HostPortPath}.
+
+split_credentials(CredsHostPortPath) ->
+    case string:tokens(CredsHostPortPath, "@") of
+        [HostPortPath] ->
+            {"", "", HostPortPath};
+        [Creds, HostPortPath] ->
+            % RFC1738 (section 3.1) says:
+            % "The user name (and password), if present, are followed by a
+            % commercial at-sign "@". Within the user and password field, any ":",
+            % "@", or "/" must be encoded."
+            % The mentioned encoding is the "percent" encoding.
+            case string:tokens(Creds, ":") of
+                [User] ->
+                    % RFC1738 says ":password" is optional
+                    {User, "", HostPortPath};
+                [User, Passwd] ->
+                    {User, Passwd, HostPortPath}
+            end
+    end.
 
 split_host([$: | PortPath], Host) ->
     {lists:reverse(Host), PortPath};

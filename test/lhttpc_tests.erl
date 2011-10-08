@@ -113,6 +113,9 @@ tcp_test_() ->
         {setup, fun start_app/0, fun stop_app/1, [
                 ?_test(simple_get()),
                 ?_test(empty_get()),
+                ?_test(basic_auth()),
+                ?_test(missing_basic_auth()),
+                ?_test(wrong_basic_auth()),
                 ?_test(get_with_mandatory_hdrs()),
                 ?_test(get_with_connect_options()),
                 ?_test(no_content_length()),
@@ -187,6 +190,33 @@ empty_get() ->
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<>>, body(Response)).
+
+basic_auth() ->
+    User = "foo",
+    Passwd = "bar",
+    Port = start(gen_tcp, [basic_auth_responder(User, Passwd)]),
+    URL = url(Port, "/empty", User, Passwd),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<"OK">>, body(Response)).
+
+missing_basic_auth() ->
+    User = "foo",
+    Passwd = "bar",
+    Port = start(gen_tcp, [basic_auth_responder(User, Passwd)]),
+    URL = url(Port, "/empty"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({401, "Unauthorized"}, status(Response)),
+    ?assertEqual(<<"missing_auth">>, body(Response)).
+
+wrong_basic_auth() ->
+    User = "foo",
+    Passwd = "bar",
+    Port = start(gen_tcp, [basic_auth_responder(User, Passwd)]),
+    URL = url(Port, "/empty", User, "wrong_password"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({401, "Unauthorized"}, status(Response)),
+    ?assertEqual(<<"wrong_auth">>, body(Response)).
 
 get_with_mandatory_hdrs() ->
     Port = start(gen_tcp, [fun simple_response/5]),
@@ -728,6 +758,10 @@ simple(Method) ->
 url(Port, Path) ->
     "http://localhost:" ++ integer_to_list(Port) ++ Path.
 
+url(Port, Path, User, Password) ->
+    "http://" ++ User ++ ":" ++ Password ++
+        "@localhost:" ++ integer_to_list(Port) ++ Path.
+
 ssl_url(Port, Path) ->
     "https://localhost:" ++ integer_to_list(Port) ++ Path.
 
@@ -983,3 +1017,44 @@ not_modified_response(Module, Socket, _Request, _Headers, _Body) ->
 			"Date: Tue, 15 Nov 1994 08:12:31 GMT\r\n\r\n"
 		]
     ).
+
+basic_auth_responder(User, Passwd) ->
+    fun(Module, Socket, _Request, Headers, _Body) ->
+        case proplists:get_value("Authorization", Headers) of
+            undefined ->
+                Module:send(
+                    Socket,
+                    [
+                        "HTTP/1.1 401 Unauthorized\r\n",
+                        "Content-Type: text/plain\r\n",
+                        "Content-Length: 12\r\n\r\n",
+                        "missing_auth"
+                    ]
+                );
+            "Basic " ++ Auth ->
+                [U, P] = string:tokens(
+                    binary_to_list(base64:decode(iolist_to_binary(Auth))), ":"),
+                case {U, P} of
+                    {User, Passwd} ->
+                        Module:send(
+                            Socket,
+                            [
+                                "HTTP/1.1 200 OK\r\n",
+                                "Content-Type: text/plain\r\n",
+                                "Content-Length: 2\r\n\r\n",
+                                "OK"
+                            ]
+                        );
+                    _ ->
+                        Module:send(
+                            Socket,
+                            [
+                                "HTTP/1.1 401 Unauthorized\r\n",
+                                "Content-Type: text/plain\r\n",
+                                "Content-Length: 10\r\n\r\n",
+                                "wrong_auth"
+                            ]
+                        )
+                end
+        end
+    end.

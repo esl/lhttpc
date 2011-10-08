@@ -34,6 +34,7 @@
 -export([request/9]).
 
 -include("lhttpc_types.hrl").
+-include("lhttpc.hrl").
 
 -record(client_state, {
         host :: string(),
