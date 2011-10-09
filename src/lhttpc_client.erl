@@ -53,9 +53,12 @@
         upload_window :: non_neg_integer() | infinity,
         partial_download = false :: true | false,
         download_window = infinity :: timeout(),
-        part_size :: non_neg_integer() | infinity
+        part_size :: non_neg_integer() | infinity,
         %% in case of infinity we read whatever data we can get from
         %% the wire at that point or in case of chunked one chunk
+        proxy :: undefined | #lhttpc_url{},
+        proxy_ssl_options = [] :: [any()],
+        proxy_setup = false :: true | false
     }).
 
 -define(CONNECTION_HDR(HDRS, DEFAULT),
@@ -101,6 +104,16 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     PartialDownload = proplists:is_defined(partial_download, Options),
     PartialDownloadOptions = proplists:get_value(partial_download, Options, []),
     NormalizedMethod = lhttpc_lib:normalize_method(Method),
+    Proxy = case proplists:get_value(proxy, Options) of
+        undefined ->
+            undefined;
+        ProxyUrl when is_list(ProxyUrl), not Ssl ->
+            % The point of HTTP CONNECT proxying is to use TLS tunneled in
+            % a plain HTTP/1.1 connection to the proxy (RFC2817).
+            throw(origin_server_not_https);
+        ProxyUrl when is_list(ProxyUrl) ->
+            lhttpc_lib:parse_url(ProxyUrl)
+    end,
     {ChunkedUpload, Request} = lhttpc_lib:format_request(Path, NormalizedMethod,
         Hdrs, Host, Port, Body, PartialUpload),
     SocketRequest = {socket, self(), Host, Port, Ssl},
@@ -128,7 +141,10 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         download_window = proplists:get_value(window_size,
             PartialDownloadOptions, infinity),
         part_size = proplists:get_value(part_size,
-            PartialDownloadOptions, infinity)
+            PartialDownloadOptions, infinity),
+        proxy = Proxy,
+        proxy_setup = (Socket =/= undefined),
+        proxy_ssl_options = proplists:get_value(proxy_ssl_options, Options, [])
     },
     Response = case send_request(State) of
         {R, undefined} ->
@@ -145,8 +161,8 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
             ManagerPid = whereis(lhttpc_manager),
             case lhttpc_sock:controlling_process(NewSocket, ManagerPid, Ssl) of
                 ok ->
-                    gen_server:cast(lhttpc_manager,
-                        {done, Host, Port, Ssl, NewSocket});
+                    DoneMsg = {done, Host, Port, Ssl, NewSocket},
+                    gen_server:cast(lhttpc_manager, DoneMsg);
                 _ ->
                     ok
             end,
@@ -158,9 +174,7 @@ send_request(#client_state{attempts = 0}) ->
     % Don't try again if the number of allowed attempts is 0.
     throw(connection_closed);
 send_request(#client_state{socket = undefined} = State) ->
-    Host = State#client_state.host,
-    Port = State#client_state.port,
-    Ssl = State#client_state.ssl,
+    {Host, Port, Ssl} = request_first_destination(State),
     Timeout = State#client_state.connect_timeout,
     ConnectOptions0 = State#client_state.connect_options,
     ConnectOptions = case (not lists:member(inet, ConnectOptions0)) andalso
@@ -183,6 +197,46 @@ send_request(#client_state{socket = undefined} = State) ->
         {error, Reason} ->
             erlang:error(Reason)
     end;
+send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false} = State) ->
+    #lhttpc_url{
+        user = User,
+        password = Passwd,
+        is_ssl = Ssl
+    } = State#client_state.proxy,
+    #client_state{
+        host = DestHost,
+        port = Port,
+        socket = Socket
+    } = State,
+    Host = case inet_parse:address(DestHost) of
+        {ok, {_, _, _, _, _, _, _, _}} ->
+            % IPv6 address literals are enclosed by square brackets (RFC2732)
+            [$[, DestHost, $], $:, integer_to_list(Port)];
+        _ ->
+            [DestHost, $:, integer_to_list(Port)]
+    end,
+    ConnectRequest = [
+        "CONNECT ", Host, " HTTP/1.1\r\n",
+        "Host: ", Host, "\r\n",
+        case User of
+            "" ->
+                "";
+            _ ->
+                ["Proxy-Authorization: Basic ",
+                    base64:encode(User ++ ":" ++ Passwd), "\r\n"]
+        end,
+        "\r\n"
+    ],
+    case lhttpc_sock:send(Socket, ConnectRequest, Ssl) of
+        ok ->
+            read_proxy_connect_response(State, nil, nil);
+        {error, closed} ->
+            lhttpc_sock:close(Socket, Ssl),
+            throw(proxy_connection_closed);
+        {error, Reason} ->
+            lhttpc_sock:close(Socket, Ssl),
+            erlang:error(Reason)
+    end;
 send_request(State) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
@@ -203,6 +257,49 @@ send_request(State) ->
         {error, Reason} ->
             lhttpc_sock:close(Socket, Ssl),
             erlang:error(Reason)
+    end.
+
+request_first_destination(#client_state{proxy = #lhttpc_url{} = Proxy}) ->
+    {Proxy#lhttpc_url.host, Proxy#lhttpc_url.port, Proxy#lhttpc_url.is_ssl};
+request_first_destination(#client_state{host = Host, port = Port, ssl = Ssl}) ->
+    {Host, Port, Ssl}.
+
+read_proxy_connect_response(State, StatusCode, StatusText) ->
+    Socket = State#client_state.socket,
+    ProxyIsSsl = (State#client_state.proxy)#lhttpc_url.is_ssl,
+    case lhttpc_sock:recv(Socket, ProxyIsSsl) of
+        {ok, {http_response, _Vsn, Code, Reason}} ->
+            read_proxy_connect_response(State, Code, Reason);
+        {ok, {http_header, _, _Name, _, _Value}} ->
+            read_proxy_connect_response(State, StatusCode, StatusText);
+        {ok, http_eoh} when StatusCode >= 100, StatusCode =< 199 ->
+            % RFC 2616, section 10.1:
+            % A client MUST be prepared to accept one or more
+            % 1xx status responses prior to a regular
+            % response, even if the client does not expect a
+            % 100 (Continue) status message. Unexpected 1xx
+            % status responses MAY be ignored by a user agent.
+            read_proxy_connect_response(State, nil, nil);
+        {ok, http_eoh} when StatusCode >= 200, StatusCode < 300 ->
+            % RFC2817, any 2xx code means success.
+            ConnectOptions = State#client_state.connect_options,
+            SslOptions = State#client_state.proxy_ssl_options,
+            Timeout = State#client_state.connect_timeout,
+            State2 = case ssl:connect(Socket, SslOptions ++ ConnectOptions, Timeout) of
+                {ok, SslSocket} ->
+                    State#client_state{socket = SslSocket, proxy_setup = true};
+                {error, Reason} ->
+                    lhttpc_sock:close(Socket, ProxyIsSsl),
+                    erlang:error({proxy_connection_failed, Reason})
+            end,
+            send_request(State2);
+        {ok, http_eoh} ->
+            throw({proxy_connection_refused, StatusCode, StatusText});
+        {error, closed} ->
+            lhttpc_sock:close(Socket, ProxyIsSsl),
+            throw(proxy_connection_closed);
+        {error, Reason} ->
+            erlang:error({proxy_connection_failed, Reason})
     end.
 
 partial_upload(State) ->

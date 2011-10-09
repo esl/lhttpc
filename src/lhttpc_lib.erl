@@ -289,6 +289,9 @@ dec(Num) when is_integer(Num) -> Num - 1;
 dec(Else)                     -> Else.
 
 host(Host, 80)   -> maybe_ipv6_enclose(Host);
+% When proxying after an HTTP CONNECT session is established, squid doesn't
+% like the :443 suffix in the Host header.
+host(Host, 443)  -> maybe_ipv6_enclose(Host);
 host(Host, Port) -> [maybe_ipv6_enclose(Host), $:, integer_to_list(Port)].
 
 maybe_ipv6_enclose(Host) ->

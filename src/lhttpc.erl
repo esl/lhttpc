@@ -148,13 +148,17 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%            {connect_options, [ConnectOptions]} |
 %%            {send_retry, integer()} |
 %%            {partial_upload, WindowSize} |
-%%            {partial_download, PartialDownloadOptions}
+%%            {partial_download, PartialDownloadOptions} |
+%%            {proxy, ProxyUrl} |
+%%            {proxy_ssl_options, SslOptions}
 %%   Milliseconds = integer()
 %%   ConnectOptions = term()
 %%   WindowSize = integer() | infinity
 %%   PartialDownloadOptions = [PartialDownloadOption]
 %%   PartialDowloadOption = {window_size, WindowSize} |
 %%                          {part_size, PartSize}
+%%   ProxyUrl = string()
+%%   SslOptions = [any()]
 %%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}} |
 %%            {ok, UploadState} | {error, Reason}
@@ -209,12 +213,16 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%            {connect_options, [ConnectOptions]} |
 %%            {send_retry, integer()} |
 %%            {partial_upload, WindowSize} |
-%%            {partial_download, PartialDownloadOptions}
+%%            {partial_download, PartialDownloadOptions} |
+%%            {proxy, ProxyUrl} |
+%%            {proxy_ssl_options, SslOptions}
 %%   Milliseconds = integer()
 %%   WindowSize = integer()
 %%   PartialDownloadOptions = [PartialDownloadOption]
 %%   PartialDowloadOption = {window_size, WindowSize} |
 %%                          {part_size, PartSize}
+%%   ProxyUrl = string()
+%%   SslOptions = [any()]
 %%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%          | {error, Reason}
@@ -321,6 +329,15 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% `undefined'. The functions {@link get_body_part/1} and
 %% {@link get_body_part/2} can be used to read body parts in the calling
 %% process.
+%%
+%% `{proxy, ProxyUrl}' if this option is specified, a proxy server is used as
+%% an intermediary for all communication with the destination server. The link
+%% to the proxy server is established with the HTTP CONNECT method (RFC2817).
+%% Example value: {proxy, "http://john:doe@myproxy.com:3128"}
+%%
+%% `{proxy_ssl_options, SslOptions}' this is a list of SSL options to use for
+%% the SSL session created after the proxy connection is established. For a
+%% list of all available options, please check OTP's ssl module manpage.
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
     headers(), iolist(), pos_integer(), [option()]) -> result().
@@ -558,6 +575,12 @@ verify_options([{partial_download, DownloadOptions} | Options], Errors)
             verify_options(Options, NewErrors)
     end;
 verify_options([{connect_options, List} | Options], Errors)
+        when is_list(List) ->
+    verify_options(Options, Errors);
+verify_options([{proxy, List} | Options], Errors)
+        when is_list(List) ->
+    verify_options(Options, Errors);
+verify_options([{proxy_ssl_options, List} | Options], Errors)
         when is_list(List) ->
     verify_options(Options, Errors);
 verify_options([Option | Options], Errors) ->
