@@ -117,7 +117,8 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     {ChunkedUpload, Request} = lhttpc_lib:format_request(Path, NormalizedMethod,
         Hdrs, Host, Port, Body, PartialUpload),
     SocketRequest = {socket, self(), Host, Port, Ssl},
-    Socket = case gen_server:call(lhttpc_manager, SocketRequest, infinity) of
+    Pool = proplists:get_value(pool, Options, whereis(lhttpc_manager)),
+    Socket = case gen_server:call(Pool, SocketRequest, infinity) of
         {ok, S}   -> S; % Re-using HTTP/1.1 connections
         no_socket -> undefined % Opening a new HTTP/1.1 connection
     end,
@@ -158,11 +159,10 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
             % * The socket was closed remotely already
             % * Due to an error in this module (returning dead sockets for
             %   instance)
-            ManagerPid = whereis(lhttpc_manager),
-            case lhttpc_sock:controlling_process(NewSocket, ManagerPid, Ssl) of
+            case lhttpc_sock:controlling_process(NewSocket, Pool, Ssl) of
                 ok ->
                     DoneMsg = {done, Host, Port, Ssl, NewSocket},
-                    ok = gen_server:call(lhttpc_manager, DoneMsg, infinity);
+                    ok = gen_server:call(Pool, DoneMsg, infinity);
                 _ ->
                     ok
             end,

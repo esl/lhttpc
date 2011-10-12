@@ -150,7 +150,8 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%            {partial_upload, WindowSize} |
 %%            {partial_download, PartialDownloadOptions} |
 %%            {proxy, ProxyUrl} |
-%%            {proxy_ssl_options, SslOptions}
+%%            {proxy_ssl_options, SslOptions} |
+%%            {pool, LhttcPool}
 %%   Milliseconds = integer()
 %%   ConnectOptions = term()
 %%   WindowSize = integer() | infinity
@@ -159,6 +160,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%                          {part_size, PartSize}
 %%   ProxyUrl = string()
 %%   SslOptions = [any()]
+%%   LhttcPool = pid() | atom()
 %%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}} |
 %%            {ok, UploadState} | {error, Reason}
@@ -215,7 +217,8 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%            {partial_upload, WindowSize} |
 %%            {partial_download, PartialDownloadOptions} |
 %%            {proxy, ProxyUrl} |
-%%            {proxy_ssl_options, SslOptions}
+%%            {proxy_ssl_options, SslOptions} |
+%%            {pool, LhttcPool}
 %%   Milliseconds = integer()
 %%   WindowSize = integer()
 %%   PartialDownloadOptions = [PartialDownloadOption]
@@ -223,6 +226,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%                          {part_size, PartSize}
 %%   ProxyUrl = string()
 %%   SslOptions = [any()]
+%%   LhttcPool = pid() | atom()
 %%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%          | {error, Reason}
@@ -582,6 +586,9 @@ verify_options([{proxy, List} | Options], Errors)
     verify_options(Options, Errors);
 verify_options([{proxy_ssl_options, List} | Options], Errors)
         when is_list(List) ->
+    verify_options(Options, Errors);
+verify_options([{pool, PidOrName} | Options], Errors)
+        when is_pid(PidOrName); is_atom(PidOrName) ->
     verify_options(Options, Errors);
 verify_options([Option | Options], Errors) ->
     verify_options(Options, [Option | Errors]);

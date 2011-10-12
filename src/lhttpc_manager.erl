@@ -37,9 +37,9 @@
 -export([
         start_link/0,
         start_link/1,
-        connection_count/0,
         connection_count/1,
-        update_connection_timeout/1
+        connection_count/2,
+        update_connection_timeout/2
     ]).
 -export([
         init/1,
@@ -61,16 +61,17 @@
         timeout = 300000 :: non_neg_integer()
     }).
 
-%% @spec () -> Count
+%% @spec (PoolPidOrName) -> Count
 %%    Count = integer()
 %% @doc Returns the total number of active connections maintained by the
-%% httpc manager.
+%% specified lhttpc pool (manager).
 %% @end
--spec connection_count() -> non_neg_integer().
-connection_count() ->
-    gen_server:call(?MODULE, connection_count).
+-spec connection_count(pid() | atom()) -> non_neg_integer().
+connection_count(PidOrName) ->
+    gen_server:call(PidOrName, connection_count).
 
-%% @spec (Destination) -> Count
+%% @spec (PoolPidOrName, Destination) -> Count
+%%    PoolPidOrName = pid() | atom()
 %%    Destination = {Host, Port, Ssl}
 %%    Host = string()
 %%    Port = integer()
@@ -79,21 +80,22 @@ connection_count() ->
 %% @doc Returns the number of active connections to the specific
 %% `Destination' maintained by the httpc manager.
 %% @end
--spec connection_count({string(), pos_integer(), boolean()}) ->
+-spec connection_count(pid() | atom(), {string(), pos_integer(), boolean()}) ->
     non_neg_integer().
-connection_count({Host, Port, Ssl}) ->
+connection_count(PidOrName, {Host, Port, Ssl}) ->
     Destination = {string:to_lower(Host), Port, Ssl},
-    gen_server:call(?MODULE, {connection_count, Destination}).
+    gen_server:call(PidOrName, {connection_count, Destination}).
 
-%% @spec (Timeout) -> ok
+%% @spec (PoolPidOrName, Timeout) -> ok
+%%    PoolPidOrName = pid() | atom()
 %%    Timeout = integer()
 %% @doc Updates the timeout for persistent connections.
 %% This will only affect future sockets handed to the manager. The sockets
 %% already managed will keep their timers.
 %% @end
--spec update_connection_timeout(non_neg_integer()) -> ok.
-update_connection_timeout(Milliseconds) ->
-    gen_server:cast(?MODULE, {update_timeout, Milliseconds}).
+-spec update_connection_timeout(pid() | atom(), non_neg_integer()) -> ok.
+update_connection_timeout(PidOrName, Milliseconds) ->
+    gen_server:cast(PidOrName, {update_timeout, Milliseconds}).
 
 %% @spec () -> {ok, pid()}
 %% @doc Starts and link to the gen server.
@@ -107,7 +109,12 @@ start_link() ->
     {ok, pid()} | {error, already_started}.
 start_link(Options0) ->
     Options = maybe_apply_defaults([connection_timeout, pool_size], Options0),
-    gen_server:start_link({local, ?MODULE}, ?MODULE, Options, []).
+    case proplists:get_value(name, Options) of
+        undefined ->
+            gen_server:start_link(?MODULE, Options, []);
+        Name ->
+            gen_server:start_link({local, Name}, ?MODULE, Options, [])
+    end.
 
 %% @hidden
 -spec init(any()) -> {ok, #httpc_man{}}.

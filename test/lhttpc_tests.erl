@@ -418,14 +418,14 @@ request_timeout() ->
 connection_timeout() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
     URL = url(Port, "/close_conn"),
-    lhttpc_manager:update_connection_timeout(50), % very short keep alive
+    lhttpc_manager:update_connection_timeout(lhttpc_manager, 50), % very short keep alive
     {ok, Response} = lhttpc:request(URL, get, [], 100),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)),
     timer:sleep(100),
     ?assertEqual(0,
-        lhttpc_manager:connection_count({"localhost", Port, false})),
-    lhttpc_manager:update_connection_timeout(300000). % set back
+        lhttpc_manager:connection_count(lhttpc_manager, {"localhost", Port, false})),
+    lhttpc_manager:update_connection_timeout(lhttpc_manager, 300000). % set back
 
 suspended_manager() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
@@ -438,7 +438,7 @@ suspended_manager() ->
     ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)),
     true = erlang:resume_process(Pid),
     ?assertEqual(1,
-        lhttpc_manager:connection_count({"localhost", Port, false})),
+        lhttpc_manager:connection_count(lhttpc_manager, {"localhost", Port, false})),
     {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)).
@@ -726,7 +726,7 @@ ssl_chunked() ->
 
 connection_count() ->
     timer:sleep(50), % give the TCP stack time to deliver messages
-    ?assertEqual(0, lhttpc_manager:connection_count()).
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)).
 
 invalid_options() ->
     ?assertError({bad_options, [{foo, bar}, bad_option]},

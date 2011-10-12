@@ -62,16 +62,16 @@ manager_test_() ->
 empty_manager() ->
     LS = socket_server:listen(),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Client = spawn_client(),
     ?assertEqual(ok, ping_client(Client)),
 
     ?assertEqual(no_socket, client_peek_socket(Client)),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client)),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     catch gen_tcp:close(LS),
     unlink(whereis(lhttpc_manager)),
@@ -80,28 +80,28 @@ empty_manager() ->
 one_socket() ->
     LS = socket_server:listen(),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Client1 = spawn_client(),
     ?assertEqual(ok, ping_client(Client1)),
     Client2 = spawn_client(),
     ?assertEqual(ok, ping_client(Client2)),
 
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
     Result1 = connect_client(Client1),
     ?assertMatch({ok, _}, Result1),
     {ok, Socket} = Result1,
     ?assertEqual(ok, ping_client(Client1)),
 
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
     ?assertEqual(ok, disconnect_client(Client1)),
     ?assertEqual(ok, ping_client(Client1)),
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Result2 = connect_client(Client2),
     ?assertEqual({ok, Socket}, Result2),
     ?assertEqual(ok, ping_client(Client2)),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client1)),
     ?assertEqual(ok, stop_client(Client2)),
@@ -112,9 +112,9 @@ one_socket() ->
 connection_timeout() ->
     LS = socket_server:listen(),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
-    ok = lhttpc_manager:update_connection_timeout(3000),
+    ok = lhttpc_manager:update_connection_timeout(lhttpc_manager, 3000),
     erlang:yield(), % make sure lhttpc_manager processes the message
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Client = spawn_client(),
     ?assertEqual(ok, ping_client(Client)),
@@ -123,25 +123,25 @@ connection_timeout() ->
     ?assertMatch({ok, _}, Result1),
     {ok, Socket} = Result1,
     ?assertEqual(ok, ping_client(Client)),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, disconnect_client(Client)),
     ?assertEqual(ok, ping_client(Client)),
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
 
     % sleep a while and verify the socket was closed by lhttpc_manager
     ok = timer:sleep(3100),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
     Result2 = connect_client(Client),
     ?assertMatch({ok, _}, Result2),
     {ok, Socket2} = Result2,
     ?assertEqual(ok, ping_client(Client)),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
     ?assert(Socket2 =/= Socket),
 
     ?assertEqual(ok, disconnect_client(Client)),
     ?assertEqual(ok, ping_client(Client)),
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
 
     catch gen_tcp:close(LS),
     ?assertEqual(ok, stop_client(Client)),
@@ -166,16 +166,16 @@ many_sockets() ->
 
     ?assertEqual(ok, disconnect_client(Client1)),
     ?assertEqual(ok, ping_client(Client1)),
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Result2 = connect_client(Client2),
     ?assertMatch({ok, Socket1}, Result2),
     ?assertEqual(ok, ping_client(Client2)),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, disconnect_client(Client2)),
     ?assertEqual(ok, ping_client(Client2)),
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
 
     lhttpc_manager ! {tcp_closed, Socket1},
     _Acceptor2 = socket_server:accept(LS),
@@ -206,7 +206,7 @@ many_sockets() ->
     ?assertEqual(ok, disconnect_client(Client1)),
     ?assertEqual(ok, ping_client(Client1)),
     % 0 because the connection should be delivered to blocked client Client4
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Result7 = get_client_socket(Client4),
     ?assertMatch({ok, _}, Result7),
@@ -230,7 +230,7 @@ many_sockets() ->
     ?assertEqual(ok, disconnect_client(Client4)),
     ?assertEqual(ok, ping_client(Client4)),
     % 0 because the connection should be delivered to blocked client Client6
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Result8 = get_client_socket(Client6),
     ?assertMatch({ok, _}, Result8),
@@ -253,20 +253,20 @@ many_sockets() ->
     ?assertNot(lists:member(
         Socket7, [Socket1, Socket2, Socket3, Socket4, Socket5, Socket6])),
 
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
     ?assertEqual(ok, disconnect_client(Client2)),
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
     ?assertEqual(ok, disconnect_client(Client3)),
-    ?assertEqual(2, lhttpc_manager:connection_count()),
+    ?assertEqual(2, lhttpc_manager:connection_count(lhttpc_manager)),
     ?assertEqual(ok, disconnect_client(Client7)),
-    ?assertEqual(3, lhttpc_manager:connection_count()),
+    ?assertEqual(3, lhttpc_manager:connection_count(lhttpc_manager)),
 
     lhttpc_manager ! {tcp_closed, Socket7},
-    ?assertEqual(2, lhttpc_manager:connection_count()),
+    ?assertEqual(2, lhttpc_manager:connection_count(lhttpc_manager)),
     lhttpc_manager ! {tcp_closed, Socket4},
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
     lhttpc_manager ! {tcp_closed, Socket3},
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     catch gen_tcp:close(LS),
     ?assertEqual(ok, stop_client(Client1)),
@@ -280,7 +280,7 @@ many_sockets() ->
 closed_race_cond() ->
     LS = socket_server:listen(),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Client = spawn_client(),
     ?assertEqual(ok, ping_client(Client)),
@@ -290,10 +290,10 @@ closed_race_cond() ->
     {ok, Socket} = Result1,
     ?assertEqual(ok, ping_client(Client)),
 
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
     ?assertEqual(ok, disconnect_client(Client)),
     ?assertEqual(ok, ping_client(Client)),
-    ?assertEqual(1, lhttpc_manager:connection_count()),
+    ?assertEqual(1, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ManagerPid = whereis(lhttpc_manager),
     true = erlang:suspend_process(ManagerPid),
@@ -313,7 +313,7 @@ closed_race_cond() ->
     end,
 
     ?assertMatch(no_socket, Result2),
-    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client)),
     catch gen_tcp:close(LS),
