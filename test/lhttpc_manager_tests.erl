@@ -51,6 +51,7 @@ manager_test_() ->
         {setup, fun start_app/0, fun stop_app/1, [
                 ?_test(empty_manager()),
                 ?_test(one_socket()),
+                {timeout, 60, ?_test(connection_timeout())},
                 {timeout, 60, ?_test(many_sockets())},
                 {timeout, 60, ?_test(closed_race_cond())}
             ]}
@@ -105,6 +106,45 @@ one_socket() ->
     ?assertEqual(ok, stop_client(Client1)),
     ?assertEqual(ok, stop_client(Client2)),
     catch gen_tcp:close(LS),
+    unlink(whereis(lhttpc_manager)),
+    ok.
+
+connection_timeout() ->
+    LS = socket_server:listen(),
+    link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
+    ok = lhttpc_manager:update_connection_timeout(3000),
+    erlang:yield(), % make sure lhttpc_manager processes the message
+    ?assertEqual(0, lhttpc_manager:connection_count()),
+
+    Client = spawn_client(),
+    ?assertEqual(ok, ping_client(Client)),
+
+    Result1 = connect_client(Client),
+    ?assertMatch({ok, _}, Result1),
+    {ok, Socket} = Result1,
+    ?assertEqual(ok, ping_client(Client)),
+    ?assertEqual(0, lhttpc_manager:connection_count()),
+
+    ?assertEqual(ok, disconnect_client(Client)),
+    ?assertEqual(ok, ping_client(Client)),
+    ?assertEqual(1, lhttpc_manager:connection_count()),
+
+    % sleep a while and verify the socket was closed by lhttpc_manager
+    ok = timer:sleep(3100),
+    ?assertEqual(0, lhttpc_manager:connection_count()),
+    Result2 = connect_client(Client),
+    ?assertMatch({ok, _}, Result2),
+    {ok, Socket2} = Result2,
+    ?assertEqual(ok, ping_client(Client)),
+    ?assertEqual(0, lhttpc_manager:connection_count()),
+    ?assert(Socket2 =/= Socket),
+
+    ?assertEqual(ok, disconnect_client(Client)),
+    ?assertEqual(ok, ping_client(Client)),
+    ?assertEqual(1, lhttpc_manager:connection_count()),
+
+    catch gen_tcp:close(LS),
+    ?assertEqual(ok, stop_client(Client)),
     unlink(whereis(lhttpc_manager)),
     ok.
 
