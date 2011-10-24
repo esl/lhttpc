@@ -46,7 +46,7 @@
 %% @end
 -spec start_link() -> {ok, pid()} | {error, atom()}.
 start_link() ->
-    supervisor:start_link(?MODULE, nil).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
 %% @hidden
 -spec init(any()) -> {ok, {{atom(), integer(), integer()}, [child()]}}.
