@@ -162,7 +162,7 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
             case lhttpc_sock:controlling_process(NewSocket, ManagerPid, Ssl) of
                 ok ->
                     DoneMsg = {done, Host, Port, Ssl, NewSocket},
-                    gen_server:cast(lhttpc_manager, DoneMsg);
+                    ok = gen_server:call(lhttpc_manager, DoneMsg, infinity);
                 _ ->
                     ok
             end,

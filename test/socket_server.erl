@@ -27,33 +27,23 @@
 %%% @author Oscar Hellström <oscar@hellstrom.st>
 -module(socket_server).
 
--export([open/0, connect/2, listen/0, accept/1]).
+-export([connect/1, listen/0, accept/1]).
 -export([do_accept/1]).
 
-open() ->
-    {LS, Port} = listen(),
-    Pid = accept(LS),
-    {ok, Port} = inet:port(LS),
-    Pid ! {connecting, self()},
-    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [{active, false}]),
-    receive accepted -> ok end,
-    {LS, Socket}.
 
-connect(Pid, Port) ->
-    Pid ! {connecting, self()},
-    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [{active, false}]),
-    receive accepted -> ok end,
+connect(Port) ->
+    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [{active, false}, binary]),
     Socket.
 
 listen() ->
-    {ok, LS} = gen_tcp:listen(0, [{active, false}, {ip, {127,0,0,1}}]),
+    {ok, LS} = gen_tcp:listen(0, [{active, false}, {ip, {127,0,0,1}}, binary]),
     {ok, Port} = inet:port(LS),
-    {LS, Port}.
+    ok = application:set_env(lhttpc, test_port, Port),
+    LS.
 
 accept(LS) ->
     spawn_link(?MODULE, do_accept, [LS]).
 
 do_accept(LS) ->
     {ok, S} = gen_tcp:accept(LS),
-    receive {connecting, Pid} ->  Pid ! accepted end,
     {error, closed} = gen_tcp:recv(S, 0).
