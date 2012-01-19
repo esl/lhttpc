@@ -392,7 +392,7 @@ send_body_part({Pid, Window}, IoList, _Timeout) when Window > 0, is_pid(Pid) ->
     receive
         {ack, Pid} ->
             {ok, {Pid, Window}};
-        {reponse, Pid, R} ->
+        {response, Pid, R} ->
             R;
         {exit, Pid, Reason} ->
             exit(Reason);
