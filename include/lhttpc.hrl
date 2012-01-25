@@ -24,26 +24,11 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
-%%% @author Oscar Hellström <oscar@hellstrom.st>
--module(socket_server).
-
--export([connect/1, listen/0, accept/1]).
--export([do_accept/1]).
-
-
-connect(Port) ->
-    {ok, Socket} = gen_tcp:connect({127,0,0,1}, Port, [{active, false}, binary]),
-    Socket.
-
-listen() ->
-    {ok, LS} = gen_tcp:listen(0, [{active, false}, {ip, {127,0,0,1}}, binary]),
-    {ok, Port} = inet:port(LS),
-    ok = application:set_env(lhttpc, test_port, Port),
-    LS.
-
-accept(LS) ->
-    spawn_link(?MODULE, do_accept, [LS]).
-
-do_accept(LS) ->
-    {ok, S} = gen_tcp:accept(LS),
-    {error, closed} = gen_tcp:recv(S, 0).
+-record(lhttpc_url, {
+    host :: string(),
+    port :: integer(),
+    path :: string(),
+    is_ssl:: boolean(),
+    user = "" :: string(),
+    password = "" :: string()
+}).

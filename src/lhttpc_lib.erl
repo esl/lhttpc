@@ -42,6 +42,7 @@
 -export([format_hdrs/1, dec/1]).
 
 -include("lhttpc_types.hrl").
+-include("lhttpc.hrl").
 
 %% @spec header_value(Header, Headers) -> undefined | term()
 %% Header = string()
@@ -91,26 +92,63 @@ maybe_atom_to_list(Atom) when is_atom(Atom) ->
 maybe_atom_to_list(List) when is_list(List) ->
     List.
 
-%% @spec (URL) -> {Host, Port, Path, Ssl}
+%% @spec (URL) -> #lhttpc_url{}
 %%   URL = string()
-%%   Host = string()
-%%   Port = integer()
-%%   Path = string()
-%%   Ssl = boolean()
 %% @doc
--spec parse_url(string()) -> {string(), integer(), string(), boolean()}.
+-spec parse_url(string()) -> #lhttpc_url{}.
 parse_url(URL) ->
     % XXX This should be possible to do with the re module?
-    {Scheme, HostPortPath} = split_scheme(URL),
+    {Scheme, CredsHostPortPath} = split_scheme(URL),
+    {User, Passwd, HostPortPath} = split_credentials(CredsHostPortPath),
     {Host, PortPath} = split_host(HostPortPath, []),
     {Port, Path} = split_port(Scheme, PortPath, []),
-    {string:to_lower(Host), Port, Path, Scheme =:= https}.
+    #lhttpc_url{
+        host = string:to_lower(Host),
+        port = Port,
+        path = Path,
+        user = User,
+        password = Passwd,
+        is_ssl = (Scheme =:= https)
+    }.
 
 split_scheme("http://" ++ HostPortPath) ->
     {http, HostPortPath};
 split_scheme("https://" ++ HostPortPath) ->
     {https, HostPortPath}.
 
+split_credentials(CredsHostPortPath) ->
+    case string:tokens(CredsHostPortPath, "@") of
+        [HostPortPath] ->
+            {"", "", HostPortPath};
+        [Creds, HostPortPath] ->
+            % RFC1738 (section 3.1) says:
+            % "The user name (and password), if present, are followed by a
+            % commercial at-sign "@". Within the user and password field, any ":",
+            % "@", or "/" must be encoded."
+            % The mentioned encoding is the "percent" encoding.
+            case string:tokens(Creds, ":") of
+                [User] ->
+                    % RFC1738 says ":password" is optional
+                    {User, "", HostPortPath};
+                [User, Passwd] ->
+                    {User, Passwd, HostPortPath}
+            end
+    end.
+
+split_host("[" ++ Rest, []) ->
+    % IPv6 address literals are enclosed by square brackets (RFC2732)
+    case string:str(Rest, "]") of
+        0 ->
+            split_host(Rest, "[");
+        N ->
+            {IPv6Address, "]" ++ PortPath0} = lists:split(N - 1, Rest),
+            case PortPath0 of
+                ":" ++ PortPath ->
+                    {IPv6Address, PortPath};
+                _ ->
+                    {IPv6Address, PortPath0}
+            end
+    end;
 split_host([$: | PortPath], Host) ->
     {lists:reverse(Host), PortPath};
 split_host([$/ | _] = PortPath, Host) ->
@@ -250,5 +288,17 @@ is_chunked(Hdrs) ->
 dec(Num) when is_integer(Num) -> Num - 1;
 dec(Else)                     -> Else.
 
-host(Host, 80)   -> Host;
-host(Host, Port) -> [Host, $:, integer_to_list(Port)].
+host(Host, 80)   -> maybe_ipv6_enclose(Host);
+% When proxying after an HTTP CONNECT session is established, squid doesn't
+% like the :443 suffix in the Host header.
+host(Host, 443)  -> maybe_ipv6_enclose(Host);
+host(Host, Port) -> [maybe_ipv6_enclose(Host), $:, integer_to_list(Port)].
+
+maybe_ipv6_enclose(Host) ->
+    case inet_parse:address(Host) of
+        {ok, {_, _, _, _, _, _, _, _}} ->
+            % IPv6 address literals are enclosed by square brackets (RFC2732)
+            [$[, Host, $]];
+        _ ->
+            Host
+    end.
