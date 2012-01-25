@@ -177,7 +177,7 @@ find_socket({_, _, Ssl} = Dest, Pid, State) ->
             case lhttpc_sock:controlling_process(Socket, Pid, Ssl) of
                 ok ->
                     {_, Timer} = dict:fetch(Socket, State#httpc_man.sockets),
-                    cancel_timer(Timer, Sockets),
+                    cancel_timer(Timer, Socket),
                     NewState = State#httpc_man{
                         destinations = update_dest(Dest, Sockets, Dests),
                         sockets = dict:erase(Socket, State#httpc_man.sockets)

@@ -196,13 +196,33 @@ send_request(State) ->
             erlang:error(Reason)
     end.
 
-partial_upload(State) ->
+partial_upload(#client_state{socket = Socket, ssl = Ssl} = State) ->
     Response = {ok, {self(), State#client_state.upload_window}},
     State#client_state.requester ! {response, self(), Response},
+    lhttpc_sock:setopts(Socket, [{packet, http}, {active, once}], Ssl),
     partial_upload_loop(State#client_state{attempts = 1, request = undefined}).
 
-partial_upload_loop(State = #client_state{requester = Pid}) ->
+partial_upload_loop(State = #client_state{requester = Pid, socket = Socket}) ->
     receive
+        {Tag, Socket} when Tag =:= tcp_closed; Tag =:= ssl_closed ->
+            throw(Tag);
+        {Tag, Socket, Reason} when Tag =:= tcp_error; Tag =:= ssl_error ->
+            throw(Reason);
+        {http_error, Reason} ->
+            throw(Reason);
+        {Tag, Socket, {http_response, Vsn, StatusCode, Reason}} when Tag =:= http; Tag =:= ssl ->
+            case read_response(State, Vsn, {StatusCode, Reason}, []) of
+                _ when StatusCode >= 100, StatusCode =< 199 ->
+                    Ssl = State#client_state.ssl,
+                    lhttpc_sock:setopts(Socket, [{packet, http}, {active, once}], Ssl),
+                    partial_upload_loop(State);
+                {_, undefined} = Result ->
+                    Result;
+                {Response, Socket} ->
+                    Ssl = State#client_state.ssl,
+                    lhttpc_sock:close(Socket, Ssl),
+                    {Response, undefined}
+            end;
         {trailers, Pid, Trailers} ->
             send_trailers(State, Trailers),
             read_response(State);
@@ -245,46 +265,60 @@ check_send_result(#client_state{socket = Sock, ssl = Ssl}, {error, Reason}) ->
 
 read_response(#client_state{socket = Socket, ssl = Ssl} = State) ->
     lhttpc_sock:setopts(Socket, [{packet, http}], Ssl),
-    read_response(State, nil, {nil, nil}, []).
+    skip_response_1xx(State).
+
+skip_response_1xx(State) ->
+    case read_response(State, nil, {nil, nil}, []) of
+        {{StatusCode, _}, _, _}  when StatusCode >= 100, StatusCode =< 199 ->
+            skip_response_1xx(State);
+        Result ->
+            Result
+    end.
 
 read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
-    case lhttpc_sock:recv(Socket, Ssl) of
-        {ok, {http_response, NewVsn, NewStatusCode, Reason}} ->
-            NewStatus = {NewStatusCode, Reason},
-            read_response(State, NewVsn, NewStatus, Hdrs);
-        {ok, {http_header, _, Name, _, Value}} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
-            read_response(State, Vsn, Status, [Header | Hdrs]);
-        {ok, http_eoh} when StatusCode >= 100, StatusCode =< 199 ->
-            % RFC 2616, section 10.1:
-            % A client MUST be prepared to accept one or more
-            % 1xx status responses prior to a regular
-            % response, even if the client does not expect a
-            % 100 (Continue) status message. Unexpected 1xx
-            % status responses MAY be ignored by a user agent.
-            read_response(State, nil, {nil, nil}, []);
-        {ok, http_eoh} ->
-            lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
-            Response = handle_response_body(State, Vsn, Status, Hdrs),
-            NewHdrs = element(2, Response),
-            ReqHdrs = State#client_state.request_headers,
-            NewSocket = maybe_close_socket(Socket, Ssl, Vsn, ReqHdrs, NewHdrs),
-            {Response, NewSocket};
-        {error, closed} ->
-            % Either we only noticed that the socket was closed after we
-            % sent the request, the server closed it just after we put
-            % the request on the wire or the server has some issues and is
-            % closing connections without sending responses.
-            % If this the first attempt to send the request, we will try again.
+    lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
+    receive
+        {Tag, Socket, HttpPacket} when Tag =:= http; Tag =:= ssl ->
+            case HttpPacket of
+                {http_response, NewVsn, NewStatusCode, Reason} ->
+                    NewStatus = {NewStatusCode, Reason},
+                    read_response(State, NewVsn, NewStatus, Hdrs);
+                {http_header, _, Name, _, Value} ->
+                    Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
+                    read_response(State, Vsn, Status, [Header | Hdrs]);
+                http_eoh when StatusCode >= 100, StatusCode =< 199 ->
+                    %% RFC 2616, section 10.1:
+                    %% A client MUST be prepared to accept one or more
+                    %% 1xx status responses prior to a regular
+                    %% response, even if the client does not expect a
+                    %% 100 (Continue) status message. Unexpected 1xx
+                    %% status responses MAY be ignored by a user agent.
+                    {Status, Hdrs, <<>>};
+                http_eoh ->
+                    lhttpc_sock:setopts(Socket, [{packet, raw}], Ssl),
+                    Response = handle_response_body(State, Vsn, Status, Hdrs),
+                    NewHdrs = element(2, Response),
+                    ReqHdrs = State#client_state.request_headers,
+                    NewSocket = maybe_close_socket(Socket, Ssl, Vsn, ReqHdrs, NewHdrs),
+                    {Response, NewSocket};
+                {http_error, Reason} ->
+                    erlang:error(Reason)
+            end;
+        {Tag, Socket} when Tag =:= tcp_closed; Tag =:= ssl_closed ->
+            %% Either we only noticed that the socket was closed after we
+            %% sent the request, the server closed it just after we put
+            %% the request on the wire or the server has some issues and is
+            %% closing connections without sending responses.
+            %% If this the first attempt to send the request, we will try again.
             lhttpc_sock:close(Socket, Ssl),
             NewState = State#client_state{
-                socket = undefined,
-                attempts = State#client_state.attempts - 1
-            },
+                         socket = undefined,
+                         attempts = State#client_state.attempts - 1
+                        },
             send_request(NewState);
-        {error, Reason} ->
+        {Tag, Socket, Reason} when Tag =:= tcp_error; Tag =:= ssl_error ->
             erlang:error(Reason)
     end.
 
