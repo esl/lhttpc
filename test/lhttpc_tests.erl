@@ -28,7 +28,7 @@
 -module(lhttpc_tests).
 
 -export([test_no/2]).
--import(webserver, [start/2]).
+-import(webserver, [start/2, start/3]).
 
 -include_lib("eunit/include/eunit.hrl").
 
@@ -112,7 +112,11 @@ tcp_test_() ->
     {inorder, 
         {setup, fun start_app/0, fun stop_app/1, [
                 ?_test(simple_get()),
+                ?_test(simple_get_ipv6()),
                 ?_test(empty_get()),
+                ?_test(basic_auth()),
+                ?_test(missing_basic_auth()),
+                ?_test(wrong_basic_auth()),
                 ?_test(get_with_mandatory_hdrs()),
                 ?_test(get_with_connect_options()),
                 ?_test(no_content_length()),
@@ -161,6 +165,7 @@ ssl_test_() ->
     {inorder,
         {setup, fun start_app/0, fun stop_app/1, [
                 ?_test(ssl_get()),
+                ?_test(ssl_get_ipv6()),
                 ?_test(ssl_post()),
                 ?_test(ssl_chunked()),
                 ?_test(connection_count()) % just check that it's 0 (last)
@@ -181,12 +186,43 @@ simple_get() ->
     simple(get),
     simple("GET").
 
+simple_get_ipv6() ->
+    simple(get, inet6),
+    simple("GET", inet6).
+
 empty_get() ->
     Port = start(gen_tcp, [fun empty_body/5]),
     URL = url(Port, "/empty"),
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<>>, body(Response)).
+
+basic_auth() ->
+    User = "foo",
+    Passwd = "bar",
+    Port = start(gen_tcp, [basic_auth_responder(User, Passwd)]),
+    URL = url(Port, "/empty", User, Passwd),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<"OK">>, body(Response)).
+
+missing_basic_auth() ->
+    User = "foo",
+    Passwd = "bar",
+    Port = start(gen_tcp, [basic_auth_responder(User, Passwd)]),
+    URL = url(Port, "/empty"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({401, "Unauthorized"}, status(Response)),
+    ?assertEqual(<<"missing_auth">>, body(Response)).
+
+wrong_basic_auth() ->
+    User = "foo",
+    Passwd = "bar",
+    Port = start(gen_tcp, [basic_auth_responder(User, Passwd)]),
+    URL = url(Port, "/empty", User, "wrong_password"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({401, "Unauthorized"}, status(Response)),
+    ?assertEqual(<<"wrong_auth">>, body(Response)).
 
 get_with_mandatory_hdrs() ->
     Port = start(gen_tcp, [fun simple_response/5]),
@@ -382,14 +418,14 @@ request_timeout() ->
 connection_timeout() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
     URL = url(Port, "/close_conn"),
-    lhttpc_manager:update_connection_timeout(50), % very short keep alive
+    lhttpc_manager:update_connection_timeout(lhttpc_manager, 50), % very short keep alive
     {ok, Response} = lhttpc:request(URL, get, [], 100),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)),
     timer:sleep(100),
     ?assertEqual(0,
-        lhttpc_manager:connection_count({"localhost", Port, false})),
-    lhttpc_manager:update_connection_timeout(300000). % set back
+        lhttpc_manager:connection_count(lhttpc_manager, {"localhost", Port, false})),
+    lhttpc_manager:update_connection_timeout(lhttpc_manager, 300000). % set back
 
 suspended_manager() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
@@ -402,7 +438,7 @@ suspended_manager() ->
     ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)),
     true = erlang:resume_process(Pid),
     ?assertEqual(1,
-        lhttpc_manager:connection_count({"localhost", Port, false})),
+        lhttpc_manager:connection_count(lhttpc_manager, {"localhost", Port, false})),
     {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)).
@@ -651,6 +687,13 @@ ssl_get() ->
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
+ssl_get_ipv6() ->
+    Port = start(ssl, [fun simple_response/5], inet6),
+    URL = ssl_url(inet6, Port, "/simple"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
 ssl_post() ->
     Port = start(ssl, [fun copy_body/5]),
     URL = ssl_url(Port, "/simple"),
@@ -683,7 +726,7 @@ ssl_chunked() ->
 
 connection_count() ->
     timer:sleep(50), % give the TCP stack time to deliver messages
-    ?assertEqual(0, lhttpc_manager:connection_count()).
+    ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)).
 
 invalid_options() ->
     ?assertError({bad_options, [{foo, bar}, bad_option]},
@@ -717,19 +760,45 @@ read_partial_body(Pid, Size, Acc) ->
     end.
 
 simple(Method) ->
-    Port = start(gen_tcp, [fun simple_response/5]),
-    URL = url(Port, "/simple"),
-    {ok, Response} = lhttpc:request(URL, Method, [], 1000),
-    {StatusCode, ReasonPhrase} = status(Response),
-    ?assertEqual(200, StatusCode),
-    ?assertEqual("OK", ReasonPhrase),
-    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+    simple(Method, inet).
+
+simple(Method, Family) ->
+    case start(gen_tcp, [fun simple_response/5], Family) of
+        {error, family_not_supported} when Family =:= inet6 ->
+            % Localhost has no IPv6 support - not a big issue.
+            ?debugMsg("WARNING: impossible to test IPv6 support~n");
+        Port when is_number(Port) ->
+            URL = url(Family, Port, "/simple"),
+            {ok, Response} = lhttpc:request(URL, Method, [], 1000),
+            {StatusCode, ReasonPhrase} = status(Response),
+            ?assertEqual(200, StatusCode),
+            ?assertEqual("OK", ReasonPhrase),
+            ?assertEqual(<<?DEFAULT_STRING>>, body(Response))
+    end.
 
 url(Port, Path) ->
-    "http://localhost:" ++ integer_to_list(Port) ++ Path.
+    url(inet, Port, Path).
+
+url(inet, Port, Path) ->
+    "http://localhost:" ++ integer_to_list(Port) ++ Path;
+url(inet6, Port, Path) ->
+    "http://[::1]:" ++ integer_to_list(Port) ++ Path.
+
+url(Port, Path, User, Password) ->
+    url(inet, Port, Path, User, Password).
+
+url(inet, Port, Path, User, Password) ->
+    "http://" ++ User ++ ":" ++ Password ++
+        "@localhost:" ++ integer_to_list(Port) ++ Path;
+url(inet6, Port, Path, User, Password) ->
+    "http://" ++ User ++ ":" ++ Password ++
+        "@[::1]:" ++ integer_to_list(Port) ++ Path.
 
 ssl_url(Port, Path) ->
     "https://localhost:" ++ integer_to_list(Port) ++ Path.
+
+ssl_url(inet6, Port, Path) ->
+    "https://[::1]:" ++ integer_to_list(Port) ++ Path.
 
 status({Status, _, _}) ->
     Status.
@@ -983,3 +1052,44 @@ not_modified_response(Module, Socket, _Request, _Headers, _Body) ->
 			"Date: Tue, 15 Nov 1994 08:12:31 GMT\r\n\r\n"
 		]
     ).
+
+basic_auth_responder(User, Passwd) ->
+    fun(Module, Socket, _Request, Headers, _Body) ->
+        case proplists:get_value("Authorization", Headers) of
+            undefined ->
+                Module:send(
+                    Socket,
+                    [
+                        "HTTP/1.1 401 Unauthorized\r\n",
+                        "Content-Type: text/plain\r\n",
+                        "Content-Length: 12\r\n\r\n",
+                        "missing_auth"
+                    ]
+                );
+            "Basic " ++ Auth ->
+                [U, P] = string:tokens(
+                    binary_to_list(base64:decode(iolist_to_binary(Auth))), ":"),
+                case {U, P} of
+                    {User, Passwd} ->
+                        Module:send(
+                            Socket,
+                            [
+                                "HTTP/1.1 200 OK\r\n",
+                                "Content-Type: text/plain\r\n",
+                                "Content-Length: 2\r\n\r\n",
+                                "OK"
+                            ]
+                        );
+                    _ ->
+                        Module:send(
+                            Socket,
+                            [
+                                "HTTP/1.1 401 Unauthorized\r\n",
+                                "Content-Type: text/plain\r\n",
+                                "Content-Length: 10\r\n\r\n",
+                                "wrong_auth"
+                            ]
+                        )
+                end
+        end
+    end.

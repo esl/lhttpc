@@ -44,6 +44,7 @@
         ]).
 
 -include("lhttpc_types.hrl").
+-include("lhttpc.hrl").
 
 -type result() :: {ok, {{pos_integer(), string()}, headers(), binary()}} |
     {error, atom()}.
@@ -147,13 +148,19 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%            {connect_options, [ConnectOptions]} |
 %%            {send_retry, integer()} |
 %%            {partial_upload, WindowSize} |
-%%            {partial_download, PartialDownloadOptions}
+%%            {partial_download, PartialDownloadOptions} |
+%%            {proxy, ProxyUrl} |
+%%            {proxy_ssl_options, SslOptions} |
+%%            {pool, LhttcPool}
 %%   Milliseconds = integer()
 %%   ConnectOptions = term()
 %%   WindowSize = integer() | infinity
 %%   PartialDownloadOptions = [PartialDownloadOption]
 %%   PartialDowloadOption = {window_size, WindowSize} |
 %%                          {part_size, PartSize}
+%%   ProxyUrl = string()
+%%   SslOptions = [any()]
+%%   LhttcPool = pid() | atom()
 %%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}} |
 %%            {ok, UploadState} | {error, Reason}
@@ -163,7 +170,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling <pre>
-%% {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
+%% #lhttpc_url{host = Host, port = Port, path = Path, is_ssl = Ssl} = lhttpc_lib:parse_url(URL),
 %% request(Host, Port, Path, Ssl, Method, Hdrs, Body, Timeout, Options).
 %% </pre>
 %%
@@ -174,8 +181,22 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 -spec request(string(), string() | atom(), headers(), iolist(),
         pos_integer() | infinity, [option()]) -> result().
 request(URL, Method, Hdrs, Body, Timeout, Options) ->
-    {Host, Port, Path, Ssl} = lhttpc_lib:parse_url(URL),
-    request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options).
+    #lhttpc_url{
+         host = Host,
+         port = Port,
+         path = Path,
+         is_ssl = Ssl,
+         user = User,
+         password = Passwd
+        } = lhttpc_lib:parse_url(URL),
+    Headers = case User of
+        "" ->
+            Hdrs;
+        _ ->
+            Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
+            lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
+    end,
+    request(Host, Port, Ssl, Path, Method, Headers, Body, Timeout, Options).
 
 %% @spec (Host, Port, Ssl, Path, Method, Hdrs, RequestBody, Timeout, Options) ->
 %%                                                                        Result
@@ -194,12 +215,18 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%            {connect_options, [ConnectOptions]} |
 %%            {send_retry, integer()} |
 %%            {partial_upload, WindowSize} |
-%%            {partial_download, PartialDownloadOptions}
+%%            {partial_download, PartialDownloadOptions} |
+%%            {proxy, ProxyUrl} |
+%%            {proxy_ssl_options, SslOptions} |
+%%            {pool, LhttcPool}
 %%   Milliseconds = integer()
 %%   WindowSize = integer()
 %%   PartialDownloadOptions = [PartialDownloadOption]
 %%   PartialDowloadOption = {window_size, WindowSize} |
 %%                          {part_size, PartSize}
+%%   ProxyUrl = string()
+%%   SslOptions = [any()]
+%%   LhttcPool = pid() | atom()
 %%   PartSize = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%          | {error, Reason}
@@ -306,6 +333,15 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% `undefined'. The functions {@link get_body_part/1} and
 %% {@link get_body_part/2} can be used to read body parts in the calling
 %% process.
+%%
+%% `{proxy, ProxyUrl}' if this option is specified, a proxy server is used as
+%% an intermediary for all communication with the destination server. The link
+%% to the proxy server is established with the HTTP CONNECT method (RFC2817).
+%% Example value: {proxy, "http://john:doe@myproxy.com:3128"}
+%%
+%% `{proxy_ssl_options, SslOptions}' this is a list of SSL options to use for
+%% the SSL session created after the proxy connection is established. For a
+%% list of all available options, please check OTP's ssl module manpage.
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
     headers(), iolist(), pos_integer(), [option()]) -> result().
@@ -544,6 +580,15 @@ verify_options([{partial_download, DownloadOptions} | Options], Errors)
     end;
 verify_options([{connect_options, List} | Options], Errors)
         when is_list(List) ->
+    verify_options(Options, Errors);
+verify_options([{proxy, List} | Options], Errors)
+        when is_list(List) ->
+    verify_options(Options, Errors);
+verify_options([{proxy_ssl_options, List} | Options], Errors)
+        when is_list(List) ->
+    verify_options(Options, Errors);
+verify_options([{pool, PidOrName} | Options], Errors)
+        when is_pid(PidOrName); is_atom(PidOrName) ->
     verify_options(Options, Errors);
 verify_options([Option | Options], Errors) ->
     verify_options(Options, [Option | Errors]);

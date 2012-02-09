@@ -51,7 +51,7 @@ start_link() ->
 %% @hidden
 -spec init(any()) -> {ok, {{atom(), integer(), integer()}, [child()]}}.
 init(_) ->
-    LHTTPCManager = {lhttpc_manager, {lhttpc_manager, start_link, []},
+    LHTTPCManager = {lhttpc_manager, {lhttpc_manager, start_link, [[{name, lhttpc_manager}]]},
         permanent, 10000, worker, [lhttpc_manager]
     },
     {ok, {{one_for_one, 10, 1}, [LHTTPCManager]}}.
