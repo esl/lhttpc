@@ -24,8 +24,23 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
--type header() :: {string() | atom(), string()}.
--type headers() :: [header()].
+-type header() :: 'Cache-Control' | 'Connection' | 'Date' | 'Pragma'
+  | 'Transfer-Encoding' | 'Upgrade' | 'Via' | 'Accept' | 'Accept-Charset'
+  | 'Accept-Encoding' | 'Accept-Language' | 'Authorization' | 'From' | 'Host'
+  | 'If-Modified-Since' | 'If-Match' | 'If-None-Match' | 'If-Range'
+  | 'If-Unmodified-Since' | 'Max-Forwards' | 'Proxy-Authorization' | 'Range'
+  | 'Referer' | 'User-Agent' | 'Age' | 'Location' | 'Proxy-Authenticate'
+  | 'Public' | 'Retry-After' | 'Server' | 'Vary' | 'Warning'
+  | 'Www-Authenticate' | 'Allow' | 'Content-Base' | 'Content-Encoding'
+  | 'Content-Language' | 'Content-Length' | 'Content-Location'
+  | 'Content-Md5' | 'Content-Range' | 'Content-Type' | 'Etag'
+  | 'Expires' | 'Last-Modified' | 'Accept-Ranges' | 'Set-Cookie'
+  | 'Set-Cookie2' | 'X-Forwarded-For' | 'Cookie' | 'Keep-Alive'
+  | 'Proxy-Connection' | binary().
+-type headers() :: [{header(), iodata()}].
+
+%-type header() :: {string() | atom(), string()}.
+%-type headers() :: [header()].
 
 -type socket() :: _.
 
