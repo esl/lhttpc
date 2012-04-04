@@ -11,6 +11,13 @@ Version ?:
       after completing requests which came from the lhttpc_client process.
       These are now avoided.
 * Add rebar support (thanks to Benoit Chesneau)
+* Add support for HTTP basic auth (Filipe Manana)
+* Add support for IPv6 (Filipe Manana)
+* Several URL parsing fixes (Filipe Manana)
+* Add support for proxies via HTTP CONNECT method (Filipe Manana)
+* Add connection limit to the connection pool (Filipe Manana)
+* Add suport for using multiple connection pools - different requests can now
+  use different connection pools (Filipe Manana)
 
 Version 1.2.5:
 * Fix for decoding chunked HTTP responses with extraneous whitespace
