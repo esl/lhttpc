@@ -352,16 +352,11 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     receive
         {response, Pid, R} ->
             R;
-        {exit, Pid, Reason} ->
-            % We would rather want to exit here, instead of letting the
-            % linked client send us an exit signal, since this can be
-            % caught by the caller.
-            exit(Reason);
         {'EXIT', Pid, Reason} ->
-            % This could happen if the process we're running in taps exits
+            % This could happen if the process we're running in traps exits
             % and the client process exits due to some exit signal being
             % sent to it. Very unlikely though
-            exit(Reason)
+            {error, Reason}
     after Timeout ->
             kill_client(Pid)
     end.
@@ -415,10 +410,8 @@ send_body_part({Pid, 0}, IoList, Timeout) when is_pid(Pid) ->
             send_body_part({Pid, 1}, IoList, Timeout);
         {response, Pid, R} ->
             R;
-        {exit, Pid, Reason} ->
-            exit(Reason);
         {'EXIT', Pid, Reason} ->
-            exit(Reason)
+            {error, Reason}
     after Timeout ->
         kill_client(Pid)
     end;
@@ -430,10 +423,8 @@ send_body_part({Pid, Window}, IoList, _Timeout) when Window > 0, is_pid(Pid) ->
             {ok, {Pid, Window}};
         {response, Pid, R} ->
             R;
-        {exit, Pid, Reason} ->
-            exit(Reason);
         {'EXIT', Pid, Reason} ->
-            exit(Reason)
+            {error, Reason}
     after 0 ->
         {ok, {Pid, lhttpc_lib:dec(Window)}}
     end.
@@ -533,10 +524,8 @@ read_response(Pid, Timeout) ->
             read_response(Pid, Timeout);
         {response, Pid, R} ->
             R;
-        {exit, Pid, Reason} ->
-            exit(Reason);
         {'EXIT', Pid, Reason} ->
-            exit(Reason)
+            {error, Reason}
     after Timeout ->
         kill_client(Pid)
     end.
