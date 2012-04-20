@@ -552,7 +552,7 @@ partial_upload_chunked_no_trailer() ->
         lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
 
 partial_download_illegal_option() ->
-    ?assertError({bad_options, [{partial_download, [{foo, bar}]}]},
+    ?assertError({bad_option, {partial_download, {foo, bar}}},
         lhttpc:request("http://localhost/", get, [], <<>>, 1000,
             [{partial_download, [{foo, bar}]}])).
 
@@ -729,9 +729,12 @@ connection_count() ->
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)).
 
 invalid_options() ->
-    ?assertError({bad_options, [{foo, bar}, bad_option]},
+    ?assertError({bad_option, bad_option},
         lhttpc:request("http://localhost/", get, [], <<>>, 1000,
-            [bad_option, {foo, bar}])).
+            [bad_option, {foo, bar}])),
+    ?assertError({bad_option, {foo, bar}},
+        lhttpc:request("http://localhost/", get, [], <<>>, 1000,
+            [{foo, bar}, bad_option])).
 
 %%% Helpers functions
 
