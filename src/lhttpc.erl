@@ -547,10 +547,8 @@ kill_client(Pid) ->
         {response, Pid, R} ->
             erlang:demonitor(Monitor, [flush]),
             R;
-        {'DOWN', _, process, Pid, timeout} ->
-            {error, timeout};
         {'DOWN', _, process, Pid, Reason}  ->
-            erlang:error(Reason)
+            {error, Reason}
     end.
 
 -spec verify_options(options()) -> ok.
