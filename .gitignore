@@ -13,3 +13,5 @@ test/*.log
 
 *.swp
 *.swo
+
+.DS_Store
