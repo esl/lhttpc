@@ -36,11 +36,9 @@
   | 'Content-Md5' | 'Content-Range' | 'Content-Type' | 'Etag'
   | 'Expires' | 'Last-Modified' | 'Accept-Ranges' | 'Set-Cookie'
   | 'Set-Cookie2' | 'X-Forwarded-For' | 'Cookie' | 'Keep-Alive'
-  | 'Proxy-Connection' | binary().
--type headers() :: [{header(), iodata()}].
+  | 'Proxy-Connection' | binary() | string().
 
-%-type header() :: {string() | atom(), string()}.
-%-type headers() :: [header()].
+-type headers() :: [{header(), iodata()}].
 
 -type socket() :: _.
 

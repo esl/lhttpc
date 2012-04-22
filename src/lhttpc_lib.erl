@@ -46,14 +46,14 @@
 
 %% @spec header_value(Header, Headers) -> undefined | term()
 %% Header = string()
-%% Headers = [{string(), term()}]
+%% Headers = [{header(), term()}]
 %% Value = term()
 %% @doc
 %% Returns the value associated with the `Header' in `Headers'.
 %% `Header' must be a lowercase string, since every header is mangled to
 %% check the match.
 %% @end
--spec header_value(string(), [{string(), Value}]) -> undefined | Value.
+-spec header_value(string(), [{header(), Value}]) -> undefined | Value.
 header_value(Hdr, Hdrs) ->
     header_value(Hdr, Hdrs, undefined).
 
@@ -67,7 +67,7 @@ header_value(Hdr, Hdrs) ->
 %% `Header' must be a lowercase string, since every header is mangled to
 %% check the match.  If no match is found, `Default' is returned.
 %% @end
--spec header_value(string(), [{string(), Value}], Default) ->
+-spec header_value(string(), [{header(), Value}], Default) ->
     Default | Value.
 header_value(Hdr, [{Hdr, Value} | _], _) ->
     Value;
