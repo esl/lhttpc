@@ -24,7 +24,7 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
-%%% @author Oscar Hellström <oscar@hellstrom.st>
+%%% @author Oscar Hellstrï¿½m <oscar@hellstrom.st>
 %%% @doc Main interface to the lightweight http client.
 %%% See {@link request/4}, {@link request/5} and {@link request/6} functions.
 -module(lhttpc).
@@ -173,7 +173,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%            {ok, UploadState} | {error, Reason}
 %%   StatusCode = integer()
 %%   ReasonPhrase = string()
-%%   ResponseBody = binary()
+%%   ResponseBody = binary() | pid() | undefined
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling <pre>
