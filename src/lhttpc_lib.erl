@@ -46,14 +46,14 @@
 
 %% @spec header_value(Header, Headers) -> undefined | term()
 %% Header = string()
-%% Headers = [{string(), term()}]
+%% Headers = [{header(), term()}]
 %% Value = term()
 %% @doc
 %% Returns the value associated with the `Header' in `Headers'.
 %% `Header' must be a lowercase string, since every header is mangled to
 %% check the match.
 %% @end
--spec header_value(string(), [{string(), Value}]) -> undefined | Value.
+-spec header_value(string(), [{header(), Value}]) -> undefined | Value.
 header_value(Hdr, Hdrs) ->
     header_value(Hdr, Hdrs, undefined).
 
@@ -67,10 +67,14 @@ header_value(Hdr, Hdrs) ->
 %% `Header' must be a lowercase string, since every header is mangled to
 %% check the match.  If no match is found, `Default' is returned.
 %% @end
--spec header_value(string(), [{string(), Value}], Default) ->
+-spec header_value(string(), [{header(), Value}], Default) ->
     Default | Value.
 header_value(Hdr, [{Hdr, Value} | _], _) ->
     Value;
+header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_atom(ThisHdr) ->
+    header_value(Hdr, [{atom_to_list(ThisHdr), Value}| Hdrs], Default);
+header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_binary(ThisHdr) ->
+    header_value(Hdr, [{binary_to_list(ThisHdr), Value}| Hdrs], Default);
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) ->
     case string:equal(string:to_lower(ThisHdr), Hdr) of
         true  -> Value;
@@ -89,7 +93,7 @@ header_value(_, [], Default) ->
 -spec maybe_atom_to_list(atom() | list()) -> list().
 maybe_atom_to_list(Atom) when is_atom(Atom) ->
     atom_to_list(Atom);
-maybe_atom_to_list(List) when is_list(List) ->
+maybe_atom_to_list(List) ->
     List.
 
 %% @spec (URL) -> #lhttpc_url{}
@@ -208,9 +212,35 @@ normalize_method(Method) when is_atom(Method) ->
 normalize_method(Method) ->
     Method.
 
+%% @spec normalize_headers(RawHeaders) -> Headers
+%%   RawHeaders = [{atom() | binary() | string(), binary() | string()}]
+%%   Headers = headers()
+%% @doc
+%% Turns the headers into binaries suitable for inclusion in a HTTP request
+%% line.
+%% @end
+-spec normalize_headers([{atom() | binary() | string(), binary() | string()}]) ->
+    headers().
+normalize_headers(Headers) ->
+    normalize_headers(Headers, []).
+
+normalize_headers([{Header, Value} | T], Acc) when is_list(Header) ->
+    NormalizedHeader = try list_to_existing_atom(Header)
+    catch
+        error:badarg -> Header
+    end,
+    NewAcc = [{NormalizedHeader, Value} | Acc],
+    normalize_headers(T, NewAcc);
+normalize_headers([{Header, Value} | T], Acc) ->
+    NewAcc = [{Header, Value} | Acc],
+    normalize_headers(T, NewAcc);
+normalize_headers([], Acc) ->
+    Acc.
+
 -spec format_hdrs(headers()) -> iolist().
 format_hdrs(Headers) ->
-    format_hdrs(Headers, []).
+    NormalizedHeaders = normalize_headers(Headers),
+    format_hdrs(NormalizedHeaders, []).
 
 format_hdrs([{Hdr, Value} | T], Acc) ->
     NewAcc = [
