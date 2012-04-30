@@ -27,7 +27,7 @@
 %%% @author Oscar Hellström <oscar@hellstrom.st>
 -module(lhttpc_lib_tests).
 
--include("../src/lhttpc_types.hrl").
+-include("../include/lhttpc_types.hrl").
 -include("../include/lhttpc.hrl").
 -include_lib("eunit/include/eunit.hrl").
 

@@ -118,6 +118,8 @@ tcp_test_() ->
                 ?_test(missing_basic_auth()),
                 ?_test(wrong_basic_auth()),
                 ?_test(get_with_mandatory_hdrs()),
+                ?_test(get_with_mandatory_hdrs_by_atoms()),
+                ?_test(get_with_mandatory_hdrs_by_binaries()),
                 ?_test(get_with_connect_options()),
                 ?_test(no_content_length()),
                 ?_test(no_content_length_1_0()),
@@ -231,6 +233,30 @@ get_with_mandatory_hdrs() ->
     Hdrs = [
         {"content-length", integer_to_list(size(Body))},
         {"host", "localhost"}
+    ],
+    {ok, Response} = lhttpc:request(URL, "POST", Hdrs, Body, 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+get_with_mandatory_hdrs_by_atoms() ->
+    Port = start(gen_tcp, [fun simple_response/5]),
+    URL = url(Port, "/host"),
+    Body = <<?DEFAULT_STRING>>,
+    Hdrs = [
+        {'Content-Length', integer_to_list(size(Body))},
+        {'Host', "localhost"}
+    ],
+    {ok, Response} = lhttpc:request(URL, "POST", Hdrs, Body, 1000),
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+get_with_mandatory_hdrs_by_binaries() ->
+    Port = start(gen_tcp, [fun simple_response/5]),
+    URL = url(Port, "/host"),
+    Body = <<?DEFAULT_STRING>>,
+    Hdrs = [
+        {<<"Content-Length">>, integer_to_list(size(Body))},
+        {<<"Host">>, "localhost"}
     ],
     {ok, Response} = lhttpc:request(URL, "POST", Hdrs, Body, 1000),
     ?assertEqual({200, "OK"}, status(Response)),
@@ -735,6 +761,7 @@ invalid_options() ->
     ?assertError({bad_option, {foo, bar}},
         lhttpc:request("http://localhost/", get, [], <<>>, 1000,
             [{foo, bar}, bad_option])).
+
 
 %%% Helpers functions
 
