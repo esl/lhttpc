@@ -173,7 +173,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%            {ok, UploadState} | {error, Reason}
 %%   StatusCode = integer()
 %%   ReasonPhrase = string()
-%%   ResponseBody = binary()
+%%   ResponseBody = binary() | pid() | undefined
 %%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling <pre>
