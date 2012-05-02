@@ -70,15 +70,22 @@ header_value(Hdr, Hdrs) ->
 -spec header_value(string(), [{header(), Value}], Default) ->
     Default | Value.
 header_value(Hdr, [{Hdr, Value} | _], _) ->
-    Value;
+    case is_list(Value) of
+        true -> string:strip(Value);
+        false -> Value
+    end;
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_atom(ThisHdr) ->
     header_value(Hdr, [{atom_to_list(ThisHdr), Value}| Hdrs], Default);
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_binary(ThisHdr) ->
     header_value(Hdr, [{binary_to_list(ThisHdr), Value}| Hdrs], Default);
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) ->
     case string:equal(string:to_lower(ThisHdr), Hdr) of
-        true  -> Value;
-        false -> header_value(Hdr, Hdrs, Default)
+        true  -> case is_list(Value) of
+                     true -> string:strip(Value);
+                     false -> Value
+                 end;
+        false ->
+            header_value(Hdr, Hdrs, Default)
     end;
 header_value(_, [], Default) ->
     Default.
