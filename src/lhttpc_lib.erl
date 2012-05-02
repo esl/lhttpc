@@ -69,13 +69,18 @@ header_value(Hdr, Hdrs) ->
 %% @end
 -spec header_value(string(), [{string(), Value}], Default) ->
     Default | Value.
-header_value(Hdr, [{Hdr, Value} | _], _) when is_list(Value) ->
-    string:strip(Value);
 header_value(Hdr, [{Hdr, Value} | _], _) ->
-    Value;
+    case is_list(Value) of
+        true -> string:strip(Value);
+        false -> value
+    end;
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) ->
     case string:equal(string:to_lower(ThisHdr), Hdr) of
-        true  -> Value;
+        true  ->
+            case is_list(Value) of
+                true -> string:strip(Value);
+                false -> Value
+            end;
         false -> header_value(Hdr, Hdrs, Default)
     end;
 header_value(_, [], Default) ->
