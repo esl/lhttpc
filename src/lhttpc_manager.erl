@@ -41,6 +41,7 @@
         connection_count/2,
         update_connection_timeout/2,
         dump_settings/1,
+        list_pools/0,
         set_max_pool_size/2
     ]).
 -export([
@@ -74,6 +75,19 @@ dump_settings(PidOrName) ->
 -spec set_max_pool_size(pid() | atom(), non_neg_integer()) -> ok.
 set_max_pool_size(PidOrName, Size) when is_integer(Size), Size > 0 ->
     gen_server:cast(PidOrName, {set_max_pool_size, Size}).
+
+-spec list_pools() -> term().
+list_pools() ->
+    Children = supervisor:which_children(lhttpc_sup),
+    lists:foldl(fun(In, Acc) ->
+                        case In of
+                            {N, P, _, [lhttpc_manager]} ->
+                                [{N, dump_settings(P)} | Acc];
+                            _ ->
+                                Acc
+                        end
+                end, [], Children).
+
 
 
 %% @spec (PoolPidOrName) -> Count
