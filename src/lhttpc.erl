@@ -123,13 +123,9 @@ add_pool(Name, ConnTimeout) when is_atom(Name),
              application:get_env(lhttpc, pool_size)).
 
 %% Add a new httpc_manager to the supervisor tree
--spec add_pool(atom(), non_neg_integer(), non_neg_integer()) ->
+-spec add_pool(atom(), non_neg_integer(), non_neg_integer() | atom()) ->
           {ok, pid()} | {error, term()}.
-add_pool(Name, ConnTimeout, PoolSize) when is_atom(Name),
-                                      is_integer(ConnTimeout),
-                                      ConnTimeout > 0,
-                                      is_integer(PoolSize),
-                                      PoolSize > 0 ->
+add_pool(Name, ConnTimeout, PoolSize) ->
     ChildSpec = {Name,
                  {lhttpc_manager, start_link, [[{name, Name},
                                                 {connection_timeout, ConnTimeout},
