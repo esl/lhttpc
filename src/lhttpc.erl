@@ -32,6 +32,10 @@
 
 -export([start/0, stop/0, request/4, request/5, request/6, request/9]).
 -export([start/2, stop/1]).
+-export([add_pool/1,
+         add_pool/2,
+         add_pool/3,
+         delete_pool/1]).
 -export([
         send_body_part/2,
         send_body_part/3, 
@@ -93,6 +97,70 @@ start() ->
 -spec stop() -> ok | {error, any()}.
 stop() ->
     application:stop(lhttpc).
+
+%% @spec (Name) -> {ok, Pid} | {error, Reason} 
+%%   Name = atom()
+%%   Pid = pid()
+%%   Reason = term()
+%% @doc
+%% Add a new named httpc_manager pool to the supervisor tree
+%% @end
+-spec add_pool(atom()) ->
+          {ok, pid()} | {error, term()}.
+add_pool(Name) when is_atom(Name) ->
+    add_pool(Name,
+             application:get_env(lhttpc, connection_timeout),
+             application:get_env(lhttpc, pool_size)).
+
+%% Add a new httpc_manager to the supervisor tree
+-spec add_pool(atom(), non_neg_integer()) ->
+          {ok, pid()} | {error, term()}.
+add_pool(Name, ConnTimeout) when is_atom(Name),
+                                 is_integer(ConnTimeout),
+                                 ConnTimeout > 0 ->
+    add_pool(Name,
+             ConnTimeout,
+             application:get_env(lhttpc, pool_size)).
+
+%% Add a new httpc_manager to the supervisor tree
+-spec add_pool(atom(), non_neg_integer(), non_neg_integer()) ->
+          {ok, pid()} | {error, term()}.
+add_pool(Name, ConnTimeout, PoolSize) when is_atom(Name),
+                                      is_integer(ConnTimeout),
+                                      ConnTimeout > 0,
+                                      is_integer(PoolSize),
+                                      PoolSize > 0 ->
+    ChildSpec = {Name,
+                 {lhttpc_manager, start_link, [[{name, Name},
+                                                {connection_timeout, ConnTimeout},
+                                                {pool_size, PoolSize}]]},
+                 permanent, 10000, worker, [lhttpc_manager]},
+    case supervisor:start_child(lhttpc_sup, ChildSpec) of
+        {error, {already_started, Pid}} ->
+            {ok, Pid};
+        {error, Error} ->
+            {error, Error};
+        {ok, Pid} ->
+            {ok, Pid};
+        {ok, Pid, _Info} ->
+            {ok, Pid}
+    end.
+
+%% Delete a pool
+-spec delete_pool(atom() | pid()) -> ok.
+delete_pool(PoolPid) when is_pid(PoolPid) ->
+    {registered_name, Name} = erlang:process_info(PoolPid, registered_name),
+    delete_pool(Name);
+delete_pool(PoolName) when is_atom(PoolName) ->
+    case supervisor:delete_child(lhttpc_sup, PoolName) of
+        ok -> ok;
+        {error, running} ->
+            supervisor:terminate_child(lhttpc_sup, PoolName),
+            delete_pool(PoolName);
+        {error, not_found} ->
+            ok
+    end.
+
 
 %% @spec (URL, Method, Hdrs, Timeout) -> Result
 %%   URL = string()
