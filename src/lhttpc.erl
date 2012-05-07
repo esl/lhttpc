@@ -108,9 +108,11 @@ stop() ->
 -spec add_pool(atom()) ->
           {ok, pid()} | {error, term()}.
 add_pool(Name) when is_atom(Name) ->
+    {ok, ConnTimeout} = application:get_env(lhttpc, connection_timeout),
+    {ok, PoolSize} = application:get_env(lhttpc, pool_size),
     add_pool(Name,
-             application:get_env(lhttpc, connection_timeout),
-             application:get_env(lhttpc, pool_size)).
+             ConnTimeout,
+             PoolSize).
 
 %% Add a new httpc_manager to the supervisor tree
 -spec add_pool(atom(), non_neg_integer()) ->
@@ -118,9 +120,10 @@ add_pool(Name) when is_atom(Name) ->
 add_pool(Name, ConnTimeout) when is_atom(Name),
                                  is_integer(ConnTimeout),
                                  ConnTimeout > 0 ->
+    {ok, PoolSize} = application:get_env(lhttpc, pool_size),
     add_pool(Name,
              ConnTimeout,
-             application:get_env(lhttpc, pool_size)).
+             PoolSize).
 
 %% Add a new httpc_manager to the supervisor tree
 -spec add_pool(atom(), non_neg_integer(), non_neg_integer() | atom()) ->
@@ -640,6 +643,16 @@ verify_options([{proxy_ssl_options, List} | Options]) when is_list(List) ->
     verify_options(Options);
 verify_options([{pool, PidOrName} | Options])
         when is_pid(PidOrName); is_atom(PidOrName) ->
+    verify_options(Options);
+verify_options([{pool_ensure, Bool} | Options])
+        when is_boolean(Bool) ->
+    verify_options(Options);
+verify_options([{pool_connection_timeout, Size} | Options])
+        when is_integer(Size) ->
+    verify_options(Options);
+verify_options([{pool_max_size, Size} | Options])
+        when is_integer(Size) orelse
+             Size =:= infinity->
     verify_options(Options);
 verify_options([Option | _Rest]) ->
     erlang:error({bad_option, Option});
