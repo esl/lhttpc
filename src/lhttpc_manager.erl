@@ -37,6 +37,7 @@
 -export([
         start_link/0,
         start_link/1,
+        client_count/1,
         connection_count/1,
         connection_count/2,
         update_connection_timeout/2,
@@ -88,7 +89,14 @@ list_pools() ->
                         end
                 end, [], Children).
 
-
+%% @spec (PoolPidOrName) -> Count
+%%    Count = integer()
+%% @doc Returns the total number of active clients maintained by the
+%% specified lhttpc pool (manager).
+%% @end
+-spec client_count(pid() | atom()) -> non_neg_integer().
+client_count(PidOrName) ->
+    gen_server:call(PidOrName, client_count).
 
 %% @spec (PoolPidOrName) -> Count
 %%    Count = integer()
@@ -187,6 +195,8 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
     end;
 handle_call(dump_settings, _, State) ->
     {reply, [{max_pool_size, State#httpc_man.max_pool_size}, {timeout, State#httpc_man.timeout}], State};
+handle_call(client_count, _, State) ->
+    {reply, dict:size(State#httpc_man.clients), State};
 handle_call(connection_count, _, State) ->
     {reply, dict:size(State#httpc_man.sockets), State};
 handle_call({connection_count, Destination}, _, State) ->
