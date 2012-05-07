@@ -119,10 +119,8 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         Hdrs, Host, Port, Body, PartialUpload),
     SocketRequest = {socket, self(), Host, Port, Ssl},
     Pool = proplists:get_value(pool, Options, whereis(lhttpc_manager)),
-    Socket = case gen_server:call(Pool, SocketRequest, infinity) of
-        {ok, S}   -> S; % Re-using HTTP/1.1 connections
-        no_socket -> undefined % Opening a new HTTP/1.1 connection
-    end,
+    %% Get a socket for the pool or exit
+    Socket = ensure_call(Pool, SocketRequest, Options),
     State = #client_state{
         host = Host,
         port = Port,
@@ -170,6 +168,53 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
             {ok, R}
     end,
     {response, self(), Response}.
+
+%% If call contains pool_ensure option, dynamically create the pool with
+%% configured parameters.
+ensure_call(Pool, SocketRequest, Options) ->
+    try gen_server:call(Pool, SocketRequest, infinity) of
+        {ok, S} ->
+            %% Re-using HTTP/1.1 connections
+            S;
+        no_socket ->
+            %% Opening a new HTTP/1.1 connection
+            undefined
+    catch
+        exit:{noproc, {gen_server, call, [Pool, S, T]}} ->
+            case proplists:get_value(pool_ensure, Options, false) of
+                true ->
+                    {ok, DefaultTimeout} = application:get_env(
+                                             lhttpc,
+                                             connection_timeout),
+                    ConnTimeout = proplists:get_value(pool_connection_timeout,
+                                                      Options,
+                                                      DefaultTimeout),
+                    {ok, DefaultMaxPool} = application:get_env(
+                                             lhttpc,
+                                             pool_size),
+                    PoolMaxSize = proplists:get_value(pool_max_size,
+                                                      Options,
+                                                      DefaultMaxPool),
+                    case lhttpc:add_pool(Pool, ConnTimeout, PoolMaxSize) of
+                        {ok, _Pid} ->
+                            ensure_call(Pool, SocketRequest, Options);
+                        _ ->
+                            %% Failed to create pool, exit as expected
+                            exit({error, {noproc, {gen_server,
+                                                   call,
+                                                   [Pool, S, T]}}})
+                    end;
+                false ->
+                    %% No dynamic pool creation, exit as expected
+                    exit({error, {noproc, {gen_server,
+                                           call,
+                                           [Pool, S, T]}}})
+            end;
+        exit:M ->
+            exit(M);
+        error:M ->
+            error(M)
+    end.
 
 send_request(#client_state{attempts = 0}) ->
     % Don't try again if the number of allowed attempts is 0.
