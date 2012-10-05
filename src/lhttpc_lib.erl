@@ -33,6 +33,7 @@
 -module(lhttpc_lib).
 
 -export([parse_url/1,
+         format_url/1,
          format_request/7,
          header_value/2, header_value/3,
          normalize_method/1,
@@ -113,6 +114,51 @@ maybe_atom_to_list(List) ->
     List.
 
 %%------------------------------------------------------------------------------
+%% @spec (#lhttpc_url{}) -> string()
+%% @doc
+%% Format parsed URL to string representation.
+%% @end
+%%------------------------------------------------------------------------------
+format_url(URL) ->
+    #lhttpc_url{
+        host = Host,
+        port = Port,
+        path = Path,
+        user = User,
+        password = Passwd,
+        is_ssl = IsSSL
+    } = URL,
+    U1 = add_scheme("", IsSSL),
+    U2 = add_credentials(U1, User, Passwd),
+    U3 = add_host(U2, Host),
+    U4 = add_port(U3, Port, IsSSL),
+    add_path(U4, Path).
+
+add_scheme(_, true) ->
+    "https://";
+add_scheme(_, false) ->
+    "http://".
+
+add_credentials(Scheme, "", "") ->
+    Scheme;
+add_credentials(Scheme, User, Passwd) ->
+    Scheme ++ User ++ ":" ++ Passwd ++ "@".
+
+add_host(SUP, Host) ->
+    SUP ++ Host.
+
+add_port(SUPH, 80, false) ->
+    SUPH;
+add_port(SUPH, 443, true) ->
+    SUPH;
+add_port(SUPH, Port, _IsSSL) ->
+    SUPH ++ ":" ++ integer_to_list(Port).
+
+add_path(SUPHP, Path) ->
+    SUPHP ++ Path.
+
+
+
 %% @spec (URL) -> #lhttpc_url{}
 %%   URL = string()
 %% @doc
