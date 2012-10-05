@@ -215,7 +215,7 @@ configure_proxy(State, Body, Path, false, ProxyUrl) ->
                   request_headers = Hdrs2,
                   proxy = Proxy,
                   proxy_setup = true},
-                NewPath, Body).
+                Body, NewPath).
 
 
 set_request(State, Body, Path) ->
