@@ -173,7 +173,7 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
 
 configure_proxy(State, Body, Path, _Ssl, undefined) ->
     %% no proxy at all
-    set_request(#client_state{proxy=undefined}, Body, Path);
+    set_request(State#client_state{proxy=undefined}, Body, Path);
 configure_proxy(State, Body, Path, true, ProxyUrl) when is_list(ProxyUrl) ->
     %% connect through ssl/not ssl proxy to ssl host using CONNECT
     Proxy = lhttpc_lib:parse_url(ProxyUrl),
