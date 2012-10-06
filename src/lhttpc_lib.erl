@@ -132,7 +132,7 @@ format_url(URL) ->
     U2 = add_credentials(U1, User, Passwd),
     U3 = add_host(U2, Host),
     U4 = add_port(U3, Port, IsSSL),
-    add_path(U4, Path).
+    lists:flatten(add_path(U4, Path)).
 
 add_scheme(_, true) ->
     "https://";
@@ -142,20 +142,21 @@ add_scheme(_, false) ->
 add_credentials(Scheme, "", "") ->
     Scheme;
 add_credentials(Scheme, User, Passwd) ->
-    Scheme ++ User ++ ":" ++ Passwd ++ "@".
+    [Scheme, User, ":", Passwd, "@"].
 
 add_host(SUP, Host) ->
-    SUP ++ Host.
+    Host2 = maybe_ipv6_enclose(Host),
+    [SUP, Host2].
 
 add_port(SUPH, 80, false) ->
     SUPH;
 add_port(SUPH, 443, true) ->
     SUPH;
 add_port(SUPH, Port, _IsSSL) ->
-    SUPH ++ ":" ++ integer_to_list(Port).
+    [SUPH, ":", integer_to_list(Port)].
 
 add_path(SUPHP, Path) ->
-    SUPHP ++ Path.
+    [SUPHP, Path].
 
 
 
