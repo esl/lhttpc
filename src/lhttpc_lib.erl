@@ -119,6 +119,8 @@ add_scheme(_, false) ->
 
 add_credentials(Scheme, "", "") ->
     Scheme;
+add_credentials(Scheme, User, "") ->
+    [Scheme, User, "@"];
 add_credentials(Scheme, User, Passwd) ->
     [Scheme, User, ":", Passwd, "@"].
 
