@@ -123,6 +123,17 @@ parse_url_test_() ->
                         },
                       lhttpc_lib:parse_url("http://joe:erlang@host:180/foo/bar")),
 
+
+        ?_assertEqual(#lhttpc_url{
+                         host = "host",
+                         port = 180,
+                         path = "/foo/bar",
+                         is_ssl = false,
+                         user = "joe",
+                         password = "erl@ng"
+                        },
+                      lhttpc_lib:parse_url("http://joe:erl%40ng@host:180/foo/bar")),
+
         ?_assertEqual(#lhttpc_url{
                          host = "host",
                          port = 180,
@@ -148,7 +159,7 @@ parse_url_test_() ->
                          port = 180,
                          path = "/foo/bar",
                          is_ssl = false,
-                         user = "joe%3Aarm",
+                         user = "joe:arm",
                          password = "erlang"
                         },
                       lhttpc_lib:parse_url("http://joe%3Aarm:erlang@host:180/foo/bar")),
@@ -158,8 +169,8 @@ parse_url_test_() ->
                          port = 180,
                          path = "/foo/bar",
                          is_ssl = false,
-                         user = "joe%3aarm",
-                         password = "erlang%2Fotp"
+                         user = "joe:arm",
+                         password = "erlang/otp"
                         },
                       lhttpc_lib:parse_url("http://joe%3aarm:erlang%2Fotp@host:180/foo/bar")),
 
