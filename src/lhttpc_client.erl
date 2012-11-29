@@ -391,6 +391,8 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
                 attempts = State#client_state.attempts - 1
             },
             send_request(NewState);
+	{ok, {http_error, _} = Reason} ->
+	    erlang:error(Reason);
         {error, Reason} ->
             erlang:error(Reason)
     end.
