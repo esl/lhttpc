@@ -105,30 +105,26 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     PartialDownload = proplists:is_defined(partial_download, Options),
     PartialDownloadOptions = proplists:get_value(partial_download, Options, []),
     NormalizedMethod = lhttpc_lib:normalize_method(Method),
-    Proxy = case proplists:get_value(proxy, Options) of
-        undefined ->
-            undefined;
-        ProxyUrl when is_list(ProxyUrl), not Ssl ->
-            % The point of HTTP CONNECT proxying is to use TLS tunneled in
-            % a plain HTTP/1.1 connection to the proxy (RFC2817).
-            throw(origin_server_not_https);
-        ProxyUrl when is_list(ProxyUrl) ->
-            lhttpc_lib:parse_url(ProxyUrl)
-    end,
-    {ChunkedUpload, Request} = lhttpc_lib:format_request(Path, NormalizedMethod,
-        Hdrs, Host, Port, Body, PartialUpload),
+
+    %% this can be target host's or proxy's host/port/ssl !?!?
+    %% How do we handle situation like
+    %% > request(host1, proxy1)
+    %% > request(host1, proxy2)
+    %% ???
     SocketRequest = {socket, self(), Host, Port, Ssl},
     Pool = proplists:get_value(pool, Options, whereis(lhttpc_manager)),
     Socket = case gen_server:call(Pool, SocketRequest, infinity) of
         {ok, S}   -> S; % Re-using HTTP/1.1 connections
         no_socket -> undefined % Opening a new HTTP/1.1 connection
     end,
+
+
     State = #client_state{
         host = Host,
         port = Port,
         ssl = Ssl,
         method = NormalizedMethod,
-        request = Request,
+        %% request = Request,
         requester = From,
         request_headers = Hdrs,
         socket = Socket,
@@ -138,17 +134,21 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         attempts = 1 + proplists:get_value(send_retry, Options, 1),
         partial_upload = PartialUpload,
         upload_window = UploadWindowSize,
-        chunked_upload = ChunkedUpload,
+        %% chunked_upload = ChunkedUpload,
         partial_download = PartialDownload,
         download_window = proplists:get_value(window_size,
             PartialDownloadOptions, infinity),
         part_size = proplists:get_value(part_size,
             PartialDownloadOptions, infinity),
-        proxy = Proxy,
-        proxy_setup = (Socket =/= undefined),
+        %% proxy = Proxy,
+        %% proxy_setup = (Socket =/= undefined),
         proxy_ssl_options = proplists:get_value(proxy_ssl_options, Options, [])
     },
-    Response = case send_request(State) of
+
+    State2 = configure_proxy(State, Body, Path, Ssl,
+                             proplists:get_value(proxy, Options)),
+
+    Response = case send_request(State2) of
         {R, undefined} ->
             {ok, R};
         {R, NewSocket} ->
@@ -170,6 +170,65 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
             {ok, R}
     end,
     {response, self(), Response}.
+
+configure_proxy(State, Body, Path, _Ssl, undefined) ->
+    %% no proxy at all
+    set_request(State#client_state{proxy=undefined}, Body, Path);
+configure_proxy(State, Body, Path, true, ProxyUrl) when is_list(ProxyUrl) ->
+    %% connect through ssl/not ssl proxy to ssl host using CONNECT
+    Proxy = lhttpc_lib:parse_url(ProxyUrl),
+    set_request(State#client_state{
+                  proxy = Proxy,
+                  proxy_setup = (State#client_state.socket =/= undefined)},
+                Body, Path);
+configure_proxy(State, Body, Path, false, ProxyUrl) ->
+    %% connect through ssl/not ssl proxy to not ssl host
+    %% just replace Path with full host URL
+    #client_state{request_headers=Hdrs,
+                  host=DestHost,
+                  port=DestPort} = State,
+    Proxy = lhttpc_lib:parse_url(ProxyUrl),
+    #lhttpc_url{
+                 %% host = Host,
+                 %% port = Port,
+                 user = User,
+                 password = Passwd
+                 %% is_ssl = SslProxy
+    } = Proxy,
+    NewPath = lhttpc_lib:format_url(
+                #lhttpc_url{host=DestHost,
+                            port=DestPort,
+                            path=Path,
+                            is_ssl=false}),
+    Hdrs2 = case User of
+                "" ->
+                    Hdrs;
+                User ->
+                    AuthHdr = {"Proxy-Authorization",
+                               "Basic " ++ base64:encode_to_string(User ++ ":" ++ Passwd)},
+                    [AuthHdr | Hdrs]
+            end,
+    set_request(State#client_state{
+                  %% ssl = SslProxy,  % see request_first_destination
+                  %% host = Host,
+                  %% port = Port,
+                  request_headers = Hdrs2,
+                  proxy = Proxy,
+                  proxy_setup = true},
+                Body, NewPath).
+
+
+set_request(State, Body, Path) ->
+    #client_state{partial_upload=PartialUpload,
+                  method=NormalizedMethod,
+                  request_headers=Hdrs,
+                  host=Host,
+                  port=Port} = State,
+    {ChunkedUpload, Request} = lhttpc_lib:format_request(
+                Path, NormalizedMethod, Hdrs, Host, Port, Body, PartialUpload),
+    State#client_state{request=Request,
+                      chunked_upload = ChunkedUpload}.
+
 
 send_request(#client_state{attempts = 0}) ->
     % Don't try again if the number of allowed attempts is 0.
