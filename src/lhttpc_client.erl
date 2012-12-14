@@ -240,6 +240,8 @@ send_request(#client_state{socket = undefined} = State) ->
             throw(connect_timeout);
         {error, timeout} ->
             throw(connect_timeout);
+        {error, {"record overflow", _}} ->
+            throw(ssl_error);
         {error, Reason} ->
             erlang:error(Reason)
     end;
