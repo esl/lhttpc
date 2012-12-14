@@ -232,7 +232,7 @@ send_request(#client_state{socket = undefined} = State) ->
             ConnectOptions0
     end,
     SocketOptions = [binary, {packet, http}, {active, false} | ConnectOptions],
-    case lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
+    try lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
         {ok, Socket} ->
             send_request(State#client_state{socket = Socket});
         {error, etimedout} ->
@@ -244,6 +244,17 @@ send_request(#client_state{socket = undefined} = State) ->
             throw(ssl_error);
         {error, Reason} ->
             erlang:error(Reason)
+    catch
+        exit:{{{badmatch, {error, {asn1, _}}}, _}, _} ->
+            throw(ssl_decode_error);
+        Type:Error ->
+            case Type of
+                exit ->
+                    error_logger:error_msg("Unexpected Exit: ~p", [Error]),
+                    erlang:error(Error, erlang:get_stacktrace());
+                Type ->
+                    erlang:Type(Error, erlang:get_stacktrace())
+            end
     end;
 send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false} = State) ->
     #lhttpc_url{
