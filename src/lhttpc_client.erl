@@ -243,7 +243,6 @@ send_request(#client_state{socket = undefined} = State) ->
         {error, "record overflow"} ->
             throw(ssl_error);
         {error, Reason} ->
-            slog:warning("~p",[Reason]),
             erlang:error(Reason)
     catch
         exit:{{{badmatch, {error, {asn1, _}}}, _}, _} ->
