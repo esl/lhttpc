@@ -418,7 +418,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% list of all available options, please check OTP's ssl module manpage.
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
-    headers(), iolist(), pos_integer(), [option()]) -> result().
+    headers(), iolist(), pos_integer() | infinity, [option()]) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
     Args = [self(), Host, Port, Ssl, Path, Method, Hdrs, Body, Options],
