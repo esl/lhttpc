@@ -191,7 +191,7 @@ request(URL, Method, Hdrs, Timeout) ->
 %%   Hdrs = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
-%%   RequestBody = iolist()
+%%   RequestBody = iodata()
 %%   Timeout = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
@@ -204,7 +204,7 @@ request(URL, Method, Hdrs, Timeout) ->
 %% `request(URL, Method, Hdrs, Body, Timeout, [])'.
 %% @end
 %% @see request/9
--spec request(string(), string() | atom(), headers(), iolist(),
+-spec request(string(), string() | atom(), headers(), iodata(),
         pos_integer() | infinity) -> result().
 request(URL, Method, Hdrs, Body, Timeout) ->
     request(URL, Method, Hdrs, Body, Timeout, []).
@@ -215,7 +215,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Hdrs = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
-%%   RequestBody = iolist()
+%%   RequestBody = iodata()
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
@@ -252,7 +252,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% `scheme://host[:port][/path]'.
 %% @end
 %% @see request/9
--spec request(string(), string() | atom(), headers(), iolist(),
+-spec request(string(), string() | atom(), headers(), iodata(),
         pos_integer() | infinity, [option()]) -> result().
 request(URL, Method, Hdrs, Body, Timeout, Options) ->
     #lhttpc_url{
@@ -282,7 +282,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%   Hdrs = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
-%%   RequestBody = iolist()
+%%   RequestBody = iodata()
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
@@ -418,7 +418,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% list of all available options, please check OTP's ssl module manpage.
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
-    headers(), iolist(), pos_integer(), [option()]) -> result().
+    headers(), iodata(), pos_integer() | infinity, [option()]) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
     Args = [self(), Host, Port, Ssl, Path, Method, Hdrs, Body, Options],
@@ -436,7 +436,7 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     end.
 
 %% @spec (UploadState :: UploadState, BodyPart :: BodyPart) -> Result
-%%   BodyPart = iolist() | binary()
+%%   BodyPart = iodata() | binary()
 %%   Timeout = integer() | infinity
 %%   Result = {error, Reason} | UploadState
 %%   Reason = connection_closed | connect_timeout | timeout
@@ -447,12 +447,12 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
 %% Would be the same as calling
 %% `send_body_part(UploadState, BodyPart, infinity)'.
 %% @end
--spec send_body_part(upload_state(), iolist() | 'http_eob') -> result().
+-spec send_body_part(upload_state(), iodata() | 'http_eob') -> result().
 send_body_part({Pid, Window}, IoList) ->
     send_body_part({Pid, Window}, IoList, infinity).
 
 %% @spec (UploadState :: UploadState, BodyPart :: BodyPart, Timeout) -> Result
-%%   BodyPart = iolist() | binary()
+%%   BodyPart = iodata() | binary()
 %%   Timeout = integer() | infinity
 %%   Result = {error, Reason} | UploadState
 %%   Reason = connection_closed | connect_timeout | timeout
@@ -472,7 +472,7 @@ send_body_part({Pid, Window}, IoList) ->
 %% there is no response within `Timeout' milliseconds, the request is
 %% canceled and `{error, timeout}' is returned.
 %% @end
--spec send_body_part(upload_state(), iolist() | 'http_eob', timeout()) -> result().
+-spec send_body_part(upload_state(), iodata() | 'http_eob', timeout()) -> result().
 send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
     read_response(Pid, Timeout);
