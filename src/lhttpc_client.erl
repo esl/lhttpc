@@ -250,8 +250,9 @@ send_request(#client_state{socket = undefined} = State) ->
         Type:Error ->
             case Type of
                 exit ->
-                    error_logger:error_msg("Unexpected Exit: ~p", [Error]),
-                    erlang:error(Error, erlang:get_stacktrace());
+                    Stack = erlang:get_stacktrace(),
+                    error_logger:error_msg("Unexpected Exit: ~p ~p", [Error, Stack]),
+                    erlang:error(Error, Stack);
                 Type ->
                     erlang:Type(Error, erlang:get_stacktrace())
             end
