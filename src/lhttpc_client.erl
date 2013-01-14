@@ -119,10 +119,8 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         Hdrs, Host, Port, Body, PartialUpload),
     SocketRequest = {socket, self(), Host, Port, Ssl},
     Pool = proplists:get_value(pool, Options, whereis(lhttpc_manager)),
-    Socket = case gen_server:call(Pool, SocketRequest, infinity) of
-        {ok, S}   -> S; % Re-using HTTP/1.1 connections
-        no_socket -> undefined % Opening a new HTTP/1.1 connection
-    end,
+    %% Get a socket for the pool or exit
+    Socket = ensure_call(Pool, SocketRequest, Options),
     State = #client_state{
         host = Host,
         port = Port,
@@ -171,6 +169,45 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     end,
     {response, self(), Response}.
 
+%% If call contains pool_ensure option, dynamically create the pool with
+%% configured parameters.
+ensure_call(Pool, SocketRequest, Options) ->
+    try gen_server:call(Pool, SocketRequest, infinity) of
+        {ok, S} ->
+            %% Re-using HTTP/1.1 connections
+            S;
+        no_socket ->
+            %% Opening a new HTTP/1.1 connection
+            undefined
+    catch
+        exit:{noproc, Reason} ->
+            case proplists:get_value(pool_ensure, Options, false) of
+                true ->
+                    {ok, DefaultTimeout} = application:get_env(
+                                             lhttpc,
+                                             connection_timeout),
+                    ConnTimeout = proplists:get_value(pool_connection_timeout,
+                                                      Options,
+                                                      DefaultTimeout),
+                    {ok, DefaultMaxPool} = application:get_env(
+                                             lhttpc,
+                                             pool_size),
+                    PoolMaxSize = proplists:get_value(pool_max_size,
+                                                      Options,
+                                                      DefaultMaxPool),
+                    case lhttpc:add_pool(Pool, ConnTimeout, PoolMaxSize) of
+                        {ok, _Pid} ->
+                            ensure_call(Pool, SocketRequest, Options);
+                        _ ->
+                            %% Failed to create pool, exit as expected
+                            exit({noproc, Reason})
+                    end;
+                false ->
+                    %% No dynamic pool creation, exit as expected
+                    exit({noproc, Reason})
+            end
+    end.
+
 send_request(#client_state{attempts = 0}) ->
     % Don't try again if the number of allowed attempts is 0.
     throw(connection_closed);
@@ -187,7 +224,7 @@ send_request(#client_state{socket = undefined} = State) ->
             ConnectOptions0
     end,
     SocketOptions = [binary, {packet, http}, {active, false} | ConnectOptions],
-    case lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
+    try lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
         {ok, Socket} ->
             send_request(State#client_state{socket = Socket});
         {error, etimedout} ->
@@ -195,8 +232,16 @@ send_request(#client_state{socket = undefined} = State) ->
             throw(connect_timeout);
         {error, timeout} ->
             throw(connect_timeout);
+        {error, "record overflow"} ->
+            throw(ssl_error);
         {error, Reason} ->
             erlang:error(Reason)
+    catch
+        exit:{{{badmatch, {error, {asn1, _}}}, _}, _} ->
+            throw(ssl_decode_error);
+        Type:Error ->
+                    error_logger:error_msg("Socket connection error: ~p ~p, ~p",
+                                           [Type, Error, erlang:get_stacktrace()])
     end;
 send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false} = State) ->
     #lhttpc_url{
