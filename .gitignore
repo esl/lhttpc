@@ -1,4 +1,4 @@
-ebin/
+ebin/*
 
 doc/edoc-info
 doc/*.html
