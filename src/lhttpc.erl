@@ -38,7 +38,7 @@
          delete_pool/1]).
 -export([
         send_body_part/2,
-        send_body_part/3, 
+        send_body_part/3,
         send_trailers/2,
         send_trailers/3
     ]).
@@ -98,7 +98,7 @@ start() ->
 stop() ->
     application:stop(lhttpc).
 
-%% @spec (Name) -> {ok, Pid} | {error, Reason} 
+%% @spec (Name) -> {ok, Pid} | {error, Reason}
 %%   Name = atom()
 %%   Pid = pid()
 %%   Reason = term()
@@ -135,8 +135,8 @@ add_pool(Name, ConnTimeout, PoolSize) ->
                                                 {pool_size, PoolSize}]]},
                  permanent, 10000, worker, [lhttpc_manager]},
     case supervisor:start_child(lhttpc_sup, ChildSpec) of
-        {error, {already_started, Pid}} ->
-            {ok, Pid};
+        {error, {already_started, _Pid}} ->
+            {error, already_exists};
         {error, Error} ->
             {error, Error};
         {ok, Pid} ->
@@ -248,7 +248,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% request(Host, Port, Path, Ssl, Method, Hdrs, Body, Timeout, Options).
 %% </pre>
 %%
-%% `URL' is expected to be a valid URL: 
+%% `URL' is expected to be a valid URL:
 %% `scheme://host[:port][/path]'.
 %% @end
 %% @see request/9
@@ -344,7 +344,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% choose to give up earlier than the connect timeout, in which case the
 %% client will also give up. The default value is infinity, which means that
 %% it will either give up when the TCP stack gives up, or when the overall
-%% request timeout is reached. 
+%% request timeout is reached.
 %%
 %% `{connect_options, Options}' specifies options to pass to the socket at
 %% connect time. This makes it possible to specify both SSL options and
@@ -464,9 +464,9 @@ send_body_part({Pid, Window}, IoList) ->
 %% milliseconds. If there is no acknowledgement received during that time the
 %% the request is cancelled and `{error, timeout}' is returned.
 %%
-%% As long as the window size is larger than 0 the function will return 
+%% As long as the window size is larger than 0 the function will return
 %% immediately after sending the body part to the request handling process.
-%% 
+%%
 %% The `BodyPart' `http_eob' signals an end of the entity body, the request
 %% is considered sent and the response will be read from the socket. If
 %% there is no response within `Timeout' milliseconds, the request is

@@ -180,7 +180,7 @@ ensure_call(Pool, SocketRequest, Options) ->
             %% Opening a new HTTP/1.1 connection
             undefined
     catch
-        exit:{noproc, {gen_server, call, [Pool, S, T]}} ->
+        exit:{noproc, Reason} ->
             case proplists:get_value(pool_ensure, Options, false) of
                 true ->
                     {ok, DefaultTimeout} = application:get_env(
@@ -200,20 +200,12 @@ ensure_call(Pool, SocketRequest, Options) ->
                             ensure_call(Pool, SocketRequest, Options);
                         _ ->
                             %% Failed to create pool, exit as expected
-                            exit({error, {noproc, {gen_server,
-                                                   call,
-                                                   [Pool, S, T]}}})
+                            exit({noproc, Reason})
                     end;
                 false ->
                     %% No dynamic pool creation, exit as expected
-                    exit({error, {noproc, {gen_server,
-                                           call,
-                                           [Pool, S, T]}}})
-            end;
-        exit:M ->
-            exit(M);
-        error:M ->
-            error(M)
+                    exit({noproc, Reason})
+            end
     end.
 
 send_request(#client_state{attempts = 0}) ->
@@ -248,14 +240,8 @@ send_request(#client_state{socket = undefined} = State) ->
         exit:{{{badmatch, {error, {asn1, _}}}, _}, _} ->
             throw(ssl_decode_error);
         Type:Error ->
-            case Type of
-                exit ->
-                    Stack = erlang:get_stacktrace(),
-                    error_logger:error_msg("Unexpected Exit: ~p ~p", [Error, Stack]),
-                    erlang:error(Error, Stack);
-                Type ->
-                    erlang:Type(Error, erlang:get_stacktrace())
-            end
+                    error_logger:error_msg("Socket connection error: ~p ~p, ~p",
+                                           [Type, Error, erlang:get_stacktrace()])
     end;
 send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false} = State) ->
     #lhttpc_url{
