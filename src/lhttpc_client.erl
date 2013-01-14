@@ -232,7 +232,7 @@ send_request(#client_state{socket = undefined} = State) ->
             throw(connect_timeout);
         {error, timeout} ->
             throw(connect_timeout);
-        {error, "record overflow"} ->
+        {error, 'record overflow'} ->
             throw(ssl_error);
         {error, Reason} ->
             erlang:error(Reason)
