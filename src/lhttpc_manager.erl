@@ -37,9 +37,13 @@
 -export([
         start_link/0,
         start_link/1,
+        client_count/1,
         connection_count/1,
         connection_count/2,
-        update_connection_timeout/2
+        update_connection_timeout/2,
+        dump_settings/1,
+        list_pools/0,
+        set_max_pool_size/2
     ]).
 -export([
         init/1,
@@ -60,6 +64,39 @@
         max_pool_size = 50 :: non_neg_integer(),
         timeout = 300000 :: non_neg_integer()
     }).
+
+%% @spec (PoolPidOrName) -> list()
+%% @doc Returns the current settings in state for the
+%% specified lhttpc pool (manager).
+%% @end
+-spec dump_settings(pid() | atom()) -> list().
+dump_settings(PidOrName) ->
+    gen_server:call(PidOrName, dump_settings).
+
+-spec set_max_pool_size(pid() | atom(), non_neg_integer()) -> ok.
+set_max_pool_size(PidOrName, Size) when is_integer(Size), Size > 0 ->
+    gen_server:cast(PidOrName, {set_max_pool_size, Size}).
+
+-spec list_pools() -> term().
+list_pools() ->
+    Children = supervisor:which_children(lhttpc_sup),
+    lists:foldl(fun(In, Acc) ->
+                        case In of
+                            {N, P, _, [lhttpc_manager]} ->
+                                [{N, dump_settings(P)} | Acc];
+                            _ ->
+                                Acc
+                        end
+                end, [], Children).
+
+%% @spec (PoolPidOrName) -> Count
+%%    Count = integer()
+%% @doc Returns the total number of active clients maintained by the
+%% specified lhttpc pool (manager).
+%% @end
+-spec client_count(pid() | atom()) -> non_neg_integer().
+client_count(PidOrName) ->
+    gen_server:call(PidOrName, client_count).
 
 %% @spec (PoolPidOrName) -> Count
 %%    Count = integer()
@@ -156,6 +193,10 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
                     {reply, no_socket, monitor_client(Dest, From, State2)}
             end
     end;
+handle_call(dump_settings, _, State) ->
+    {reply, [{max_pool_size, State#httpc_man.max_pool_size}, {timeout, State#httpc_man.timeout}], State};
+handle_call(client_count, _, State) ->
+    {reply, dict:size(State#httpc_man.clients), State};
 handle_call(connection_count, _, State) ->
     {reply, dict:size(State#httpc_man.sockets), State};
 handle_call({connection_count, Destination}, _, State) ->
@@ -179,6 +220,8 @@ handle_call(_, _, State) ->
 -spec handle_cast(any(), #httpc_man{}) -> {noreply, #httpc_man{}}.
 handle_cast({update_timeout, Milliseconds}, State) ->
     {noreply, State#httpc_man{timeout = Milliseconds}};
+handle_cast({set_max_pool_size, Size}, State) ->
+    {noreply, State#httpc_man{max_pool_size = Size}};
 handle_cast(_, State) ->
     {noreply, State}.
 

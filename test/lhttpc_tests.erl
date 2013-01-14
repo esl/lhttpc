@@ -159,6 +159,7 @@ tcp_test_() ->
                 ?_test(partial_download_slow_chunks()),
                 ?_test(close_connection()),
                 ?_test(message_queue()),
+                ?_test(trailing_space_header()),
                 ?_test(connection_count()) % just check that it's 0 (last)
             ]}
     }.
@@ -283,6 +284,17 @@ no_content_length_1_0() ->
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+
+%% Check the header value is trimming spaces on header values
+%% which can cause crash in lhttpc_client:body_type when Content-Length
+%% is converted from list to integer
+trailing_space_header() ->
+    Port = start(gen_tcp, [fun trailing_space_header/5]),
+    URL = url(Port, "/no_cl"),
+    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    Headers = headers(Response),
+    ContentLength = lhttpc_lib:header_value("Content-Length", Headers),
+    ?assertEqual("14", ContentLength).
 
 get_not_modified() ->
     Port = start(gen_tcp, [fun not_modified_response/5]),
@@ -1123,3 +1135,12 @@ basic_auth_responder(User, Passwd) ->
                 end
         end
     end.
+
+trailing_space_header(Module, Socket, _, _, _) ->
+    Module:send(
+      Socket,
+      "HTTP/1.1 200 OK\r\n"
+          "Content-type: text/plain\r\n"
+          "Content-Length: 14 \r\n\r\n"
+          ?DEFAULT_STRING
+    ).
