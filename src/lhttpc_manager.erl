@@ -56,14 +56,8 @@
 
 -behaviour(gen_server).
 
--record(httpc_man, {
-        destinations = dict:new(),
-        sockets = dict:new(),
-        clients = dict:new(), % Pid => {Dest, MonRef}
-        queues = dict:new(),  % Dest => queue of Froms
-        max_pool_size = 50 :: non_neg_integer(),
-        timeout = 300000 :: non_neg_integer()
-    }).
+-include("lhttpc_types.hrl").
+-include("lhttpc.hrl").
 
 %% @spec (PoolPidOrName) -> list()
 %% @doc Returns the current settings in state for the
