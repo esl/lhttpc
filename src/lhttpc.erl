@@ -151,15 +151,13 @@ delete_pool(PoolPid) when is_pid(PoolPid) ->
     {registered_name, Name} = erlang:process_info(PoolPid, registered_name),
     delete_pool(Name);
 delete_pool(PoolName) when is_atom(PoolName) ->
-    case supervisor:delete_child(lhttpc_sup, PoolName) of
-        ok -> ok;
-        {error, running} ->
-            supervisor:terminate_child(lhttpc_sup, PoolName),
-            delete_pool(PoolName);
-        {error, not_found} ->
-            ok
+    case supervisor:terminate_child(lhttpc_sup, PoolName) of
+        ok -> case supervisor:delete_child(lhttpc_sup, PoolName) of
+                  ok -> ok;
+                  {error, not_found} -> ok
+              end;
+        {error, Reason} -> {error, Reason}
     end.
-
 
 %% @spec (URL, Method, Hdrs, Timeout) -> Result
 %%   URL = string()
