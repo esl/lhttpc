@@ -32,6 +32,10 @@
 
 -export([start/0, stop/0, request/4, request/5, request/6, request/9]).
 -export([start/2, stop/1]).
+-export([add_pool/1,
+         add_pool/2,
+         add_pool/3,
+         delete_pool/1]).
 -export([
         send_body_part/2,
         send_body_part/3, 
@@ -94,6 +98,69 @@ start() ->
 stop() ->
     application:stop(lhttpc).
 
+%% @spec (Name) -> {ok, Pid} | {error, Reason} 
+%%   Name = atom()
+%%   Pid = pid()
+%%   Reason = term()
+%% @doc
+%% Add a new named httpc_manager pool to the supervisor tree
+%% @end
+-spec add_pool(atom()) ->
+          {ok, pid()} | {error, term()}.
+add_pool(Name) when is_atom(Name) ->
+    {ok, ConnTimeout} = application:get_env(lhttpc, connection_timeout),
+    {ok, PoolSize} = application:get_env(lhttpc, pool_size),
+    add_pool(Name,
+             ConnTimeout,
+             PoolSize).
+
+%% Add a new httpc_manager to the supervisor tree
+-spec add_pool(atom(), non_neg_integer()) ->
+          {ok, pid()} | {error, term()}.
+add_pool(Name, ConnTimeout) when is_atom(Name),
+                                 is_integer(ConnTimeout),
+                                 ConnTimeout > 0 ->
+    {ok, PoolSize} = application:get_env(lhttpc, pool_size),
+    add_pool(Name,
+             ConnTimeout,
+             PoolSize).
+
+%% Add a new httpc_manager to the supervisor tree
+-spec add_pool(atom(), non_neg_integer(), non_neg_integer() | atom()) ->
+          {ok, pid()} | {error, term()}.
+add_pool(Name, ConnTimeout, PoolSize) ->
+    ChildSpec = {Name,
+                 {lhttpc_manager, start_link, [[{name, Name},
+                                                {connection_timeout, ConnTimeout},
+                                                {pool_size, PoolSize}]]},
+                 permanent, 10000, worker, [lhttpc_manager]},
+    case supervisor:start_child(lhttpc_sup, ChildSpec) of
+        {error, {already_started, Pid}} ->
+            {ok, Pid};
+        {error, Error} ->
+            {error, Error};
+        {ok, Pid} ->
+            {ok, Pid};
+        {ok, Pid, _Info} ->
+            {ok, Pid}
+    end.
+
+%% Delete a pool
+-spec delete_pool(atom() | pid()) -> ok.
+delete_pool(PoolPid) when is_pid(PoolPid) ->
+    {registered_name, Name} = erlang:process_info(PoolPid, registered_name),
+    delete_pool(Name);
+delete_pool(PoolName) when is_atom(PoolName) ->
+    case supervisor:delete_child(lhttpc_sup, PoolName) of
+        ok -> ok;
+        {error, running} ->
+            supervisor:terminate_child(lhttpc_sup, PoolName),
+            delete_pool(PoolName);
+        {error, not_found} ->
+            ok
+    end.
+
+
 %% @spec (URL, Method, Hdrs, Timeout) -> Result
 %%   URL = string()
 %%   Method = string() | atom()
@@ -124,7 +191,7 @@ request(URL, Method, Hdrs, Timeout) ->
 %%   Hdrs = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
-%%   RequestBody = iolist()
+%%   RequestBody = iodata()
 %%   Timeout = integer() | infinity
 %%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
 %%            | {error, Reason}
@@ -137,7 +204,7 @@ request(URL, Method, Hdrs, Timeout) ->
 %% `request(URL, Method, Hdrs, Body, Timeout, [])'.
 %% @end
 %% @see request/9
--spec request(string(), string() | atom(), headers(), iolist(),
+-spec request(string(), string() | atom(), headers(), iodata(),
         pos_integer() | infinity) -> result().
 request(URL, Method, Hdrs, Body, Timeout) ->
     request(URL, Method, Hdrs, Body, Timeout, []).
@@ -148,7 +215,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %%   Hdrs = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
-%%   RequestBody = iolist()
+%%   RequestBody = iodata()
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
@@ -185,7 +252,7 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% `scheme://host[:port][/path]'.
 %% @end
 %% @see request/9
--spec request(string(), string() | atom(), headers(), iolist(),
+-spec request(string(), string() | atom(), headers(), iodata(),
         pos_integer() | infinity, [option()]) -> result().
 request(URL, Method, Hdrs, Body, Timeout, Options) ->
     #lhttpc_url{
@@ -215,7 +282,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%   Hdrs = [{Header, Value}]
 %%   Header = string() | binary() | atom()
 %%   Value = string() | binary()
-%%   RequestBody = iolist()
+%%   RequestBody = iodata()
 %%   Timeout = integer() | infinity
 %%   Options = [Option]
 %%   Option = {connect_timeout, Milliseconds | infinity} |
@@ -351,7 +418,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% list of all available options, please check OTP's ssl module manpage.
 %% @end
 -spec request(string(), 1..65535, true | false, string(), atom() | string(),
-    headers(), iolist(), pos_integer(), [option()]) -> result().
+    headers(), iodata(), pos_integer() | infinity, [option()]) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
     Args = [self(), Host, Port, Ssl, Path, Method, Hdrs, Body, Options],
@@ -369,7 +436,7 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     end.
 
 %% @spec (UploadState :: UploadState, BodyPart :: BodyPart) -> Result
-%%   BodyPart = iolist() | binary()
+%%   BodyPart = iodata() | binary()
 %%   Timeout = integer() | infinity
 %%   Result = {error, Reason} | UploadState
 %%   Reason = connection_closed | connect_timeout | timeout
@@ -380,12 +447,12 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
 %% Would be the same as calling
 %% `send_body_part(UploadState, BodyPart, infinity)'.
 %% @end
--spec send_body_part(upload_state(), iolist() | 'http_eob') -> result().
+-spec send_body_part(upload_state(), iodata() | 'http_eob') -> result().
 send_body_part({Pid, Window}, IoList) ->
     send_body_part({Pid, Window}, IoList, infinity).
 
 %% @spec (UploadState :: UploadState, BodyPart :: BodyPart, Timeout) -> Result
-%%   BodyPart = iolist() | binary()
+%%   BodyPart = iodata() | binary()
 %%   Timeout = integer() | infinity
 %%   Result = {error, Reason} | UploadState
 %%   Reason = connection_closed | connect_timeout | timeout
@@ -405,7 +472,7 @@ send_body_part({Pid, Window}, IoList) ->
 %% there is no response within `Timeout' milliseconds, the request is
 %% canceled and `{error, timeout}' is returned.
 %% @end
--spec send_body_part(upload_state(), iolist() | 'http_eob', timeout()) -> result().
+-spec send_body_part(upload_state(), iodata() | 'http_eob', timeout()) -> result().
 send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
     Pid ! {body_part, self(), http_eob},
     read_response(Pid, Timeout);
@@ -580,6 +647,16 @@ verify_options([{proxy_ssl_options, List} | Options]) when is_list(List) ->
     verify_options(Options);
 verify_options([{pool, PidOrName} | Options])
         when is_pid(PidOrName); is_atom(PidOrName) ->
+    verify_options(Options);
+verify_options([{pool_ensure, Bool} | Options])
+        when is_boolean(Bool) ->
+    verify_options(Options);
+verify_options([{pool_connection_timeout, Size} | Options])
+        when is_integer(Size) ->
+    verify_options(Options);
+verify_options([{pool_max_size, Size} | Options])
+        when is_integer(Size) orelse
+             Size =:= infinity->
     verify_options(Options);
 verify_options([Option | _Rest]) ->
     erlang:error({bad_option, Option});
