@@ -1,4 +1,4 @@
-.PHONY: all rel compile test clean rel doc build-plt dialyze
+.PHONY: all release compile test clean rel doc build-plt dialyzer
 
 PROJECT = lhttpc
 
@@ -18,7 +18,7 @@ doc:
 test:	compile
 	$(REBAR) eunit
 
-rel: all dialyze test
+release: all dialyze test
 	$(REBAR) release
 
 clean:
@@ -28,7 +28,7 @@ build-plt: compile
 	@$(DIALYZER) --build_plt --output_plt .$(PROJECT).plt \
 		--apps $(APPS)
 
-dialyze:
+dialyzer:
 	@$(DIALYZER) --fullpath  --src ./src \
 		--plt .$(PROJECT).plt --no_native \
 		-Werror_handling  #-Wrace_conditions
