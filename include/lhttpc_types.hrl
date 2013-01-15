@@ -80,6 +80,8 @@
 
 -type host() :: string() | {integer(), integer(), integer(), integer()}.
 
+-type http_status() ::  {integer(), string() | binary()} | {'nil','nil'}.
+
 -type socket_options() :: [{atom(), term()} | atom()].
 
 -type window_size() :: non_neg_integer() | 'infinity'.
