@@ -1,4 +1,4 @@
-ebin/
+ebin/*
 
 doc/edoc-info
 doc/*.html
@@ -13,5 +13,8 @@ test/*.log
 
 *.swp
 *.swo
+
+*.plt
+erl_crash.dump
 
 .DS_Store

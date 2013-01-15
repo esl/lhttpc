@@ -50,15 +50,6 @@
 -include("lhttpc_types.hrl").
 -include("lhttpc.hrl").
 
--type upload_state() :: {pid(), window_size()}.
--type body()         :: binary()    |
-                        'undefined' | % HEAD request.
-                        pid().        % When partial_download option is used.
-
--type result() ::
-        {ok, {{pos_integer(), string()}, headers(), body()}} |
-        {ok, upload_state()} |
-        {error, atom()}.
 
 %% @hidden
 -spec start(normal | {takeover, node()} | {failover, node()}, any()) ->
