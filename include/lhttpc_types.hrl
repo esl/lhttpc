@@ -58,6 +58,8 @@
 
 -type destination() :: {string(), pos_integer(), boolean()}.
 
+-type raw_headers() :: [{atom() | binary() | string(), binary() | string()}].
+
 -type partial_download_option() ::
         {'window_size', window_size()} |
         {'part_size', non_neg_integer() | 'infinity'} |
