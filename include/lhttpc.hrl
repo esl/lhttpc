@@ -46,8 +46,8 @@
 %record that keeps the state of the client.
 -record(client_state, {
         host :: string(),
-        port = 80 :: integer(),
-        ssl = false :: true | false,
+        port = 80 :: port_num(),
+        ssl = false :: boolean(),
         method :: string(),
         request :: iolist(),
         request_headers :: headers(),
@@ -56,15 +56,15 @@
         connect_options = [] :: [any()],
         attempts :: integer(),
         requester :: pid(),
-        partial_upload = false :: true | false,
-        chunked_upload = false :: true | false,
+        partial_upload = false :: boolean(),
+        chunked_upload = false :: boolean(),
         upload_window :: non_neg_integer() | infinity,
-        partial_download = false :: true | false,
+        partial_download = false :: boolean(),
         download_window = infinity :: timeout(),
         part_size :: non_neg_integer() | infinity,
         %% in case of infinity we read whatever data we can get from
         %% the wire at that point or in case of chunked one chunk
         proxy :: undefined | #lhttpc_url{},
         proxy_ssl_options = [] :: [any()],
-        proxy_setup = false :: true | false
+        proxy_setup = false :: boolean()
     }).

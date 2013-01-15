@@ -40,24 +40,38 @@
 
 -type headers() :: [{header(), iodata()}].
 
+-type method() :: string() | atom().
+
+-type pos_timeout() ::  pos_integer() | 'infinity'.
+
+-type bodypart() :: iodata() | 'http_eob'.
+
 -type socket() :: _.
+
+-type port_num() :: 1..65535.
+
+-type poolsize() :: non_neg_integer() | atom().
 
 -type invalid_option() :: any().
 
+-type pool_id() ::  pid() | atom().
+
+-type destination() :: {string(), pos_integer(), boolean()}.
+
 -type partial_download_option() ::
-        {window_size, window_size()} |
-        {part_size, non_neg_integer() | infinity} |
+        {'window_size', window_size()} |
+        {'part_size', non_neg_integer() | 'infinity'} |
         invalid_option().
 
 -type option() ::
-        {connect_timeout, timeout()} |
-        {send_retry, non_neg_integer()} |
-        {partial_upload, non_neg_integer() | infinity} |
-        {partial_download, [partial_download_option()]} |
-        {connect_options, socket_options()} |
-        {proxy, string()} |
-        {proxy_ssl_options, socket_options()} |
-        {pool, pid() | atom()} |
+        {'connect_timeout', timeout()} |
+        {'send_retry', non_neg_integer()} |
+        {'partial_upload', non_neg_integer() | 'infinity'} |
+        {'partial_download', [partial_download_option()]} |
+        {'connect_options', socket_options()} |
+        {'proxy', string()} |
+        {'proxy_ssl_options', socket_options()} |
+        {'pool', pid() | atom()} |
         invalid_option().
 
 -type options() :: [option()].
@@ -66,7 +80,7 @@
 
 -type socket_options() :: [{atom(), term()} | atom()].
 
--type window_size() :: non_neg_integer() | infinity.
+-type window_size() :: non_neg_integer() | 'infinity'.
 
 -type upload_state() :: {pid(), window_size()}.
 
