@@ -136,10 +136,11 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     end,
     {ChunkedUpload, Request} = lhttpc_lib:format_request(Path, NormalizedMethod,
         Hdrs, Host, Port, Body, PartialUpload),
-    SocketRequest = {socket, self(), Host, Port, Ssl},
+    %SocketRequest = {socket, self(), Host, Port, Ssl},
     Pool = proplists:get_value(pool, Options, whereis(lhttpc_manager)),
     %% Get a socket for the pool or exit
-    Socket = ensure_call(Pool, SocketRequest, Options),
+    %Socket = lhttpc_manager:ensure_call(Pool, SocketRequest, Options),
+    Socket = lhttpc_manager:ensure_call(Pool, self(), Host, Port, Ssl, Options),
     State = #client_state{
         host = Host,
         port = Port,
@@ -177,59 +178,10 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
             % * The socket was closed remotely already
             % * Due to an error in this module (returning dead sockets for
             %   instance)
-            case lhttpc_sock:controlling_process(NewSocket, Pool, Ssl) of
-                ok ->
-                    DoneMsg = {done, Host, Port, Ssl, NewSocket},
-                    ok = gen_server:call(Pool, DoneMsg, infinity);
-                _ ->
-                    ok
-            end,
+            ok = lhttpc_manager:client_done(Pool, Host, Port, Ssl, NewSocket),
             {ok, R}
     end,
     {response, self(), Response}.
-
-%%------------------------------------------------------------------------------
-%% @doc If call contains pool_ensure option, dynamically create the pool with
-%% configured parameters. Checks the pool for a socket connected to the
-%% destination and returns it if it exists, 'undefined' otherwise.
-%% @end
-%%------------------------------------------------------------------------------
-ensure_call(Pool, SocketRequest, Options) ->
-    try gen_server:call(Pool, SocketRequest, infinity) of
-        {ok, S} ->
-            %% Re-using HTTP/1.1 connections
-            S;
-        no_socket ->
-            %% Opening a new HTTP/1.1 connection
-            undefined
-    catch
-        exit:{noproc, Reason} ->
-            case proplists:get_value(pool_ensure, Options, false) of
-                true ->
-                    {ok, DefaultTimeout} = application:get_env(
-                                             lhttpc,
-                                             connection_timeout),
-                    ConnTimeout = proplists:get_value(pool_connection_timeout,
-                                                      Options,
-                                                      DefaultTimeout),
-                    {ok, DefaultMaxPool} = application:get_env(
-                                             lhttpc,
-                                             pool_size),
-                    PoolMaxSize = proplists:get_value(pool_max_size,
-                                                      Options,
-                                                      DefaultMaxPool),
-                    case lhttpc:add_pool(Pool, ConnTimeout, PoolMaxSize) of
-                        {ok, _Pid} ->
-                            ensure_call(Pool, SocketRequest, Options);
-                        _ ->
-                            %% Failed to create pool, exit as expected
-                            exit({noproc, Reason})
-                    end;
-                false ->
-                    %% No dynamic pool creation, exit as expected
-                    exit({noproc, Reason})
-            end
-    end.
 
 %%------------------------------------------------------------------------------
 %% @private
