@@ -86,7 +86,7 @@
 
 -type window_size() :: non_neg_integer() | 'infinity'.
 
--type upload_state() :: {pid(), window_size()}.
+-type upload_state() :: {partial_upload, pid()}.
 
 -type body()         :: binary()    |
                         'undefined' | % HEAD request.

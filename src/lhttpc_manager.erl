@@ -27,6 +27,8 @@
 %%------------------------------------------------------------------------------
 %%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @author Filipe David Manana <fdmanana@apache.org>
+%%% @author Diana Parra Corbacho <diana.corbacho@erlang-solutions.com>
+%%% @author Ramon Lastres Guerrero <ramon.lastres@erlang-solutions.com>
 %%% @doc Connection manager for the HTTP client.
 %%% This gen_server is responsible for keeping track of persistent
 %%% connections to HTTP servers. The only interesting API is
@@ -46,7 +48,8 @@
          list_pools/0,
          set_max_pool_size/2,
          ensure_call/6,
-         client_done/5
+         client_done/5,
+	 close_socket/2
         ]).
 
 %% Callbacks
@@ -163,6 +166,13 @@ update_connection_timeout(PidOrName, Milliseconds) ->
     gen_server:cast(PidOrName, {update_timeout, Milliseconds}).
 
 %%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+close_socket(PidOrName, Socket) ->
+    gen_server:cast(PidOrName, {remove_socket, Socket}).
+
+%%------------------------------------------------------------------------------
 %% @spec () -> {ok, pid()}
 %% @doc Starts and link to the gen server.
 %% This is normally called by a supervisor.
@@ -204,7 +214,7 @@ ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
             S;
         no_socket ->
             %% Opening a new HTTP/1.1 connection
-            undefined
+            {ok, undefined}
     catch
         exit:{noproc, Reason} ->
             case proplists:get_value(pool_ensure, Options, false) of
@@ -226,7 +236,8 @@ ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
                             ensure_call(Pool, Pid, Host, Port, Ssl, Options);
                         _ ->
                             %% Failed to create pool, exit as expected
-                            exit({noproc, Reason})
+                            %exit({noproc, Reason})
+			    exit({noproc, Reason})
                     end;
                 false ->
                     %% No dynamic pool creation, exit as expected
@@ -328,6 +339,8 @@ handle_cast({update_timeout, Milliseconds}, State) ->
     {noreply, State#httpc_man{timeout = Milliseconds}};
 handle_cast({set_max_pool_size, Size}, State) ->
     {noreply, State#httpc_man{max_pool_size = Size}};
+handle_cast({remove_socket, Socket}, State) ->
+    {noreply, remove_socket(Socket, State)};
 handle_cast(_, State) ->
     {noreply, State}.
 

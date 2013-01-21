@@ -26,7 +26,9 @@
 
 %%------------------------------------------------------------------------------
 %%% @author Oscar Hellström <oscar@hellstrom.st>
-%%% @doc Main interface to the lightweight http client.
+%%% @author Diana Parra Corbacho <diana.corbacho@erlang-solutions.com>
+%%% @author Ramon Lastres Guerrero <ramon.lastres@erlang-solutions.com>
+%%% @doc Main interface to the lightweight http client
 %%% See {@link request/4}, {@link request/5} and {@link request/6} functions.
 %%% @end
 %%------------------------------------------------------------------------------
@@ -35,8 +37,11 @@
 
 -export([start/0, stop/0, start/2, stop/1,
          request/4, request/5, request/6, request/9,
+	 request_client/5, request_client/6, request_client/7,
          add_pool/1, add_pool/2, add_pool/3,
          delete_pool/1,
+	 connect_client/2,
+	 disconnect_client/1,
          send_body_part/2, send_body_part/3,
          send_trailers/2, send_trailers/3,
          get_body_part/1, get_body_part/2
@@ -159,6 +164,70 @@ delete_pool(PoolName) when is_atom(PoolName) ->
                   {error, not_found} -> ok
               end;
         {error, Reason} -> {error, Reason}
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc Starts a Client.
+%% @end
+%%------------------------------------------------------------------------------
+%-spec connect( ,options()) -> {ok,Pid} | ignore | {error,Error}.
+% WHICH TIMEOUT TO USE?
+connect_client(Destination, Options) ->
+    %Gs_Options = ??
+    lhttpc_client:start({Destination, Options}, []).
+
+%%------------------------------------------------------------------------------
+%% @doc Stops a Client.
+%% @end
+%%------------------------------------------------------------------------------
+-spec disconnect_client(pid()) -> ok.
+disconnect_client(Client) ->
+    lhttpc_client:stop(Client).
+
+
+%REQUESTS USING THE CLIENT
+-spec request_client(pid(), string(), method(), headers(), pos_timeout()) -> result().
+request_client(Client, PathOrUrl, Method, Hdrs, Timeout) ->
+    request_client(Client, PathOrUrl, Method, Hdrs, [], Timeout, []).
+
+-spec request_client(pid(), string(), method(), headers(), iodata(), pos_timeout()) -> result().
+request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout) ->
+    request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, []).
+
+
+-spec request_client(pid(), string(), method(), headers(), iodata(),
+              pos_timeout(), options()) -> result().
+request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options) ->
+    {FinalPath, FinalHeaders} =
+	case lhttpc_lib:parse_url(PathOrUrl) of
+	    #lhttpc_url{ %its an URL
+			 host = _Host,
+			 port = _Port,
+			 path = Path,
+			 is_ssl = _Ssl,
+			 user = User,
+			 password = Passwd
+		       } -> % @TODO: check that the host is the right one.
+		Headers = case User of
+			      "" ->
+				  Hdrs;
+			      _ ->
+				  Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
+				  lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
+			  end,
+		{Path, Headers};
+	%request_client(Client, Path, Method, Headers, Body, Timeout, Options);
+	    _ -> % its a path
+		%request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options)
+		{PathOrUrl}
+	end,
+    verify_options(Options),
+    try
+	Reply = lhttpc_client:request(Client, FinalPath, Method, FinalHeaders, Body, Options, Timeout),
+	Reply
+    catch
+	exit:{timeout, _} ->
+	    {error, timeout}
     end.
 
 %%------------------------------------------------------------------------------
@@ -427,18 +496,15 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
     headers(), iodata(), pos_timeout(), options()) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
-    Args = [self(), Host, Port, Ssl, Path, Method, Hdrs, Body, Options],
-    Pid = spawn_link(lhttpc_client, request, Args),
-    receive
-        {response, Pid, R} ->
-            R;
-        {'EXIT', Pid, Reason} ->
-            % This could happen if the process we're running in traps exits
-            % and the client process exits due to some exit signal being
-            % sent to it. Very unlikely though
-            {error, Reason}
-    after Timeout ->
-            kill_client(Pid)
+    {ok, Client} = connect_client({Host, Port, Ssl}, Options),
+    try
+	Reply = lhttpc_client:request(Client, Path, Method, Hdrs, Body, Options, Timeout),
+	disconnect_client(Client),
+	Reply
+    catch
+	exit:{timeout, _} ->
+	    disconnect_client(Client),
+	    {error, timeout}
     end.
 
 %%------------------------------------------------------------------------------
@@ -483,33 +549,8 @@ send_body_part({Pid, Window}, IoList) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec send_body_part(upload_state(), bodypart(), timeout()) -> result().
-send_body_part({Pid, _Window}, http_eob, Timeout) when is_pid(Pid) ->
-    Pid ! {body_part, self(), http_eob},
-    read_response(Pid, Timeout);
-send_body_part({Pid, 0}, IoList, Timeout) when is_pid(Pid) ->
-    receive
-        {ack, Pid} ->
-            send_body_part({Pid, 1}, IoList, Timeout);
-        {response, Pid, R} ->
-            R;
-        {'EXIT', Pid, Reason} ->
-            {error, Reason}
-    after Timeout ->
-        kill_client(Pid)
-    end;
-send_body_part({Pid, Window}, IoList, _Timeout) when Window > 0, is_pid(Pid) ->
-                                                     % atom > 0 =:= true
-    Pid ! {body_part, self(), IoList},
-    receive
-        {ack, Pid} ->
-            {ok, {Pid, Window}};
-        {response, Pid, R} ->
-            R;
-        {'EXIT', Pid, Reason} ->
-            {error, Reason}
-    after 0 ->
-        {ok, {Pid, lhttpc_lib:dec(Window)}}
-    end.
+send_body_part(Client, BodyPart, Timeout)  ->
+    lhttpc_client:send_body_part(Client, BodyPart, Timeout).
 
 %%------------------------------------------------------------------------------
 %% @spec (UploadState :: UploadState, Trailers) -> Result
@@ -527,8 +568,8 @@ send_body_part({Pid, Window}, IoList, _Timeout) when Window > 0, is_pid(Pid) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec send_trailers({pid(), window_size()}, headers()) -> result().
-send_trailers({Pid, Window}, Trailers) ->
-    send_trailers({Pid, Window}, Trailers, infinity).
+send_trailers(Client, Trailers) ->
+    lhttpc_client:send_trailers(Client, Trailers, infinity).
 
 %%------------------------------------------------------------------------------
 %% @spec (UploadState :: UploadState, Trailers, Timeout) -> Result
@@ -596,18 +637,8 @@ get_body_part(Pid) ->
 %%------------------------------------------------------------------------------
 -spec get_body_part(pid(), timeout()) -> {ok, binary()} |
                            {ok, {http_eob, headers()}} | {error, term()}.
-get_body_part(Pid, Timeout) ->
-    receive
-        {body_part, Pid, Bin} ->
-            Pid ! {ack, self()},
-            {ok, Bin};
-        {http_eob, Pid, Trailers} ->
-            {ok, {http_eob, Trailers}};
-        {error, Pid, Reason} ->
-            {error, Reason}
-    after Timeout ->
-        kill_client(Pid)
-    end.
+get_body_part(Client, Timeout) ->
+    lhttpc_client:get_body_part(Client, Timeout).
 
 %%==============================================================================
 %% Internal functions
