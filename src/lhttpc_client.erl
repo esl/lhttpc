@@ -519,7 +519,7 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 		    {noreply, NewState#client_state{socket = NewSocket}};
 		_ ->
 		    %{reply, Reply, NewState#client_state{socket = NewSocket}}
-		    {Reply, NewState#client_state{socket = NewSocket}}
+		    {{ok, Reply}, NewState#client_state{socket = NewSocket}}
 	    end;
         {error, closed} ->
             %% TODO does it work for partial uploads? I think should return an error
