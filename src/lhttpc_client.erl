@@ -283,15 +283,21 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, State = #client_state{pool = Pool, host = Host, ssl = Ssl, socket = Socket, port = Port}) ->
-    case Pool of
-	undefined ->
-	    % if we dont have pool we just close the socket.
-	    close_socket(State),
-	    ok;
-	_ ->
-	    %return the control of the socket to the pool.
-	    lhttpc_manager:client_done(Pool, Host, Port, Ssl, Socket)
+    case Socket of
+        undefined ->
+            ok;
+        _ ->
+            case Pool of
+                undefined ->
+                    close_socket(State),
+                    ok;
+                _ ->
+                    %return the control of the socket to the pool.
+                    lhttpc_manager:client_done(Pool, Host, Port, Ssl, Socket)
+            end
     end.
+
+
 
 %%--------------------------------------------------------------------
 %% @private

@@ -380,8 +380,9 @@ pre_1_1_server_keep_alive() ->
         ]),
     URL = url(Port, "/close"),
     Body = pid_to_list(self()),
-    {ok, Response1} = lhttpc:request(URL, get, [], [], 1000),
-    {ok, Response2} = lhttpc:request(URL, put, [], Body, 1000),
+    %this test need to use a client now (or a pool).
+    {ok, Response1} = lhttpc:request(URL, get, [], [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
+    {ok, Response2} = lhttpc:request(URL, put, [], Body, 1000, [{pool_ensure, true}, {pool, pool_name}]),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
