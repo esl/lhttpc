@@ -215,33 +215,31 @@ request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout) ->
               pos_timeout(), options()) -> result().
 request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options) ->
     {FinalPath, FinalHeaders} =
-	case lhttpc_lib:parse_url(PathOrUrl) of
-	    #lhttpc_url{ %its an URL
-			 host = _Host,
-			 port = _Port,
-			 path = Path,
-			 is_ssl = _Ssl,
-			 user = User,
-			 password = Passwd
-		       } -> % @TODO: check that the host is the right one.
-		Headers = case User of
-			      "" ->
-				  Hdrs;
-			      _ ->
-				  Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
-				  lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
-			  end,
-		{Path, Headers};
-	    _ -> % its a path
-		{PathOrUrl}
-	end,
+        try #lhttpc_url{ host = _Host, %its an URL
+                         port = _Port,
+                         path = Path,
+                         is_ssl = _Ssl,
+                         user = User,
+                         password = Passwd} = lhttpc_lib:parse_url(PathOrUrl),
+             Headers = case User of
+                           "" ->
+                               Hdrs;
+                           _ ->
+                               Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
+                               lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
+                       end,
+             {Path, Headers}
+        catch %if parse_url crashes we assume it is a path.
+            _:_ ->
+                {PathOrUrl, Hdrs}
+        end,
     verify_options(Options),
     try
-	Reply = lhttpc_client:request(Client, FinalPath, Method, FinalHeaders, Body, Options, Timeout),
-	Reply
+        Reply = lhttpc_client:request(Client, FinalPath, Method, FinalHeaders, Body, Options, Timeout),
+        Reply
     catch
-	exit:{timeout, _} ->
-	    {error, timeout}
+        exit:{timeout, _} ->
+            {error, timeout}
     end.
 
 %%------------------------------------------------------------------------------
