@@ -322,44 +322,6 @@ send_body_part(State = #client_state{socket = Socket, ssl = Ssl,
 %% handles the proxy connection.
 %% @end
 %%------------------------------------------------------------------------------
-%send_request(#client_state{attempts = 0} = State) ->
-    % Don't try again if the number of allowed attempts is 0.
-%    {{error, connection_closed}, State};
-%we need a socket.
-%send_request(#client_state{socket = undefined} = State) -> % MOVED TO CONNECT SOCKET!!
-%    {Host, Port, Ssl} = request_first_destination(State),
-%    Timeout = State#client_state.connect_timeout,
-%    ConnectOptions0 = State#client_state.connect_options,
-%    ConnectOptions = case (not lists:member(inet, ConnectOptions0)) andalso
-%                         (not lists:member(inet6, ConnectOptions0)) andalso
-%                         is_ipv6_host(Host) of
-%        true ->
-%            [inet6 | ConnectOptions0];
-%        false ->
-%            ConnectOptions0
-%    end,
-%    SocketOptions = [binary, {packet, http}, {active, false} | ConnectOptions],
-%    Reply = try lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
-%        {ok, Socket} ->
-%            send_request(State#client_state{socket = Socket});
-%        {error, etimedout} ->
-%            % TCP stack decided to give up
-%            {error, connect_timeout};
-%        {error, timeout} ->
-%            {error, connect_timeout};
-%        {error, 'record overflow'} ->
-%            {error, ssl_error};
-%        {error, _} = Error ->
-%            Error
-%    catch
-%        exit:{{{badmatch, {error, {asn1, _}}}, _}, _} ->
-%            {error, ssl_decode_error};
-%        Type:Error ->
-%            error_logger:error_msg("Socket connection error: ~p ~p, ~p",
-%                                   [Type, Error, erlang:get_stacktrace()]),
-%            {error, connection_error}
-%    end,
-%    {Reply, State};
 send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false,
                            host = DestHost, port = Port, socket = Socket} = State) ->
     %% use a proxy.
@@ -1013,39 +975,6 @@ connect_socket(State = #client_state{attempts = 0}) ->
 connect_socket(State = #client_state{init_options = Options, pool = Pool}) ->
     case Pool of
 	undefined ->
-	    %% TODO open new socket here
-	    %{Host, Port, Ssl} = request_first_destination(State),
-	    %Timeout = State#client_state.connect_timeout,
-	    %ConnectOptions0 = State#client_state.connect_options,
-	    %ConnectOptions = case (not lists:member(inet, ConnectOptions0)) andalso
-	%			 (not lists:member(inet6, ConnectOptions0)) andalso
-	%			 is_ipv6_host(Host) of
-	%			 true ->
-	%			     [inet6 | ConnectOptions0];
-	%			 false ->
-	%			     ConnectOptions0
-	%		     end,
-	 %   SocketOptions = [binary, {packet, http}, {active, false} | ConnectOptions],
-	 %   try lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
-	%	{ok, Socket} ->
-	%	    {ok, State#client_state{socket = Socket}};
-	%	{error, etimedout} ->
-	%	    % TCP stack decided to give up
-	%	    {error, connect_timeout};
-	%	{error, timeout} ->
-	%	    {error, connect_timeout};
-	%	{error, 'record overflow'} ->
-	%	    {error, ssl_error};
-	%	{error, _} = Error ->
-	%	    Error
-	%   catch
-	%	exit:{{{badmatch, {error, {asn1, _}}}, _}, _} ->
-	%	    {error, ssl_decode_error};
-	%	Type:Error ->
-	%	    error_logger:error_msg("Socket connection error: ~p ~p, ~p",
-	%				   [Type, Error, erlang:get_stacktrace()]),
-	%	    {error, connection_error}
-	 %   end;
 	    new_socket(State);
 	_ ->
 	    {Host, Port, Ssl} = request_first_destination(State),

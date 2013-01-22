@@ -186,15 +186,31 @@ disconnect_client(Client) ->
 
 
 %REQUESTS USING THE CLIENT
+
+%%------------------------------------------------------------------------------
+%% @doc Makes a request using a client already connected.
+%% It can receive either a URL or a path
+%% @end
+%%------------------------------------------------------------------------------
 -spec request_client(pid(), string(), method(), headers(), pos_timeout()) -> result().
 request_client(Client, PathOrUrl, Method, Hdrs, Timeout) ->
     request_client(Client, PathOrUrl, Method, Hdrs, [], Timeout, []).
 
+%%------------------------------------------------------------------------------
+%% @doc Makes a request using a client already connected.
+%% It can receive either a URL or a path. It allows to add the body.
+%% @end
+%%------------------------------------------------------------------------------
 -spec request_client(pid(), string(), method(), headers(), iodata(), pos_timeout()) -> result().
 request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout) ->
     request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, []).
 
-
+%%------------------------------------------------------------------------------
+%% @doc Makes a request using a client already connected.
+%% It can receive either a URL or a path. It allows to add the body and specify
+%% options, which are the same than for request (without client) functions.
+%% @end
+%%------------------------------------------------------------------------------
 -spec request_client(pid(), string(), method(), headers(), iodata(),
               pos_timeout(), options()) -> result().
 request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options) ->
@@ -216,9 +232,7 @@ request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options) ->
 				  lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
 			  end,
 		{Path, Headers};
-	%request_client(Client, Path, Method, Headers, Body, Timeout, Options);
 	    _ -> % its a path
-		%request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options)
 		{PathOrUrl}
 	end,
     verify_options(Options),
