@@ -61,6 +61,7 @@ manager_test_() ->
 
 empty_manager() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
@@ -79,6 +80,7 @@ empty_manager() ->
 
 one_socket() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
@@ -111,6 +113,7 @@ one_socket() ->
 
 connection_timeout() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ok = lhttpc_manager:update_connection_timeout(lhttpc_manager, 3000),
     erlang:yield(), % make sure lhttpc_manager processes the message
@@ -149,6 +152,7 @@ connection_timeout() ->
     ok.
 
 many_sockets() ->
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     LS = socket_server:listen(),
     Client1 = spawn_client(),
@@ -279,6 +283,7 @@ many_sockets() ->
 
 closed_race_cond() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 

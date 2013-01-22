@@ -109,7 +109,7 @@ stop_app(_) ->
     ok = application:stop(ssl).
 
 tcp_test_() ->
-    {inorder, 
+    {inorder,
         {setup, fun start_app/0, fun stop_app/1, [
                 ?_test(simple_get()),
                 ?_test(simple_get_ipv6()),
@@ -438,10 +438,10 @@ persistent_connection() ->
             fun copy_body/5
         ]),
     URL = url(Port, "/persistent"),
-    {ok, FirstResponse} = lhttpc:request(URL, "GET", [], 1000),
+    {ok, FirstResponse} = lhttpc:request(URL, "GET", [], [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
     Headers = [{"KeepAlive", "300"}], % shouldn't be needed
-    {ok, SecondResponse} = lhttpc:request(URL, "GET", Headers, 1000),
-    {ok, ThirdResponse} = lhttpc:request(URL, "POST", [], 1000),
+    {ok, SecondResponse} = lhttpc:request(URL, "GET", Headers, [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
+    {ok, ThirdResponse} = lhttpc:request(URL, "POST", [], [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
@@ -457,6 +457,7 @@ request_timeout() ->
 connection_timeout() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
     URL = url(Port, "/close_conn"),
+    lhttpc:add_pool(lhttpc_manager),
     lhttpc_manager:update_connection_timeout(lhttpc_manager, 50), % very short keep alive
     {ok, Response} = lhttpc:request(URL, get, [], 100),
     ?assertEqual({200, "OK"}, status(Response)),
@@ -469,16 +470,17 @@ connection_timeout() ->
 suspended_manager() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
     URL = url(Port, "/persistent"),
-    {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
+    lhttpc:add_pool(lhttpc_manager),
+    {ok, FirstResponse} = lhttpc:request(URL, get, [], [], 50, [{pool, lhttpc_manager}]),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(FirstResponse)),
     Pid = whereis(lhttpc_manager),
     true = erlang:suspend_process(Pid),
-    ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], 50)),
+    ?assertEqual({error, timeout}, lhttpc:request(URL, get, [], [], 50, [{pool, lhttpc_manager}])),
     true = erlang:resume_process(Pid),
     ?assertEqual(1,
         lhttpc_manager:connection_count(lhttpc_manager, {"localhost", Port, false})),
-    {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
+    {ok, SecondResponse} = lhttpc:request(URL, get, [], [], 50, [{pool, lhttpc_manager}]),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)).
 
@@ -559,7 +561,7 @@ partial_upload_chunked() ->
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response1)),
     ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
-    ?assertEqual(element(2, Trailer), 
+    ?assertEqual(element(2, Trailer),
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response1))),
     % Make sure it works with no body part in the original request as well
     Headers = [{"Transfer-Encoding", "chunked"}],
@@ -572,7 +574,7 @@ partial_upload_chunked() ->
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response2)),
     ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response2))),
-    ?assertEqual(element(2, Trailer), 
+    ?assertEqual(element(2, Trailer),
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response2))).
 
 partial_upload_chunked_no_trailer() ->
