@@ -322,6 +322,14 @@ send_body_part(State = #client_state{socket = Socket, ssl = Ssl,
 %% handles the proxy connection.
 %% @end
 %%------------------------------------------------------------------------------
+send_request(#client_state{socket = undefined} = State) ->
+% if we dont get a keep alive from the previous request, the socket is undefined.
+    case connect_socket(State) of
+        {ok, NewState} ->
+            send_request(NewState);
+        {error, Reason} ->
+            {{error, Reason}, State}
+    end;
 send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false,
                            host = DestHost, port = Port, socket = Socket} = State) ->
     %% use a proxy.
