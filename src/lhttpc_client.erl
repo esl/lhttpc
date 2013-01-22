@@ -1054,7 +1054,7 @@ connect_socket(State = #client_state{init_options = Options, pool = Pool}) ->
 	    case Socket of
 		undefined ->
 		    new_socket(State);
-		socket ->
+		Socket ->
 		    {ok, State#client_state{socket = Socket}}
 	    end
     end.

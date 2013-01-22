@@ -211,7 +211,7 @@ ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     try gen_server:call(Pool, SocketRequest, infinity) of
         {ok, S} ->
             %% Re-using HTTP/1.1 connections
-            S;
+            {ok, S};
         no_socket ->
             %% Opening a new HTTP/1.1 connection
             {ok, undefined}
