@@ -732,6 +732,16 @@ verify_partial_download([{part_size, Size} | Options]) when
     verify_partial_download(Options);
 verify_partial_download([{part_size, infinity} | Options]) ->
     verify_partial_download(Options);
+%verify_partial_download([{recv_proc, PidOrName} | Options])  when
+%      is_atom(PidOrName) ->
+%    Pid = whereis(PidOrName),
+%    is_alive(Pid) =:= true,
+%    verify_partial_download(Options);
+%verify_partial_download([{recv_proc, PidOrName} | Options]) when
+%      is_alive(Pid) ->
+%    verify_partial_download(Options);
+verify_partial_download([{recv_proc, _PidOrName} | Options]) ->
+    verify_partial_download(Options);
 verify_partial_download([Option | _Options]) ->
     erlang:error({bad_option, {partial_download, Option}});
 verify_partial_download([]) ->
