@@ -69,7 +69,7 @@
         socket,
         connect_timeout = infinity :: timeout(),
         connect_options = [] :: [any()],
-        attempts :: integer(),
+        attempts = 1 :: integer(),
         partial_upload = false :: boolean(),
         chunked_upload = false :: boolean(),
         upload_window :: non_neg_integer() | infinity,
@@ -126,8 +126,6 @@ request(Client, Path, Method, Hdrs, Body, Options, Timeout) ->
 %%% gen_server callbacks
 %%%===================================================================
 init({Destination, Options}) ->
-    %{Host, Port, Ssl, Options
-    %% TODO use pool if configured. Otherwise start socket alone
     Pool = proplists:get_value(pool, Options),
     State = case Destination of
 		{Host, Port, Ssl} ->
@@ -139,10 +137,7 @@ init({Destination, Options}) ->
 		URL ->
 		    #lhttpc_url{host = Host,
 				port = Port,
-				path = _Path,
-				is_ssl = Ssl,
-				user = _User,
-				password = _Passwd
+				is_ssl = Ssl
 			       } = lhttpc_lib:parse_url(URL),
 		    #client_state{host = Host,
 				  port = Port,
@@ -150,12 +145,11 @@ init({Destination, Options}) ->
 				  pool = Pool,
 				  init_options = Options}
     end,
-    %Pool = proplists:get_value(pool, Options),
     %% Get a socket for the pool or exit
     case connect_socket(State) of
 	{ok, NewState} ->
 	    {ok, NewState};
-	{error, Reason} ->
+	{{error, Reason}, _} ->
 	    {stop, Reason}
     end.
 
@@ -333,8 +327,8 @@ send_request(#client_state{socket = undefined} = State) ->
     case connect_socket(State) of
         {ok, NewState} ->
             send_request(NewState);
-        {error, Reason} ->
-            {{error, Reason}, State}
+        {{error, Reason}, NewState} ->
+            {{error, Reason}, NewState}
     end;
 send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false,
                            host = DestHost, port = Port, socket = Socket} = State) ->
@@ -378,21 +372,19 @@ send_request(#client_state{socket = Socket, ssl = Ssl, request = Request} = Stat
     case lhttpc_sock:send(Socket, Request, Ssl) of
         ok ->
             if
-						% {partial_upload, WindowSize} is used.
+		%% {partial_upload, WindowSize} is used.
                 State#client_state.partial_upload     ->
                     {{ok, partial_upload}, State#client_state{attempts = 1}};
                 not State#client_state.partial_upload -> read_response(State)
             end;
         {error, closed} ->
             close_socket(State),
-            NewState = State#client_state{
-                socket = undefined,
-                attempts = State#client_state.attempts - 1},
-	    case connect_socket(NewState) of
-		{error, connection_closed} ->
+	    case connect_socket(State#client_state{
+				  socket = undefined}) of
+		{{error, connection_closed}, NewState} ->
 		    {{error, connection_closed}, NewState};
-		NewState2 ->
-		    send_request(NewState2)
+		{ok, NewState} ->
+		    send_request(NewState)
 	    end;
 	{error, _Reason} ->
             close_socket(State),
@@ -985,21 +977,34 @@ is_ipv6_host(Host) ->
 %%------------------------------------------------------------------------------
 connect_socket(State = #client_state{attempts = 0}) ->
     % Don't try again if the number of allowed attempts is 0.
-    {{error, connection_closed}, State};
-connect_socket(State = #client_state{init_options = Options, pool = Pool}) ->
-    case Pool of
-	undefined ->
+    {{error, connection_closed}, State#client_state{attempts = 1}};
+connect_socket(State = #client_state{pool = Pool,
+				     attempts = Attempts}) ->
+    Connection = case Pool of
+		     undefined ->
+			 new_socket(State);
+		     _ ->
+			 connect_pool(State)
+		 end,
+    case Connection of
+	{ok, Socket} ->
+	    {ok, State#client_state{socket = Socket}};
+	{error, unknown_pool} = Error ->
+	    {Error, State};
+	{error, _} ->
+	    connect_socket(State#client_state{attempts = Attempts - 1})
+    end.
+
+-spec connect_pool(#client_state{}) -> {ok, socket()} | {error, atom()}.
+connect_pool(State = #client_state{init_options = Options,
+				   pool = Pool}) ->
+    {Host, Port, Ssl} = request_first_destination(State),
+    case lhttpc_manager:ensure_call(Pool, self(), Host, Port, Ssl, Options) of
+	{ok, undefined} ->
+	    %% ensure_call does not open a socket if the pool doesnt have one
 	    new_socket(State);
-	_ ->
-	    {Host, Port, Ssl} = request_first_destination(State),
-	    {ok, Socket} = lhttpc_manager:ensure_call(Pool, self(), Host, Port, Ssl, Options),
-	    %ensure_call does not open a socket if the pool doesnt have one already!!!
-	    case Socket of
-		undefined ->
-		    new_socket(State);
-		Socket ->
-		    {ok, State#client_state{socket = Socket}}
-	    end
+	Reply ->
+	    Reply
     end.
 
 %%------------------------------------------------------------------------------
@@ -1022,9 +1027,9 @@ new_socket(State) ->
     SocketOptions = [binary, {packet, http}, {active, false} | ConnectOptions],
     try lhttpc_sock:connect(Host, Port, SocketOptions, Timeout, Ssl) of
 	{ok, Socket} ->
-	    {ok, State#client_state{socket = Socket}};
+	    {ok, Socket};
 	{error, etimedout} ->
-						% TCP stack decided to give up
+	    %% TCP stack decided to give up
 	    {error, connect_timeout};
 	{error, timeout} ->
 	    {error, connect_timeout};

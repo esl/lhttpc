@@ -41,6 +41,7 @@
 
 %% Exported functions
 -export([start_link/0, start_link/1,
+	 new_pool/3,
          client_count/1,
          connection_count/1, connection_count/2,
          update_connection_timeout/2,
@@ -205,18 +206,18 @@ start_link(Options0) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec ensure_call(pool_id(), pid(), host(), port_num(), boolean(), options()) ->
-                        socket() | 'no_socket'.
+                        {ok, socket()} | {error, 'no_socket'} | {error, term()}.
 ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     SocketRequest = {socket, Pid, Host, Port, Ssl},
     try gen_server:call(Pool, SocketRequest, infinity) of
         {ok, S} ->
             %% Re-using HTTP/1.1 connections
             {ok, S};
-        no_socket ->
+        {error, no_socket} ->
             %% Opening a new HTTP/1.1 connection
             {ok, undefined}
     catch
-        exit:{noproc, Reason} ->
+        exit:{noproc, _Reason} ->
             case proplists:get_value(pool_ensure, Options, false) of
                 true ->
                     {ok, DefaultTimeout} = application:get_env(
@@ -231,18 +232,35 @@ ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
                     PoolMaxSize = proplists:get_value(pool_max_size,
                                                       Options,
                                                       DefaultMaxPool),
-                    case lhttpc:add_pool(Pool, ConnTimeout, PoolMaxSize) of
+                    case new_pool(Pool, ConnTimeout, PoolMaxSize) of
                         {ok, _Pid} ->
                             ensure_call(Pool, Pid, Host, Port, Ssl, Options);
-                        _ ->
-                            %% Failed to create pool, exit as expected
-                            %exit({noproc, Reason})
-			    exit({noproc, Reason})
+                        Error ->
+                            Error
                     end;
                 false ->
                     %% No dynamic pool creation, exit as expected
-                    exit({noproc, Reason})
+                    {error, unknown_pool}
             end
+    end.
+
+-spec new_pool(atom(), non_neg_integer(), poolsize()) ->
+          {ok, pid()} | {error, term()}.
+new_pool(Pool, ConnTimeout, PoolSize) ->
+    ChildSpec = {Pool,
+                 {lhttpc_manager, start_link, [[{name, Pool},
+                                                {connection_timeout, ConnTimeout},
+                                                {pool_size, PoolSize}]]},
+                 permanent, 10000, worker, [lhttpc_manager]},
+    case supervisor:start_child(lhttpc_sup, ChildSpec) of
+        {error, {already_started, _Pid}} ->
+            {error, already_exists};
+        {error, Error} ->
+            {error, Error};
+        {ok, Pid} ->
+            {ok, Pid};
+        {ok, Pid, _Info} ->
+            {ok, Pid}
     end.
 
 %%------------------------------------------------------------------------------
@@ -305,7 +323,7 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
                     Queues2 = add_to_queue(Dest, From, Queues),
                     {noreply, State2#httpc_man{queues = Queues2}};
                 false ->
-                    {reply, no_socket, monitor_client(Dest, From, State2)}
+                    {reply, {error, no_socket}, monitor_client(Dest, From, State2)}
             end
     end;
 handle_call(dump_settings, _, State) ->

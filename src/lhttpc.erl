@@ -133,21 +133,7 @@ add_pool(Name, ConnTimeout) when is_atom(Name),
 -spec add_pool(atom(), non_neg_integer(), poolsize()) ->
           {ok, pid()} | {error, term()}.
 add_pool(Name, ConnTimeout, PoolSize) ->
-    ChildSpec = {Name,
-                 {lhttpc_manager, start_link, [[{name, Name},
-                                                {connection_timeout, ConnTimeout},
-                                                {pool_size, PoolSize}]]},
-                 permanent, 10000, worker, [lhttpc_manager]},
-    case supervisor:start_child(lhttpc_sup, ChildSpec) of
-        {error, {already_started, _Pid}} ->
-            {error, already_exists};
-        {error, Error} ->
-            {error, Error};
-        {ok, Pid} ->
-            {ok, Pid};
-        {ok, Pid, _Info} ->
-            {ok, Pid}
-    end.
+    lhttpc_manager:new_pool(Name, ConnTimeout, PoolSize).
 
 %%------------------------------------------------------------------------------
 %% @doc Delete a pool
