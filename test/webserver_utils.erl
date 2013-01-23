@@ -68,6 +68,13 @@ default_string() ->
 long_body_part() ->
     ?LONG_BODY_PART.
 
+long_body_part(Size) ->
+    list_to_binary(
+      lists:foldl(
+	fun(_, Acc) ->
+		Acc ++ " " ++ webserver_utils:long_body_part()
+	end, webserver_utils:long_body_part(), lists:seq(1, Size))).
+
 %%% Responders
 simple_response(Module, Socket, _Request, _Headers, Body) ->
     Module:send(

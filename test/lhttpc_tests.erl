@@ -540,10 +540,8 @@ partial_download_illegal_option() ->
 
 long_body_part(Size) ->
     list_to_binary(
-      lists:foldl(
-	fun(_, Acc) ->
-		Acc ++ " " ++ webserver_utils:long_body_part()
-	end, webserver_utils:long_body_part(), lists:seq(1, Size))).
+      lists:flatten(
+	[webserver_utils:long_body_part() || _ <- lists:seq(1, Size)])).
 
 partial_download_identity() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
@@ -559,6 +557,7 @@ partial_download_identity() ->
     ok = lhttpc:get_body_part(Client),
     Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(size(long_body_part(3)), size(Body)),
     ?assertEqual(long_body_part(3), Body).
 
 partial_download_infinity_window() ->
@@ -736,14 +735,18 @@ upload_parts(BodyPart, CurrentState) ->
     NextState.
 
 read_partial_body(Client) ->
-    read_partial_body(Client, infinity, []).
+    read_partial_body(Client, infinity, <<>>).
 
 read_partial_body(Client, Size) ->
-    read_partial_body(Client, Size, []).
+    read_partial_body(Client, Size, <<>>).
 
 read_partial_body(Client, Size, Acc) ->
-    %ok = lhttpc:get_body_part(Client),
     receive
+	{body_part,  http_eob} ->
+	    Acc;
+	{body_part,  window_finished} ->
+	    ok = lhttpc:get_body_part(Client),
+	    read_partial_body(Client, Size, Acc);
 	{body_part, Bin} ->
 	    if
                 Size =:= infinity ->
@@ -751,20 +754,14 @@ read_partial_body(Client, Size, Acc) ->
                 Size =/= infinity ->
                     ?assert(Size >= iolist_size(Bin))
 	    end,
-	    ok = lhttpc:get_body_part(Client),
-	    read_partial_body(Client, Size, [Acc, Bin]);
+	    read_partial_body(Client, Size, <<Acc/binary,Bin/binary>>);
 	{http_eob, Trailers} ->
-	    list_to_binary(Acc);
-	{body_part,  http_eob} ->
-	    list_to_binary(Acc);
-	{body_part,  window_finished} ->
-	    ok = lhttpc:get_body_part(Client),
-	    read_partial_body(Client, Size, Acc);
-	{error, Reason} ->
-	    {error, Reason}
-		after
-		    100 ->
-			{error, receive_clause}
+	    Acc;
+	{body_part_error, Reason} ->
+	    {error, Reason, Acc}
+    after
+	100 ->
+	    {error, receive_clause, Acc}
     end.
 
 simple(Method) ->

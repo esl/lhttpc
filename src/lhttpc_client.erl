@@ -86,7 +86,8 @@
         proxy_setup = false :: boolean(),
         download_info :: {term(), term()},
 	  pool = undefined,
-	  init_options
+	  init_options,
+	  body_length = undefined :: non_neg_integer() | undefined | chunked | infinity
     }).
 
 %%==============================================================================
@@ -236,11 +237,12 @@ handle_call({send_body_part, Data}, From, State = #client_state{partial_upload =
     {_Reply, NewState} = send_body_part(State, Data),
     {noreply, NewState};
 %We send the parts to the specified Pid.
-handle_call(get_body_part, From,
-            State=#client_state{partial_download = true, download_info = {_Vsn, Hdrs}}) ->
+handle_call(get_body_part, From, State=#client_state{partial_download = true}) ->
     gen_server:reply(From, ok),
-    read_partial_body(State, body_type(Hdrs)),
-    {noreply, State}.
+    {noreply, read_partial_body(State)};
+handle_call(_, _, State) ->
+    {reply, {error, unsupported_call}, State}.
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -529,7 +531,7 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 
             % Either we only noticed that the socket was closed after we
             % sent the request, the server closed it just after we put
-            % the request on the wire or the server has some issues and is
+            % the request on the wire or the server has some isses and is
             % closing connections without sending responses.
             % If this the first attempt to send the request, we will try again.
             close_socket(State),
@@ -571,9 +573,9 @@ handle_response_body(#client_state{partial_download = true} = State, Vsn,
         true ->
             Response = {ok, {Status, Hdrs, partial_download}},
             gen_server:reply(State#client_state.requester, Response),
-	    NewState = State#client_state{download_info = {Vsn, Hdrs}},
-            read_partial_body(NewState, body_type(Hdrs)),
-            {noreply, NewState};
+	    NewState = State#client_state{download_info = {Vsn, Hdrs},
+					  body_length = body_type(Hdrs)},
+            {noreply, read_partial_body(NewState)};
         false ->
             {{Status, Hdrs, undefined}, State}
     end.
@@ -644,13 +646,17 @@ read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
 %%% @doc Called when {partial_download, PartialDownloadOptions} option is used.
 %%% @end
 %%------------------------------------------------------------------------------
-read_partial_body(State=#client_state{download_info = {_Vsn, Hdrs}}, chunked) ->
+read_partial_body(State=#client_state{download_info = {_Vsn, Hdrs},
+				      body_length = chunked}) ->
     Window = State#client_state.download_window,
     read_partial_chunked_body(State, Hdrs, Window, 0, [], 0);
-read_partial_body(State=#client_state{download_info = {Vsn, Hdrs}}, infinite) ->
+read_partial_body(State=#client_state{download_info = {Vsn, Hdrs},
+				      body_length = infinite}) ->
     check_infinite_response(Vsn, Hdrs),
     read_partial_infinite_body(State, Hdrs, State#client_state.download_window);
-read_partial_body(State=#client_state{download_info = {_Vsn, Hdrs}}, {fixed_length, ContentLength}) ->
+read_partial_body(State=#client_state{
+		    download_info = {_Vsn, Hdrs},
+		    body_length = {fixed_length, ContentLength}}) ->
     read_partial_finite_body(State, Hdrs, ContentLength, State#client_state.download_window).
 
 %%------------------------------------------------------------------------------
@@ -658,21 +664,22 @@ read_partial_body(State=#client_state{download_info = {_Vsn, Hdrs}}, {fixed_leng
 %%------------------------------------------------------------------------------
 read_partial_finite_body(State , _Hdrs, 0, _Window) ->
     reply_end_of_body(State, []),
-    {noreply, State};
-read_partial_finite_body(#client_state{download_proc = To} = State, _Hdrs, _ContentLength, 0) ->
+    State;
+read_partial_finite_body(#client_state{download_proc = To} = State, _Hdrs, ContentLength, 0) ->
     %finished the window, reply to ask for another call to get_body_part
     To ! {body_part, window_finished},
-    {noreply, State};
+    State#client_state{body_length = {fixed_length, ContentLength}};
 read_partial_finite_body(State, Hdrs, ContentLength, Window) when Window >= 0->
     case read_body_part(State, ContentLength) of
         {ok, Bin} ->
             State#client_state.download_proc ! {body_part, Bin},
 	    Length = ContentLength - iolist_size(Bin),
 	    read_partial_finite_body(State, Hdrs, Length, lhttpc_lib:dec(Window));
-        %TODO do we need to close the socket here?
         {error, Reason} ->
-            State#client_state.download_proc ! {error, Reason},
-            exit(normal)
+            State#client_state.download_proc ! {body_part_error, Reason},
+	    close_socket(State),
+            State#client_state{partial_download = false,
+			       socket = undefined}
     end.
 
 %%------------------------------------------------------------------------------
@@ -709,7 +716,7 @@ read_length(Hdrs, Ssl, Socket, Length) ->
 read_partial_chunked_body(State, _Hdrs, 0, 0, _Buffer, 0) ->
     %we ask for another call to get_body_part
     State#client_state.download_proc ! {body_part, http_eob},
-    {noreply, State};
+    State;
 read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, 0) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
@@ -719,7 +726,7 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, 0) ->
             reply_chunked_part(State, Buffer, Window),
             {Trailers, _NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
             reply_end_of_body(State, Trailers),
-	    {noreply, State};
+	    State;
         ChunkSize when PartSize =:= infinity ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
             NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window),
@@ -862,12 +869,13 @@ reply_end_of_body(#client_state{download_proc = To}, Trailers) ->
 %%------------------------------------------------------------------------------
 read_partial_infinite_body(State, _Hdrs, 0) ->
     State#client_state.download_proc ! {body_part, window_finished},
-    {noreply, State};
+    State;
 read_partial_infinite_body(State, Hdrs, Window)
   when Window >= 0 ->
     case read_infinite_body_part(State) of
-        http_eob -> reply_end_of_body(State, []),
-		    {noreply, State};
+        http_eob ->
+	    reply_end_of_body(State, []),
+	    State;
         Bin ->
             State#client_state.download_proc ! {body_part, Bin},
 	    read_partial_infinite_body(State, Hdrs, lhttpc_lib:dec(Window))
@@ -1010,7 +1018,7 @@ connect_pool(State = #client_state{init_options = Options,
 				   pool = Pool}) ->
     {Host, Port, Ssl} = request_first_destination(State),
     case lhttpc_manager:ensure_call(Pool, self(), Host, Port, Ssl, Options) of
-	{ok, undefined} ->
+	{ok, no_socket} ->
 	    %% ensure_call does not open a socket if the pool doesnt have one
 	    new_socket(State);
 	Reply ->

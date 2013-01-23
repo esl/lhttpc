@@ -206,16 +206,11 @@ start_link(Options0) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec ensure_call(pool_id(), pid(), host(), port_num(), boolean(), options()) ->
-                        {ok, socket()} | {error, 'no_socket'} | {error, term()}.
+                        {ok, socket()} | {ok, 'no_socket'} | {error, term()}.
 ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     SocketRequest = {socket, Pid, Host, Port, Ssl},
-    try gen_server:call(Pool, SocketRequest, infinity) of
-        {ok, S} ->
-            %% Re-using HTTP/1.1 connections
-            {ok, S};
-        {error, no_socket} ->
-            %% Opening a new HTTP/1.1 connection
-            {ok, undefined}
+    try
+	gen_server:call(Pool, SocketRequest, infinity)
     catch
         exit:{noproc, _Reason} ->
             case proplists:get_value(pool_ensure, Options, false) of
@@ -323,7 +318,7 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
                     Queues2 = add_to_queue(Dest, From, Queues),
                     {noreply, State2#httpc_man{queues = Queues2}};
                 false ->
-                    {reply, {error, no_socket}, monitor_client(Dest, From, State2)}
+                    {reply, {ok, no_socket}, monitor_client(Dest, From, State2)}
             end
     end;
 handle_call(dump_settings, _, State) ->
@@ -387,7 +382,7 @@ handle_info({'DOWN', MonRef, process, Pid, _Reason}, State) ->
         empty ->
             {noreply, State#httpc_man{clients = Clients2}};
         {ok, From, Queues2} ->
-            gen_server:reply(From, no_socket),
+            gen_server:reply(From, {ok, no_socket}),
             State2 = State#httpc_man{queues = Queues2, clients = Clients2},
             {noreply, monitor_client(Dest, From, State2)}
     end;

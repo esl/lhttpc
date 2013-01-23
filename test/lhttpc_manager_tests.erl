@@ -68,7 +68,7 @@ empty_manager() ->
     Client = spawn_client(),
     ?assertEqual(ok, ping_client(Client)),
 
-    ?assertEqual(no_socket, client_peek_socket(Client)),
+    ?assertEqual({ok, no_socket}, client_peek_socket(Client)),
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client)),
@@ -317,7 +317,7 @@ closed_race_cond() ->
         after 5000 -> erlang:error("Timeout receiving result from child process")
     end,
 
-    ?assertMatch(no_socket, Result2),
+    ?assertMatch({ok, no_socket}, Result2),
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client)),
@@ -350,7 +350,7 @@ client_loop(Parent, Socket) ->
         {connect, Ref} ->
             Args = {socket, self(), ?HOST, get_port(), ?SSL},
             NewSocket = case gen_server:call(lhttpc_manager, Args, infinity) of
-                no_socket ->
+                {ok, no_socket}->
                     socket_server:connect(get_port());
                 {ok, S} ->
                     S
