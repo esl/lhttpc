@@ -15,24 +15,27 @@ fail_connect_test() ->
     ?assertEqual({error, connection_closed},
 		 lhttpc_client:start({{"localhost", 8080, false}, []}, [])).
 
-fail_connect_pool_test() ->
-    ?assertEqual({error, unknown_pool},
-		 lhttpc_client:start({{"localhost", 8080, false},
-				      [{pool, my_test_pool}]}, [])).
-
-success_connect_pool_test_() ->
-    {setup,
+fail_connect_pool_test_() ->
+    {foreach,
      fun() ->
 	     ok = application:start(ssl),
 	     ok = application:start(lhttpc)
      end,
      fun(_) ->
-	     application:stop(lhttpc)
+	     application:stop(lhttpc),
+	     application:stop(ssl)
      end,
-     fun() ->
-	     ?assertMatch({error, connection_closed},
-			  lhttpc_client:start({{"localhost", 8080, false},
-					       [{pool, my_test_pool},
-						{pool_ensure, true}]}, []))
-     end
+     [{"Fail to connect on ensure pool",
+       fun() ->
+	       ?assertMatch({error, connection_closed},
+			    lhttpc_client:start({{"localhost", 8080, false},
+						 [{pool, my_test_pool},
+						  {pool_ensure, true}]}, []))
+       end},
+      {"Fail to connect - no pool",
+       fun() ->
+	       ?assertEqual({error, unknown_pool},
+			    lhttpc_client:start({{"localhost", 8080, false},
+						 [{pool, my_test_pool}]}, []))
+       end}]
     }.
