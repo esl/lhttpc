@@ -233,7 +233,7 @@ handle_call({send_body_part, Data}, From, State = #client_state{partial_upload =
 %We send the parts to the specified Pid.
 handle_call({get_body_part, _Options}, From,
             State=#client_state{partial_download = true, download_info = {_Vsn, Hdrs}}) ->
-    gen_server:reply(ok, From),
+    gen_server:reply(From, ok),
     read_partial_body(State, body_type(Hdrs)),
     {noreply, State}.
 
