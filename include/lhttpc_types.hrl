@@ -65,6 +65,8 @@
         {'part_size', non_neg_integer() | 'infinity'} |
         invalid_option().
 
+
+
 -type option() ::
         {'connect_timeout', timeout()} |
         {'send_retry', non_neg_integer()} |
@@ -73,8 +75,16 @@
         {'connect_options', socket_options()} |
         {'proxy', string()} |
         {'proxy_ssl_options', socket_options()} |
-        {'pool', pid() | atom()} |
+	{'pool_options', pool_options()} |
         invalid_option().
+
+-type pool_option() ::
+	{'pool_ensure', boolean()} |
+	{'pool_connection_timeout', pos_timeout()} |
+	{'pool_max_size' | integer()} |
+	{'pool_name', pool_id()}.
+
+-type pool_options() :: [pool_option()].
 
 -type options() :: [option()].
 

@@ -67,7 +67,7 @@
 	  pool = undefined,
 	  pool_options,
 	  socket,
-	  connect_timeout = infinity :: timeout(),
+	  connect_timeout = 'infinity' :: timeout(),
 	  connect_options = [] :: [any()],
 	  %% next fields are specific to particular requests
 	  request :: iolist() | undefined,
@@ -84,7 +84,7 @@
 	  %% the wire at that point or in case of chunked one chunk
 	  attempts = 0 :: integer(),
 	  download_info :: {term(), term()},
-	  body_length = undefined :: non_neg_integer() | undefined | chunked | infinity,
+	  body_length = undefined :: {'fixed_length', non_neg_integer()} | 'undefined' | 'chunked' | 'infinite',
 	  proxy :: undefined | #lhttpc_url{},
 	  proxy_ssl_options = [] :: [any()],
 	  proxy_setup = false :: boolean()
@@ -554,7 +554,9 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 %%------------------------------------------------------------------------------
 -spec handle_response_body(#client_state{}, {integer(), integer()},
                 http_status(), headers()) -> {http_status(), headers(), body()} |
-                                             {http_status(), headers()}.
+                                             {http_status(), headers()} |
+					     {'noreply', any()} |
+					     {{'error', any()}, any()}.
 handle_response_body(#client_state{partial_download = false} = State, Vsn,
         Status, Hdrs) ->
 %when {partial_download, PartialDownloadOptions} option is NOT used.

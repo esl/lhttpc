@@ -681,7 +681,7 @@ kill_client(Pid) ->
 %%------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
--spec verify_options(options()) -> ok.
+-spec verify_options(options()) -> ok | any().
 verify_options([{send_retry, N} | Options]) when is_integer(N), N >= 0 ->
     verify_options(Options);
 verify_options([{connect_timeout, infinity} | Options]) ->
@@ -705,17 +705,17 @@ verify_options([{proxy, List} | Options]) when is_list(List) ->
 verify_options([{proxy_ssl_options, List} | Options]) when is_list(List) ->
     verify_options(Options);
 verify_options([{pool_options, PoolOptions} | Options]) ->
-    case verify_pool_options(PoolOptions) of
-	ok ->
-	    verify_options(Options);
-	R ->
-	    R
-    end;
+    ok = verify_pool_options(PoolOptions),
+    verify_options(Options);
 verify_options([Option | _Rest]) ->
     erlang:error({bad_option, Option});
 verify_options([]) ->
     ok.
 
+%%------------------------------------------------------------------------------
+%% @private
+%%------------------------------------------------------------------------------
+-spec verify_pool_options(pool_options()) -> ok | no_return().
 verify_pool_options([{pool, PidOrName} | Options])
         when is_pid(PidOrName); is_atom(PidOrName) ->
     verify_pool_options(Options);
