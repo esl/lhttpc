@@ -210,7 +210,7 @@ start_link(Options0) ->
 ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     SocketRequest = {socket, Pid, Host, Port, Ssl},
     try
-	gen_server:call(Pool, SocketRequest, infinity)
+	gen_server:call(Pool, SocketRequest, 100)
     catch
         exit:{noproc, _Reason} ->
             case proplists:get_value(pool_ensure, Options, false) of

@@ -494,15 +494,19 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
     headers(), iodata(), pos_timeout(), options()) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
-    {ok, Client} = connect_client({Host, Port, Ssl}, Options),
-    try
-	Reply = lhttpc_client:request(Client, Path, Method, Hdrs, Body, Options, Timeout),
-	disconnect_client(Client),
-	Reply
-    catch
-	exit:{timeout, _} ->
-	    disconnect_client(Client),
-	    {error, timeout}
+    case connect_client({Host, Port, Ssl}, Options) of
+	{ok, Client} ->
+	    try
+		Reply = lhttpc_client:request(Client, Path, Method, Hdrs, Body, Options, Timeout),
+		disconnect_client(Client),
+		Reply
+	    catch
+		exit:{timeout, _} ->
+		    disconnect_client(Client),
+		    {error, timeout}
+	    end;
+	{error, {timeout, Reason}} ->
+	    {error, connection_timeout}
     end.
 
 %%------------------------------------------------------------------------------
