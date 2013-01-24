@@ -561,17 +561,12 @@ handle_response_body(#client_state{partial_download = false} = State, Vsn,
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
     Method = State#client_state.method,
-    %{Body, NewHdrs} = case has_body(Method, element(1, Status), Hdrs) of
-    %                      true  -> read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs));
-    %                      false -> {<<>>, Hdrs}
-    %                  end,
     Reply = case has_body(Method, element(1, Status), Hdrs) of
                           true  -> read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs));
                           false -> {<<>>, Hdrs}
 	    end,
     case Reply of
 	{error, Reason} ->
-	   % NewState = State#client_state{socket = undefined},
 	    {{error, Reason}, State};
 	{Body, NewHdrs} ->
 	    {{Status, NewHdrs, Body}, State}
@@ -715,7 +710,6 @@ read_length(Hdrs, Ssl, Socket, Length) ->
         {ok, Data} ->
             {Data, Hdrs};
         {error, Reason} ->
-            %erlang:error(Reason)
 	    lhttpc_sock:close(Socket, Ssl),
 	    {error, Reason}
     end.
