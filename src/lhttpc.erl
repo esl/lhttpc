@@ -689,8 +689,8 @@ verify_options([{connect_timeout, infinity} | Options]) ->
 verify_options([{connect_timeout, MS} | Options])
         when is_integer(MS), MS >= 0 ->
     verify_options(Options);
-verify_options([{partial_upload, WindowSize} | Options])
-        when is_integer(WindowSize), WindowSize >= 0 ->
+verify_options([{partial_upload, Bool} | Options])
+        when is_boolean(Bool) ->
     verify_options(Options);
 verify_options([{partial_upload, infinity} | Options])  ->
     verify_options(Options);

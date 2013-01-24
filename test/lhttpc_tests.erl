@@ -84,23 +84,24 @@ tcp_test_() ->
                 ?_test(connection_timeout()),
                 ?_test(suspended_manager()),
               %  ?_test(chunked_encoding()),
-              %  ?_test(partial_upload_identity()),
-              %  ?_test(partial_upload_identity_iolist()),
+                ?_test(partial_upload_identity()),
+                ?_test(partial_upload_identity_iolist()),
               %  ?_test(partial_upload_chunked()),
               %  ?_test(partial_upload_chunked_no_trailer()),
                 ?_test(partial_download_illegal_option()),
-              %  ?_test(partial_download_identity()),
-		?_test(partial_download_infinity_window()),
-              %  ?_test(partial_download_no_content_length()),
-              %  ?_test(partial_download_no_content()),
-              %  ?_test(limited_partial_download_identity()),
-              %  ?_test(partial_download_chunked()),
-              %  ?_test(partial_download_chunked_infinite_part()),
-              %  ?_test(partial_download_smallish_chunks()),
-              %  ?_test(partial_download_slow_chunks()),
-                ?_test(close_connection()),
-                ?_test(trailing_space_header()),
-                ?_test(connection_count()) % just check that it's 0 (last)
+                ?_test(partial_download_identity()),
+	        ?_test(partial_download_infinity_window()),
+                ?_test(partial_download_no_content_length()),
+                ?_test(partial_download_no_content()),
+                ?_test(limited_partial_download_identity()),
+                ?_test(partial_download_chunked()),
+                ?_test(partial_download_chunked_infinite_part()),
+                ?_test(partial_download_smallish_chunks()),
+                ?_test(partial_download_slow_chunks())
+              %  ?_test(close_connection()),
+              %  ?_test(message_queue()),
+              %  ?_test(trailing_space_header()),
+              %  ?_test(connection_count()) % just check that it's 0 (last)
             ]}
     }.
 
@@ -443,18 +444,18 @@ partial_upload_identity() ->
     URL = url(Port, "/partial_upload"),
     Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
     Hdrs = [{"Content-Length", integer_to_list(iolist_size(Body))}],
-    Options = [{partial_upload, 1}],
-    {ok, UploadState1} = lhttpc:request(URL, post, Hdrs, hd(Body), 1000, Options),
-    Response1 = lists:foldl(fun upload_parts/2, UploadState1,
-        tl(Body) ++ [http_eob]),
+    Options = [{partial_upload, true}],
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, partial_upload} =
+        lhttpc:request_client(Client, URL, post, Hdrs, hd(Body), 1000, Options),
+    {ok, Response1} = upload_parts(Client, tl(Body) ++ [http_eob]),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response1)),
     ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
     % Make sure it works with no body part in the original request as well
-    {ok, UploadState2} = lhttpc:request(URL, post, Hdrs, [], 1000, Options),
-    Response2 = lists:foldl(fun upload_parts/2, UploadState2,
-        Body ++ [http_eob]),
+    {ok, partial_upload} = lhttpc:request_client(Client, URL, post, Hdrs, [], 1000, Options),
+    {ok, Response2} = upload_parts(Client, Body ++ [http_eob]),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response2)),
     ?assertEqual("This is chunky stuff!",
@@ -465,18 +466,18 @@ partial_upload_identity_iolist() ->
     URL = url(Port, "/partial_upload"),
     Body = ["This", [<<" ">>, $i, $s, [" "]], <<"chunky">>, [<<" stuff!">>]],
     Hdrs = [{"Content-Length", integer_to_list(iolist_size(Body))}],
-    Options = [{partial_upload, 1}],
-    {ok, UploadState1} = lhttpc:request(URL, post, Hdrs, hd(Body), 1000, Options),
-    Response1 = lists:foldl(fun upload_parts/2, UploadState1,
-        tl(Body) ++ [http_eob]),
+    Options = [{partial_upload, true}],
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, partial_upload} =
+        lhttpc:request_client(Client, URL, post, Hdrs, hd(Body), 1000, Options),
+    {ok, Response1} = upload_parts(Client, tl(Body) ++ [http_eob]),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response1)),
     ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
     % Make sure it works with no body part in the original request as well
-    {ok, UploadState2} = lhttpc:request(URL, post, Hdrs, [], 1000, Options),
-    Response2 = lists:foldl(fun upload_parts/2, UploadState2,
-        Body ++ [http_eob]),
+    {ok, UploadState2} = lhttpc:request_client(Client, URL, post, Hdrs, [], 1000, Options),
+    {ok, Response2} = upload_parts(Client, Body ++ [http_eob]),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response2)),
     ?assertEqual("This is chunky stuff!",
@@ -486,13 +487,12 @@ partial_upload_chunked() ->
     Port = start(gen_tcp, [fun webserver_utils:chunked_upload/5, fun webserver_utils:chunked_upload/5]),
     URL = url(Port, "/partial_upload_chunked"),
     Body = ["This", [<<" ">>, $i, $s, [" "]], <<"chunky">>, [<<" stuff!">>]],
-    Options = [{partial_upload, 1}],
-    {ok, UploadState1} = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
+    Options = [{partial_upload, true}],
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, partial_upload} = lhttpc:request_client(Client, URL, post, [], hd(Body), 1000, Options),
     Trailer = {"X-Trailer-1", "my tail is tailing me...."},
-    {ok, Response1} = lhttpc:send_trailers(
-        lists:foldl(fun upload_parts/2, UploadState1, tl(Body)),
-        [Trailer]
-    ),
+    upload_parts(Client, tl(Body)),
+    {ok, Response1} = lhttpc:send_trailers(Client, [Trailer]),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response1)),
     ?assertEqual("This is chunky stuff!",
@@ -502,10 +502,8 @@ partial_upload_chunked() ->
     % Make sure it works with no body part in the original request as well
     Headers = [{"Transfer-Encoding", "chunked"}],
     {ok, UploadState2} = lhttpc:request(URL, post, Headers, [], 1000, Options),
-    {ok, Response2} = lhttpc:send_trailers(
-        lists:foldl(fun upload_parts/2, UploadState2, Body),
-        [Trailer]
-    ),
+    upload_parts(Client, Body),
+    {ok, Response2} = lhttpc:send_trailers(Client, [Trailer]),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response2)),
     ?assertEqual("This is chunky stuff!",
@@ -513,20 +511,20 @@ partial_upload_chunked() ->
     ?assertEqual(element(2, Trailer),
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response2))).
 
-partial_upload_chunked_no_trailer() ->
-    Port = start(gen_tcp, [fun webserver_utils:chunked_upload/5]),
-    URL = url(Port, "/partial_upload_chunked_no_trailer"),
-    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
-    Options = [{partial_upload, 1}],
-    {ok, UploadState1} = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
-    {ok, Response} = lhttpc:send_body_part(
-        lists:foldl(fun upload_parts/2, UploadState1, tl(Body)),
-        http_eob
-    ),
-    ?assertEqual({200, "OK"}, status(Response)),
-    ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)),
-    ?assertEqual("This is chunky stuff!",
-        lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
+%% partial_upload_chunked_no_trailer() ->
+%%     Port = start(gen_tcp, [fun webserver_utils:chunked_upload/5]),
+%%     URL = url(Port, "/partial_upload_chunked_no_trailer"),
+%%     Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
+%%     Options = [{partial_upload, 1}],
+%%     ok = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
+%%     {ok, Response} = lhttpc:send_body_part(
+%% 		       lists:foldl(fun upload_parts/2, Client, tl(Body)),
+%% 		       http_eob
+%% 		      ),
+%%     ?assertEqual({200, "OK"}, status(Response)),
+%%     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)),
+%%     ?assertEqual("This is chunky stuff!",
+%%         lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
 
 partial_download_illegal_option() ->
     ?assertError({bad_option, {partial_download, {foo, bar}}},
@@ -542,14 +540,13 @@ partial_download_identity() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-		       {window_size, 1},
-		       {recv_proc, self()}
-		      ],
+        {window_size, 1},
+	{recv_proc, self()}
+    ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
     {ok, {Status, _Hdrs, partial_download}} =
         lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
-    ok = lhttpc:get_body_part(Client),
     Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(size(long_body_part(3)), size(Body)),
@@ -563,8 +560,10 @@ partial_download_infinity_window() ->
 		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} = lhttpc:request(URL, get, [], <<>>, 1000, Options),
-    Body = read_partial_body(Pid),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, partial_download}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(long_body_part(3), Body).
 
@@ -572,11 +571,14 @@ partial_download_no_content_length() ->
     Port = start(gen_tcp, [fun webserver_utils:no_content_length/5]),
     URL = url(Port, "/no_cl"),
     PartialDownload = [
-        {window_size, 1}
+		       {window_size, 1},
+		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} = lhttpc:request(URL, get, [], <<>>, 1000, Options),
-    Body = read_partial_body(Pid),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, partial_download}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), Body).
 
@@ -584,11 +586,13 @@ partial_download_no_content() ->
     Port = start(gen_tcp, [fun webserver_utils:no_content_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1}
+		       {window_size, 1},
+		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Body}} =
-        lhttpc:request(URL, get, [], <<>>, 1000, Options),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, Body}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
     ?assertEqual({204, "OK"}, Status),
     ?assertEqual(undefined, Body).
 
@@ -596,13 +600,15 @@ limited_partial_download_identity() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-        {part_size, 512} % bytes
-    ],
+		       {window_size, 1},
+		       {part_size, 512}, % bytes
+		       {recv_proc, self()}
+		      ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} =
-        lhttpc:request(URL, get, [], <<>>, 1000, Options),
-    Body = read_partial_body(Pid, 512),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, partial_download}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Client, 512),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(long_body_part(3), Body).
 
@@ -610,13 +616,15 @@ partial_download_chunked() ->
     Port = start(gen_tcp, [fun webserver_utils:large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-        {part_size, length(webserver_utils:long_body_part()) * 3}
+		       {window_size, 1},
+		       {part_size, length(webserver_utils:long_body_part()) * 3},
+		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} =
-        lhttpc:request(URL, get, [], <<>>, 1000, Options),
-    Body = read_partial_body(Pid),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, partial_download}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(long_body_part(3), Body).
 
@@ -624,27 +632,32 @@ partial_download_chunked_infinite_part() ->
     Port = start(gen_tcp, [fun webserver_utils:large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-        {part_size, infinity}
+		       {window_size, 1},
+		       {part_size, infinity},
+		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} =
-        lhttpc:request(URL, get, [], <<>>, 1000, Options),
-    Body = read_partial_body(Pid),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, partial_download}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
+    ?assertEqual(size(long_body_part(3)), size(Body)),
     ?assertEqual(long_body_part(3), Body).
 
 partial_download_smallish_chunks() ->
     Port = start(gen_tcp, [fun webserver_utils:large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-        {part_size, length(webserver_utils:long_body_part()) - 1}
+		       {window_size, 1},
+		       {part_size, length(webserver_utils:long_body_part()) - 1},
+		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} =
-        lhttpc:request(URL, get, [], <<>>, 1000, Options),
-    Body = read_partial_body(Pid),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, partial_download}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(long_body_part(3), Body).
 
@@ -652,12 +665,15 @@ partial_download_slow_chunks() ->
     Port = start(gen_tcp, [fun webserver_utils:slow_chunked_response/5]),
     URL = url(Port, "/slow"),
     PartialDownload = [
-        {window_size, 1},
-        {part_size, length(webserver_utils:long_body_part()) div 2}
+		       {window_size, 1},
+		       {part_size, length(webserver_utils:long_body_part()) div 2},
+		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
-    {ok, {Status, _, Pid}} = lhttpc:request(URL, get, [], <<>>, 1000, Options),
-    Body = read_partial_body(Pid),
+    {ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, {Status, _Hdrs, partial_download}} =
+        lhttpc:request_client(Client, URL, get, [], <<>>, 1000, Options),
+    Body = read_partial_body(Client),
     ?assertEqual({200, "OK"}, Status),
     ?assertEqual(long_body_part(2), Body).
 
@@ -725,10 +741,10 @@ invalid_options() ->
 
 
 %%% Helpers functions
-
-upload_parts(BodyPart, CurrentState) ->
-    {ok, NextState} = lhttpc:send_body_part(CurrentState, BodyPart, 1000),
-    NextState.
+upload_parts(Client, Parts) ->
+    lists:foldl(fun(BodyPart, _) ->
+			lhttpc:send_body_part(Client, BodyPart, 1000)
+		end, ok, Parts).
 
 read_partial_body(Client) ->
     read_partial_body(Client, infinity, <<>>).
@@ -739,7 +755,9 @@ read_partial_body(Client, Size) ->
 read_partial_body(Client, Size, Acc) ->
     receive
 	{body_part,  http_eob} ->
-	    Acc;
+	    %% chunked download
+	    ok = lhttpc:get_body_part(Client),
+	    read_partial_body(Client, Size, Acc);
 	{body_part,  window_finished} ->
 	    ok = lhttpc:get_body_part(Client),
 	    read_partial_body(Client, Size, Acc);
@@ -756,7 +774,7 @@ read_partial_body(Client, Size, Acc) ->
 	{body_part_error, Reason} ->
 	    {error, Reason, Acc}
     after
-	100 ->
+	1000 ->
 	    {error, receive_clause, Acc}
     end.
 
