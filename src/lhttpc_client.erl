@@ -61,34 +61,34 @@
     string:to_lower(lhttpc_lib:header_value("connection", HDRS, DEFAULT))).
 
 -record(client_state, {
-        host :: string(),
-        port = 80 :: port_num(),
-        ssl = false :: boolean(),
-        method :: string(),
-        request :: iolist(),
-        request_headers :: headers(),
-	requester,
-        socket,
-        connect_timeout = infinity :: timeout(),
-        connect_options = [] :: [any()],
-        attempts = 1 :: integer(),
-        partial_upload = false :: boolean(),
-        chunked_upload = false :: boolean(),
-        upload_window :: non_neg_integer() | infinity,
-        partial_download = false :: boolean(),
-        download_window = infinity :: timeout(),
-        download_proc :: pid(),
-        part_size :: non_neg_integer() | infinity,
-        %% in case of infinity we read whatever data we can get from
-        %% the wire at that point or in case of chunked one chunk
-        proxy :: undefined | #lhttpc_url{},
-        proxy_ssl_options = [] :: [any()],
-        proxy_setup = false :: boolean(),
-        download_info :: {term(), term()},
+	  host :: string(),
+	  port = 80 :: port_num(),
+	  ssl = false :: boolean(),
 	  pool = undefined,
-	  init_options,
-	  body_length = undefined :: non_neg_integer() | undefined | chunked | infinity
-    }).
+	  pool_options,
+	  socket,
+	  connect_timeout = infinity :: timeout(),
+	  connect_options = [] :: [any()],
+	  %% next fields are specific to particular requests
+	  request :: iolist() | undefined,
+	  method :: string(),
+	  request_headers :: headers(),
+	  requester,
+	  partial_upload = false :: boolean(),
+	  chunked_upload = false :: boolean(),
+	  partial_download = false :: boolean(),
+	  download_window = infinity :: timeout(),
+	  download_proc :: pid(),
+	  part_size :: non_neg_integer() | infinity,
+	  %% in case of infinity we read whatever data we can get from
+	  %% the wire at that point or in case of chunked one chunk
+	  attempts = 0 :: integer(),
+	  download_info :: {term(), term()},
+	  body_length = undefined :: non_neg_integer() | undefined | chunked | infinity,
+	  proxy :: undefined | #lhttpc_url{},
+	  proxy_ssl_options = [] :: [any()],
+	  proxy_setup = false :: boolean()
+	 }).
 
 %%==============================================================================
 %% Exported functions
@@ -132,14 +132,18 @@ request(Client, Path, Method, Hdrs, Body, Options, Timeout) ->
 %%% gen_server callbacks
 %%%===================================================================
 init({Destination, Options}) ->
-    Pool = proplists:get_value(pool, Options),
+    PoolOptions = proplists:get_value(pool_options, Options, []),
+    Pool = proplists:get_value(pool, PoolOptions),
     State = case Destination of
 		{Host, Port, Ssl} ->
 		    #client_state{host = Host,
 				  port = Port,
 				  ssl = Ssl,
 				  pool = Pool,
-				  init_options = Options};
+				  connect_timeout = proplists:get_value(connect_timeout, Options,
+									infinity),
+				  connect_options = proplists:get_value(connect_options, Options, []),
+				  pool_options = PoolOptions};
 		URL ->
 		    #lhttpc_url{host = Host,
 				port = Port,
@@ -149,7 +153,10 @@ init({Destination, Options}) ->
 				  port = Port,
 				  ssl = Ssl,
 				  pool = Pool,
-				  init_options = Options}
+				  connect_timeout = proplists:get_value(connect_timeout, Options,
+									infinity),
+				  connect_options = proplists:get_value(connect_options, Options, []),
+				  pool_options = PoolOptions}
     end,
     %% Get a socket for the pool or exit
     case connect_socket(State) of
@@ -168,8 +175,7 @@ init({Destination, Options}) ->
 handle_call({request, Path, Method, Hdrs, Body, Options}, From,
 	    State = #client_state{ssl = Ssl, host = Host, port = Port,
 				  socket = Socket}) ->
-    UploadWindowSize = proplists:get_value(partial_upload, Options),
-    PartialUpload = proplists:is_defined(partial_upload, Options),
+    PartialUpload = proplists:get_value(partial_upload, Options, false),
     PartialDownload = proplists:is_defined(partial_download, Options),
     PartialDownloadOptions = proplists:get_value(partial_download, Options, []),
     NormalizedMethod = lhttpc_lib:normalize_method(Method),
@@ -177,8 +183,8 @@ handle_call({request, Path, Method, Hdrs, Body, Options}, From,
                 undefined ->
                     undefined;
                 ProxyUrl when is_list(ProxyUrl), not Ssl ->
-                        % The point of HTTP CONNECT proxying is to use TLS tunneled in
-                        % a plain HTTP/1.1 connection to the proxy (RFC2817).
+						% The point of HTTP CONNECT proxying is to use TLS tunneled in
+						% a plain HTTP/1.1 connection to the proxy (RFC2817).
                     throw(origin_server_not_https);
                 ProxyUrl when is_list(ProxyUrl) ->
                     lhttpc_lib:parse_url(ProxyUrl)
@@ -191,12 +197,8 @@ handle_call({request, Path, Method, Hdrs, Body, Options}, From,
                  request = Request,
 		 requester = From,
                  request_headers = Hdrs,
-                 connect_timeout = proplists:get_value(connect_timeout, Options,
-                                                       infinity),
-                 connect_options = proplists:get_value(connect_options, Options, []),
-                 attempts = 1 + proplists:get_value(send_retry, Options, 1),
+                 attempts = proplists:get_value(send_retry, Options, 1),
                  partial_upload = PartialUpload,
-                 upload_window = UploadWindowSize,
                  chunked_upload = ChunkedUpload,
                  partial_download = PartialDownload,
                  download_window = proplists:get_value(window_size,
@@ -211,37 +213,38 @@ handle_call({request, Path, Method, Hdrs, Body, Options}, From,
                 },
     {Response, NewState2} = send_request(NewState),
     {reply, Response, NewState2};
-handle_call({trailers, Trailers}, _From, State = #client_state{partial_upload = true}) ->
+handle_call(_Msg, _From, #client_state{request = undefined} = State) ->
+    {reply, {error, no_pending_request}, State};
+handle_call({send_body_part, _}, _From, State = #client_state{partial_upload = false}) ->
+    {reply, {error, no_partial_upload}, State};
+handle_call({trailers, _}, _From, State = #client_state{partial_upload = false}) ->
+    {reply, {error, no_partial_upload}, State};
+handle_call(get_body_part, _From, State = #client_state{partial_download = false}) ->
+    {reply, {error, no_partial_download}, State};
+handle_call(_Msg, _From, #client_state{socket = undefined} = State) ->
+    {reply, {error, connection_closed}, State#client_state{request = undefined}};
+handle_call({trailers, Trailers}, _From, State) ->
     case send_trailers(State, Trailers) of
         {ok, NewState} ->
             read_response(NewState);
         {Error, NewState} ->
             {reply, Error, NewState}
     end;
-handle_call({send_body_part, http_eob}, _From, State = #client_state{partial_upload = true, socket = undefined}) ->
-    {reply, {error, closed}, State};
-handle_call({send_body_part, http_eob}, From, State = #client_state{partial_upload = true}) ->
+handle_call({send_body_part, http_eob}, From, State) ->
     case send_body_part(State, http_eob) of
         {ok, NewState} ->
             read_response(NewState#client_state{requester = From});
         {Error, NewState} ->
             {reply, Error, NewState}
     end;
-handle_call({send_body_part, Data}, _From, #client_state{partial_upload = true,
-                                                         upload_window = 0}
-            = State) ->
-    {Reply, NewState} = send_body_part(State, Data),
-    {reply, Reply, NewState};
-handle_call({send_body_part, Data}, From, State = #client_state{partial_upload = true}) ->
+handle_call({send_body_part, Data}, From, State) ->
     gen_server:reply(From, ok),
     {_Reply, NewState} = send_body_part(State, Data),
     {noreply, NewState};
-%We send the parts to the specified Pid.
-handle_call(get_body_part, From, State=#client_state{partial_download = true}) ->
+						%We send the parts to the specified Pid.
+handle_call(get_body_part, From, State) ->
     gen_server:reply(From, ok),
-    {noreply, read_partial_body(State)};
-handle_call(_, _, State) ->
-    {reply, {error, unsupported_call}, State}.
+    {noreply, read_partial_body(State)}.
 
 
 %%--------------------------------------------------------------------
@@ -317,11 +320,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-send_body_part(State = #client_state{socket = Socket, ssl = Ssl,
-                                     upload_window = Window}, BodyPart) ->
+send_body_part(State = #client_state{socket = Socket, ssl = Ssl}, BodyPart) ->
     Data = encode_body_part(State, BodyPart),
-    check_send_result(State#client_state{upload_window = lhttpc_lib:dec(Window)},
-                      lhttpc_sock:send(Socket, Data, Ssl)).
+    check_send_result(State, lhttpc_sock:send(Socket, Data, Ssl)).
 
 %%------------------------------------------------------------------------------
 %% @private
@@ -329,13 +330,15 @@ send_body_part(State = #client_state{socket = Socket, ssl = Ssl,
 %% handles the proxy connection.
 %% @end
 %%------------------------------------------------------------------------------
+send_request(#client_state{attempts = 0} = State) ->
+    {{error, connection_closed}, State#client_state{request = undefined}};
 send_request(#client_state{socket = undefined} = State) ->
 % if we dont get a keep alive from the previous request, the socket is undefined.
     case connect_socket(State) of
         {ok, NewState} ->
             send_request(NewState);
-        {{error, Reason}, NewState} ->
-            {{error, Reason}, NewState}
+        {Error, NewState} ->
+            {Error, NewState}
     end;
 send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false,
                            host = DestHost, port = Port, socket = Socket} = State) ->
@@ -369,33 +372,31 @@ send_request(#client_state{proxy = #lhttpc_url{}, proxy_setup = false,
             read_proxy_connect_response(State, nil, nil);
         {error, closed} ->
             close_socket(State),
-            {{error, proxy_connection_closed}, State#client_state{socket = undefined}};
+            {{error, proxy_connection_closed}, State#client_state{socket = undefined, request = undefined}};
         {error, _Reason} ->
             close_socket(State),
-            {{error, proxy_connection_closed}, State#client_state{socket = undefined}}
+            {{error, proxy_connection_closed}, State#client_state{socket = undefined, request = undefined}}
     end;
-send_request(#client_state{socket = Socket, ssl = Ssl, request = Request} = State) ->
+send_request(#client_state{socket = Socket, ssl = Ssl, request = Request,
+			   attempts = Attempts} = State) ->
     %% no proxy
     case lhttpc_sock:send(Socket, Request, Ssl) of
         ok ->
             if
 		%% {partial_upload, WindowSize} is used.
                 State#client_state.partial_upload     ->
-                    {{ok, partial_upload}, State#client_state{attempts = 1}};
-                not State#client_state.partial_upload -> read_response(State)
+                    {{ok, partial_upload}, State#client_state{attempts = 0}};
+                not State#client_state.partial_upload ->
+		    read_response(State)
             end;
         {error, closed} ->
             close_socket(State),
-	    case connect_socket(State#client_state{
-				  socket = undefined}) of
-		{{error, connection_closed}, NewState} ->
-		    {{error, connection_closed}, NewState};
-		{ok, NewState} ->
-		    send_request(NewState)
-	    end;
+	    send_request(State#client_state{socket = undefined,
+					    attempts = Attempts - 1});
 	{error, _Reason} ->
             close_socket(State),
-            {{error, connection_closed}, State#client_state{socket = undefined}}
+            {{error, connection_closed}, State#client_state{socket = undefined,
+							    request = undefined}}
     end.
 
 %%------------------------------------------------------------------------------
@@ -442,9 +443,9 @@ read_proxy_connect_response(State, StatusCode, StatusText) ->
             {{error, {proxy_connection_refused, StatusCode, StatusText}}, State};
         {error, closed} ->
             close_socket(State),
-            {{error, proxy_connection_closed}, State#client_state{socket = undefined}};
+            {{error, proxy_connection_closed}, State#client_state{socket = undefined, request = undefined}};
         {error, Reason} ->
-            {{error, {proxy_connection_failed, Reason}}, State}
+            {{error, {proxy_connection_failed, Reason}}, State#client_state{request = undefined}}
     end.
 
 %%------------------------------------------------------------------------------
@@ -478,7 +479,7 @@ check_send_result(State, ok) ->
     {ok, State};
 check_send_result(State, Error) ->
     close_socket(State),
-    {Error, State#client_state{socket = undefined}}.
+    {Error, State#client_state{socket = undefined, request = undefined}}.
 
 %%------------------------------------------------------------------------------
 %% @private
@@ -524,7 +525,8 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 		    NewHdrs = element(2, Reply),
 		    ReqHdrs = State#client_state.request_headers,
 		    NewSocket = maybe_close_socket(State, Vsn, ReqHdrs, NewHdrs),
-		    {{ok, Reply}, NewState#client_state{socket = NewSocket}}
+		    {{ok, Reply}, NewState#client_state{socket = NewSocket,
+							request = undefined}}
 	    end;
         {error, closed} ->
             %% TODO does it work for partial uploads? I think should return an error
@@ -535,15 +537,12 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
             % closing connections without sending responses.
             % If this the first attempt to send the request, we will try again.
             close_socket(State),
-            NewState = State#client_state{
-                socket = undefined,
-                attempts = State#client_state.attempts - 1
-            },
+            NewState = State#client_state{socket = undefined},
             send_request(NewState);
         {ok, {http_error, _} = Reason} ->
-            {reply, {error, Reason}, State};
+            {reply, {error, Reason}, State#client_state{request = undefined}};
         {error, Reason} ->
-            {reply, {error, Reason}, State}
+            {reply, {error, Reason}, State#client_state{request = undefined}}
     end.
 
 %%------------------------------------------------------------------------------
@@ -646,39 +645,36 @@ read_body(_Vsn, Hdrs, Ssl, Socket, {fixed_length, ContentLength}) ->
 %%% @doc Called when {partial_download, PartialDownloadOptions} option is used.
 %%% @end
 %%------------------------------------------------------------------------------
-read_partial_body(State=#client_state{download_info = {_Vsn, Hdrs},
-				      body_length = chunked}) ->
+read_partial_body(State=#client_state{body_length = chunked}) ->
     Window = State#client_state.download_window,
-    read_partial_chunked_body(State, Hdrs, Window, 0, [], 0);
+    read_partial_chunked_body(State, Window, 0, [], 0);
 read_partial_body(State=#client_state{download_info = {Vsn, Hdrs},
 				      body_length = infinite}) ->
     check_infinite_response(Vsn, Hdrs),
-    read_partial_infinite_body(State, Hdrs, State#client_state.download_window);
-read_partial_body(State=#client_state{
-		    download_info = {_Vsn, Hdrs},
-		    body_length = {fixed_length, ContentLength}}) ->
-    read_partial_finite_body(State, Hdrs, ContentLength, State#client_state.download_window).
+    read_partial_infinite_body(State, State#client_state.download_window);
+read_partial_body(State=#client_state{body_length = {fixed_length, ContentLength}}) ->
+    read_partial_finite_body(State, ContentLength, State#client_state.download_window).
 
 %%------------------------------------------------------------------------------
 %%% @private
 %%------------------------------------------------------------------------------
-read_partial_finite_body(State , _Hdrs, 0, _Window) ->
+read_partial_finite_body(State , 0, _Window) ->
     reply_end_of_body(State, []),
-    State;
-read_partial_finite_body(#client_state{download_proc = To} = State, _Hdrs, ContentLength, 0) ->
+    State#client_state{request = undefined};
+read_partial_finite_body(#client_state{download_proc = To} = State, ContentLength, 0) ->
     %finished the window, reply to ask for another call to get_body_part
     To ! {body_part, window_finished},
     State#client_state{body_length = {fixed_length, ContentLength}};
-read_partial_finite_body(State, Hdrs, ContentLength, Window) when Window >= 0->
+read_partial_finite_body(State, ContentLength, Window) when Window >= 0->
     case read_body_part(State, ContentLength) of
         {ok, Bin} ->
             State#client_state.download_proc ! {body_part, Bin},
 	    Length = ContentLength - iolist_size(Bin),
-	    read_partial_finite_body(State, Hdrs, Length, lhttpc_lib:dec(Window));
+	    read_partial_finite_body(State, Length, lhttpc_lib:dec(Window));
         {error, Reason} ->
             State#client_state.download_proc ! {body_part_error, Reason},
 	    close_socket(State),
-            State#client_state{partial_download = false,
+            State#client_state{request = undefined,
 			       socket = undefined}
     end.
 
@@ -713,35 +709,36 @@ read_length(Hdrs, Ssl, Socket, Length) ->
 %%------------------------------------------------------------------------------
 %%% @private
 %%------------------------------------------------------------------------------
-read_partial_chunked_body(State, _Hdrs, 0, 0, _Buffer, 0) ->
+read_partial_chunked_body(State, 0, 0, _Buffer, 0) ->
     %we ask for another call to get_body_part
     State#client_state.download_proc ! {body_part, http_eob},
     State;
-read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, 0) ->
-    Socket = State#client_state.socket,
-    Ssl = State#client_state.ssl,
-    PartSize = State#client_state.part_size,
-     case read_chunk_size(Socket, Ssl) of
+read_partial_chunked_body(#client_state{download_info = {_Vsn, Hdrs},
+					socket = Socket,
+					ssl = Ssl,
+					part_size = PartSize} = State,
+			  Window, BufferSize, Buffer, 0) ->
+    case read_chunk_size(Socket, Ssl) of
         0 ->
             reply_chunked_part(State, Buffer, Window),
             {Trailers, _NewHdrs} = read_trailers(Socket, Ssl, [], Hdrs),
             reply_end_of_body(State, Trailers),
-	    State;
+	    State#client_state{request = undefined};
         ChunkSize when PartSize =:= infinity ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
             NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window),
-            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], 0);
+            read_partial_chunked_body(State, NewWindow, 0, [], 0);
         ChunkSize when BufferSize + ChunkSize >= PartSize ->
             {Chunk, RemSize} = read_partial_chunk(Socket, Ssl,
                 PartSize - BufferSize, ChunkSize),
             NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window),
-            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [], RemSize);
+            read_partial_chunked_body(State, NewWindow, 0, [], RemSize);
         ChunkSize ->
             Chunk = read_chunk(Socket, Ssl, ChunkSize),
-            read_partial_chunked_body(State, Hdrs, Window,
-                BufferSize + ChunkSize, [Chunk | Buffer], 0)
+	     read_partial_chunked_body(State, Window,
+				       BufferSize + ChunkSize, [Chunk | Buffer], 0)
     end;
-read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, RemSize) ->
+read_partial_chunked_body(State, Window, BufferSize, Buffer, RemSize) ->
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
     PartSize = State#client_state.part_size,
@@ -750,12 +747,12 @@ read_partial_chunked_body(State, Hdrs, Window, BufferSize, Buffer, RemSize) ->
             {Chunk, NewRemSize} =
                 read_partial_chunk(Socket, Ssl, PartSize - BufferSize, RemSize),
             NewWindow = reply_chunked_part(State, [Chunk | Buffer], Window),
-            read_partial_chunked_body(State, Hdrs, NewWindow, 0, [],
-                NewRemSize);
+            read_partial_chunked_body(State, NewWindow, 0, [],
+				      NewRemSize);
         BufferSize + RemSize < PartSize ->
             Chunk = read_chunk(Socket, Ssl, RemSize),
-            read_partial_chunked_body(State, Hdrs, Window, BufferSize + RemSize,
-                [Chunk | Buffer], 0)
+            read_partial_chunked_body(State, Window, BufferSize + RemSize,
+				      [Chunk | Buffer], 0)
     end.
 
 %%------------------------------------------------------------------------------
@@ -867,18 +864,18 @@ reply_end_of_body(#client_state{download_proc = To}, Trailers) ->
 %%------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-read_partial_infinite_body(State, _Hdrs, 0) ->
+read_partial_infinite_body(State, 0) ->
     State#client_state.download_proc ! {body_part, window_finished},
     State;
-read_partial_infinite_body(State, Hdrs, Window)
+read_partial_infinite_body(State, Window)
   when Window >= 0 ->
     case read_infinite_body_part(State) of
         http_eob ->
 	    reply_end_of_body(State, []),
-	    State;
+	    State#client_state{request = undefined};
         Bin ->
             State#client_state.download_proc ! {body_part, Bin},
-	    read_partial_infinite_body(State, Hdrs, lhttpc_lib:dec(Window))
+	    read_partial_infinite_body(State, lhttpc_lib:dec(Window))
     end.
 
 %%------------------------------------------------------------------------------
@@ -993,11 +990,7 @@ is_ipv6_host(Host) ->
 %% pool dinamically.
 %% @end
 %%------------------------------------------------------------------------------
-connect_socket(State = #client_state{attempts = 0}) ->
-    % Don't try again if the number of allowed attempts is 0.
-    {{error, connection_closed}, State#client_state{attempts = 1}};
-connect_socket(State = #client_state{pool = Pool,
-				     attempts = Attempts}) ->
+connect_socket(State = #client_state{pool = Pool}) ->
     Connection = case Pool of
 		     undefined ->
 			 new_socket(State);
@@ -1007,14 +1000,12 @@ connect_socket(State = #client_state{pool = Pool,
     case Connection of
 	{ok, Socket} ->
 	    {ok, State#client_state{socket = Socket}};
-	{error, unknown_pool} = Error ->
-	    {Error, State};
-	{error, _} ->
-	    connect_socket(State#client_state{attempts = Attempts - 1})
+	Error ->
+	    {Error, State}
     end.
 
 -spec connect_pool(#client_state{}) -> {ok, socket()} | {error, atom()}.
-connect_pool(State = #client_state{init_options = Options,
+connect_pool(State = #client_state{pool_options = Options,
 				   pool = Pool}) ->
     {Host, Port, Ssl} = request_first_destination(State),
     case lhttpc_manager:ensure_call(Pool, self(), Host, Port, Ssl, Options) of

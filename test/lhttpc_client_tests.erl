@@ -12,7 +12,7 @@
 -compile(export_all).
 
 fail_connect_test() ->
-    ?assertEqual({error, connection_closed},
+    ?assertEqual({error, econnrefused},
 		 lhttpc_client:start({{"localhost", 8080, false}, []}, [])).
 
 fail_connect_pool_test_() ->
@@ -27,15 +27,17 @@ fail_connect_pool_test_() ->
      end,
      [{"Fail to connect on ensure pool",
        fun() ->
-	       ?assertMatch({error, connection_closed},
+	       ?assertMatch({error, econnrefused},
 			    lhttpc_client:start({{"localhost", 8080, false},
-						 [{pool, my_test_pool},
-						  {pool_ensure, true}]}, []))
+						 [{pool_options,
+						   [{pool, my_test_pool},
+						    {pool_ensure, true}]}]}, []))
        end},
       {"Fail to connect - no pool",
        fun() ->
 	       ?assertEqual({error, unknown_pool},
 			    lhttpc_client:start({{"localhost", 8080, false},
-						 [{pool, my_test_pool}]}, []))
+						 [{pool_options,
+						   [{pool, my_test_pool}]}]}, []))
        end}]
     }.

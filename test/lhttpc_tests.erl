@@ -89,8 +89,8 @@ tcp_test_() ->
               %  ?_test(partial_upload_chunked()),
               %  ?_test(partial_upload_chunked_no_trailer()),
                 ?_test(partial_download_illegal_option()),
-                ?_test(partial_download_identity())
-              %  ?_test(partial_download_infinity_window()),
+                ?_test(partial_download_identity()),
+		?_test(partial_download_infinity_window())
               %  ?_test(partial_download_no_content_length()),
               %  ?_test(partial_download_no_content()),
               %  ?_test(limited_partial_download_identity()),
@@ -322,8 +322,8 @@ pre_1_1_server_keep_alive() ->
     URL = url(Port, "/close"),
     Body = pid_to_list(self()),
     %this test need to use a client now (or a pool).
-    {ok, Response1} = lhttpc:request(URL, get, [], [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
-    {ok, Response2} = lhttpc:request(URL, put, [], Body, 1000, [{pool_ensure, true}, {pool, pool_name}]),
+    {ok, Response1} = lhttpc:request(URL, get, [], [], 1000, [{pool_options, [{pool_ensure, true}, {pool, pool_name}]}]),
+    {ok, Response2} = lhttpc:request(URL, put, [], Body, 1000, [{pool_options, [{pool_ensure, true}, {pool, pool_name}]}]),
     ?assertEqual({200, "OK"}, status(Response1)),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response1)),
@@ -379,10 +379,10 @@ persistent_connection() ->
             fun webserver_utils:copy_body/5
         ]),
     URL = url(Port, "/persistent"),
-    {ok, FirstResponse} = lhttpc:request(URL, "GET", [], [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
+    {ok, FirstResponse} = lhttpc:request(URL, "GET", [], [], 1000, [{pool_options, [{pool_ensure, true}, {pool, pool_name}]}]),
     Headers = [{"KeepAlive", "300"}], % shouldn't be needed
-    {ok, SecondResponse} = lhttpc:request(URL, "GET", Headers, [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
-    {ok, ThirdResponse} = lhttpc:request(URL, "POST", [], [], 1000, [{pool_ensure, true}, {pool, pool_name}]),
+    {ok, SecondResponse} = lhttpc:request(URL, "GET", Headers, [], 1000, [{pool_options, [{pool_ensure, true}, {pool, pool_name}]}]),
+    {ok, ThirdResponse} = lhttpc:request(URL, "POST", [], [], 1000, [{pool_options, [{pool_ensure, true}, {pool, pool_name}]}]),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(FirstResponse)),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
@@ -547,9 +547,9 @@ partial_download_identity() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, 1},
-	{recv_proc, self()}
-    ],
+		       {window_size, 1},
+		       {recv_proc, self()}
+		      ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
     {ok, {Status, _Hdrs, partial_download}} =
@@ -564,7 +564,8 @@ partial_download_infinity_window() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-        {window_size, infinity}
+		       {window_size, infinity},
+		       {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, {Status, _, Pid}} = lhttpc:request(URL, get, [], <<>>, 1000, Options),

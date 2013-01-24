@@ -700,22 +700,34 @@ verify_options([{proxy, List} | Options]) when is_list(List) ->
     verify_options(Options);
 verify_options([{proxy_ssl_options, List} | Options]) when is_list(List) ->
     verify_options(Options);
-verify_options([{pool, PidOrName} | Options])
-        when is_pid(PidOrName); is_atom(PidOrName) ->
-    verify_options(Options);
-verify_options([{pool_ensure, Bool} | Options])
-        when is_boolean(Bool) ->
-    verify_options(Options);
-verify_options([{pool_connection_timeout, Size} | Options])
-        when is_integer(Size) ->
-    verify_options(Options);
-verify_options([{pool_max_size, Size} | Options])
-        when is_integer(Size) orelse
-             Size =:= infinity->
-    verify_options(Options);
+verify_options([{pool_options, PoolOptions} | Options]) ->
+    case verify_pool_options(PoolOptions) of
+	ok ->
+	    verify_options(Options);
+	R ->
+	    R
+    end;
 verify_options([Option | _Rest]) ->
     erlang:error({bad_option, Option});
 verify_options([]) ->
+    ok.
+
+verify_pool_options([{pool, PidOrName} | Options])
+        when is_pid(PidOrName); is_atom(PidOrName) ->
+    verify_pool_options(Options);
+verify_pool_options([{pool_ensure, Bool} | Options])
+        when is_boolean(Bool) ->
+    verify_pool_options(Options);
+verify_pool_options([{pool_connection_timeout, Size} | Options])
+        when is_integer(Size) ->
+    verify_pool_options(Options);
+verify_pool_options([{pool_max_size, Size} | Options])
+        when is_integer(Size) orelse
+             Size =:= infinity->
+    verify_pool_options(Options);
+verify_pool_options([Option | _Rest]) ->
+    erlang:error({bad_option, Option});
+verify_pool_options([]) ->
     ok.
 
 %%------------------------------------------------------------------------------
