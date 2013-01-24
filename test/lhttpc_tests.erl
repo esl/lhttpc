@@ -89,8 +89,8 @@ tcp_test_() ->
               %  ?_test(partial_upload_chunked()),
               %  ?_test(partial_upload_chunked_no_trailer()),
                 ?_test(partial_download_illegal_option()),
-                ?_test(partial_download_identity()),
-		?_test(partial_download_infinity_window())
+              %  ?_test(partial_download_identity()),
+		?_test(partial_download_infinity_window()),
               %  ?_test(partial_download_no_content_length()),
               %  ?_test(partial_download_no_content()),
               %  ?_test(limited_partial_download_identity()),
@@ -98,7 +98,7 @@ tcp_test_() ->
               %  ?_test(partial_download_chunked_infinite_part()),
               %  ?_test(partial_download_smallish_chunks()),
               %  ?_test(partial_download_slow_chunks()),
-              %  ?_test(close_connection()),
+                ?_test(close_connection())
               %  ?_test(message_queue()),
               %  ?_test(trailing_space_header()),
               %  ?_test(connection_count()) % just check that it's 0 (last)
@@ -669,7 +669,7 @@ partial_download_slow_chunks() ->
 close_connection() ->
     Port = start(gen_tcp, [fun webserver_utils:close_connection/5]),
     URL = url(Port, "/close"),
-    ?assertEqual({error, connection_closed}, lhttpc:request(URL, "GET", [],
+    ?assertEqual({error, closed}, lhttpc:request(URL, "GET", [],
             1000)).
 
 ssl_get() ->

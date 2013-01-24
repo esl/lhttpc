@@ -521,6 +521,8 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 		noreply ->
 		    %when partial_download is used. We do not close the socket.
 		    {noreply, NewState#client_state{socket = Socket}};
+		{error, Reason} ->
+		    {{error, Reason}, NewState#client_state{socket = undefined}};
 		_ ->
 		    NewHdrs = element(2, Reply),
 		    ReqHdrs = State#client_state.request_headers,
@@ -559,11 +561,21 @@ handle_response_body(#client_state{partial_download = false} = State, Vsn,
     Socket = State#client_state.socket,
     Ssl = State#client_state.ssl,
     Method = State#client_state.method,
-    {Body, NewHdrs} = case has_body(Method, element(1, Status), Hdrs) of
+    %{Body, NewHdrs} = case has_body(Method, element(1, Status), Hdrs) of
+    %                      true  -> read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs));
+    %                      false -> {<<>>, Hdrs}
+    %                  end,
+    Reply = case has_body(Method, element(1, Status), Hdrs) of
                           true  -> read_body(Vsn, Hdrs, Ssl, Socket, body_type(Hdrs));
                           false -> {<<>>, Hdrs}
-                      end,
-    {{Status, NewHdrs, Body}, State};
+	    end,
+    case Reply of
+	{error, Reason} ->
+	   % NewState = State#client_state{socket = undefined},
+	    {{error, Reason}, State};
+	{Body, NewHdrs} ->
+	    {{Status, NewHdrs, Body}, State}
+    end;
 handle_response_body(#client_state{partial_download = true} = State, Vsn,
         Status, Hdrs) ->
 %when {partial_download, PartialDownloadOptions} option is used.
@@ -703,7 +715,9 @@ read_length(Hdrs, Ssl, Socket, Length) ->
         {ok, Data} ->
             {Data, Hdrs};
         {error, Reason} ->
-            erlang:error(Reason)
+            %erlang:error(Reason)
+	    lhttpc_sock:close(Socket, Ssl),
+	    {error, Reason}
     end.
 
 %%------------------------------------------------------------------------------
