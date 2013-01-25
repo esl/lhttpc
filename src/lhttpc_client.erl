@@ -74,6 +74,7 @@
 	  method :: string(),
 	  request_headers :: headers(),
 	  requester,
+	  cookies = [] :: [#lhttpc_cookie{}],
 	  partial_upload = false :: boolean(),
 	  chunked_upload = false :: boolean(),
 	  partial_download = false :: boolean(),
@@ -525,10 +526,12 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 		    {{error, Reason}, NewState#client_state{socket = undefined}};
 		_ ->
 		    NewHdrs = element(2, Reply),
+		    NewCookies = [lhttpc_lib:get_cookies(NewHdrs) ++ State#client_state.cookies],
 		    ReqHdrs = State#client_state.request_headers,
 		    NewSocket = maybe_close_socket(State, Vsn, ReqHdrs, NewHdrs),
 		    {reply, {ok, Reply}, NewState#client_state{socket = NewSocket,
-							       request = undefined}}
+							       request = undefined,
+							      cookies = NewCookies}}
 	    end;
         {error, closed} ->
             %% TODO does it work for partial uploads? I think should return an error

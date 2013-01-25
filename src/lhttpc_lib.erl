@@ -27,8 +27,9 @@
 %%------------------------------------------------------------------------------
 %%% @private
 %%% @author Oscar Hellström <oscar@hellstrom.st>
+%%% @author Ramon Lastres Guerrero <ramon.lastres@erlang-solutions.com>
 %%% @doc
-%%% This module implements various library functions used in lhttpc.
+%%% This module implements various library functions used in lhttpc
 %%------------------------------------------------------------------------------
 -module(lhttpc_lib).
 
@@ -38,7 +39,8 @@
          normalize_method/1,
          maybe_atom_to_list/1,
          format_hdrs/1,
-         dec/1
+         dec/1,
+	 get_cookies/1
         ]).
 
 -include("lhttpc_types.hrl").
@@ -192,14 +194,59 @@ format_hdrs(Headers) ->
     NormalizedHeaders = normalize_headers(Headers),
     format_hdrs(NormalizedHeaders, []).
 
+%%------------------------------------------------------------------------------
+%% @doc From a list of headers returned by the server, it returns a list of
+%% cookie records, one record for each set-cookie line on the headers.
+%% @end
+%%------------------------------------------------------------------------------
+get_cookies(Hdrs) ->
+    Values = [Value || {"Set-Cookie", Value} <- Hdrs],
+    lists:map(fun create_cookie_record/1, Values).
+
+
 %%==============================================================================
 %% Internal functions
 %%==============================================================================
 
 %%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% @end
+%%------------------------------------------------------------------------------
+create_cookie_record(Cookie) ->
+    [NameValue | Rest] = string:tokens(Cookie, ";"),
+    Tokens = string:tokens(NameValue, "="),
+    {Atr, AtrValue} = case length(Tokens) of
+			2 ->
+			    [Name | [Value]] = Tokens,
+			    {Name, Value};
+			_ ->
+			    [Name | _] = Tokens,
+			    Length = length(Name) + 2,
+			    Value = string:substr(NameValue, Length),
+			    {Name, Value}
+		    end,
+    CookieRec = #lhttpc_cookie{name = Atr,
+			    value = AtrValue},
+    other_cookie_elements(Rest, CookieRec).
+
+%%------------------------------------------------------------------------------
+%% @private
+%%------------------------------------------------------------------------------
+other_cookie_elements([], Cookie) ->
+    Cookie;
+% sometimes seems that the E is a capital letter...
+other_cookie_elements([" Expires" ++ Value | Rest], Cookie) ->
+    "=" ++ FinalValue = Value,
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{expires = FinalValue});
+% ...sometimes it is not.
+other_cookie_elements([" expires" ++ Value | Rest], Cookie) ->
+    "=" ++ FinalValue = Value,
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{expires = FinalValue});
+% for the moment we ignore the other attributes.
+other_cookie_elements([_Element | Rest], Cookie) ->
+    other_cookie_elements(Rest, Cookie).
+
+%%------------------------------------------------------------------------------
+%% @private
 %%------------------------------------------------------------------------------
 split_scheme("http://" ++ HostPortPath) ->
     {http, HostPortPath};
@@ -208,8 +255,6 @@ split_scheme("https://" ++ HostPortPath) ->
 
 %%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% @end
 %%------------------------------------------------------------------------------
 split_credentials(CredsHostPortPath) ->
     case string:tokens(CredsHostPortPath, "@") of

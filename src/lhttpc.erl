@@ -505,7 +505,7 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
 		    disconnect_client(Client),
 		    {error, timeout}
 	    end;
-	{error, {timeout, Reason}} ->
+	{error, {timeout, _Reason}} ->
 	    {error, connection_timeout}
     end.
 

@@ -32,3 +32,9 @@
     user = "" :: string(),
     password = "" :: string()
 }).
+
+-record(lhttpc_cookie, {
+	  name = "" :: string(),
+	  value = "" :: string(),
+	  expires = never :: string() | atom()
+}).
