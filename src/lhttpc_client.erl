@@ -175,7 +175,7 @@ init({Destination, Options}) ->
 %%------------------------------------------------------------------------------
 handle_call({request, Path, Method, Hdrs, Body, Options}, From,
 	    State = #client_state{ssl = Ssl, host = Host, port = Port,
-				  socket = Socket}) ->
+				  socket = Socket, cookies = Cookies}) ->
     PartialUpload = proplists:get_value(partial_upload, Options, false),
     PartialDownload = proplists:is_defined(partial_download, Options),
     PartialDownloadOptions = proplists:get_value(partial_download, Options, []),
@@ -192,7 +192,7 @@ handle_call({request, Path, Method, Hdrs, Body, Options}, From,
             end,
     {ChunkedUpload, Request} = lhttpc_lib:format_request(
                                  Path, NormalizedMethod,
-                                 Hdrs, Host, Port, Body, PartialUpload),
+                                 Hdrs, Host, Port, Body, PartialUpload, Cookies),
     NewState = State#client_state{
                  method = NormalizedMethod,
                  request = Request,

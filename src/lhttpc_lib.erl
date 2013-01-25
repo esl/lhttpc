@@ -34,7 +34,7 @@
 -module(lhttpc_lib).
 
 -export([parse_url/1,
-         format_request/7,
+         format_request/8,
          header_value/2, header_value/3,
          normalize_method/1,
          maybe_atom_to_list/1,
@@ -149,9 +149,9 @@ parse_url(URL) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec format_request(iolist(), method(), headers(), string(),
-    integer(), iolist(), boolean()) -> {boolean(), iolist()}.
-format_request(Path, Method, Hdrs, Host, Port, Body, PartialUpload) ->
-    AllHdrs = add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload),
+    integer(), iolist(), boolean(), [#lhttpc_cookie{}]) -> {boolean(), iolist()}.
+format_request(Path, Method, Hdrs, Host, Port, Body, PartialUpload, Cookies) ->
+    AllHdrs = add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload, Cookies),
     IsChunked = is_chunked(AllHdrs),
     {
         IsChunked,
@@ -398,15 +398,40 @@ format_body(Body, true) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec add_mandatory_hdrs(method(), headers(), host(), port_num(),
-                         iolist(), boolean()) -> headers().
-add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload) ->
+                         iolist(), boolean(), [#lhttpc_cookie{}]) -> headers().
+add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload, Cookies) ->
     ContentHdrs = add_content_headers(Method, Hdrs, Body, PartialUpload),
-    add_host(ContentHdrs, Host, Port).
+    FinalHdrs = add_cookie_headers(ContentHdrs, Cookies),
+    add_host(FinalHdrs, Host, Port).
 
 %%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% @end
+%%------------------------------------------------------------------------------
+add_cookie_headers(Hdrs, []) ->
+    Hdrs;
+add_cookie_headers(Hdrs, Cookies) ->
+    CookieString = make_cookie_string(Cookies, []),
+    [{"Cookie", CookieString} | Hdrs].
+
+%%------------------------------------------------------------------------------
+%% @private
+%%------------------------------------------------------------------------------
+make_cookie_string([], Acc) ->
+    Acc;
+make_cookie_string([Cookie | []], Acc) ->
+    Last = cookie_string(Cookie) -- "; ",
+    make_cookie_string([], Acc ++ Last);
+make_cookie_string([Cookie | Rest], Acc) ->
+    make_cookie_string(Rest,  Acc ++ cookie_string(Cookie)).
+
+%%------------------------------------------------------------------------------
+%% @private
+%%------------------------------------------------------------------------------
+cookie_string(#lhttpc_cookie{name = Name, value = Value}) ->
+    Name ++ "=" ++ Value ++ "; ".
+
+%%------------------------------------------------------------------------------
+%% @private
 %%------------------------------------------------------------------------------
 -spec add_content_headers(string(), headers(), iolist(), boolean()) -> headers().
 add_content_headers("POST", Hdrs, Body, PartialUpload) ->
@@ -420,8 +445,6 @@ add_content_headers(_, Hdrs, _, _PartialUpload) ->
 
 %%------------------------------------------------------------------------------
 %% @private
-%% @doc
-%% @end
 %%------------------------------------------------------------------------------
 -spec add_content_headers(headers(), iolist(), boolean()) -> headers().
 add_content_headers(Hdrs, Body, false) ->
