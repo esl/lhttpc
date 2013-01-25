@@ -83,14 +83,14 @@ tcp_test_() ->
                 ?_test(request_timeout()),
                 ?_test(connection_timeout()),
                 ?_test(suspended_manager()),
-              %  ?_test(chunked_encoding()),
+                ?_test(chunked_encoding()),
                 ?_test(partial_upload_identity()),
                 ?_test(partial_upload_identity_iolist()),
-              %  ?_test(partial_upload_chunked()),
-              %  ?_test(partial_upload_chunked_no_trailer()),
+              	?_test(partial_upload_chunked()),
+              	?_test(partial_upload_chunked_no_trailer()),
                 ?_test(partial_download_illegal_option()),
                 ?_test(partial_download_identity()),
-	        ?_test(partial_download_infinity_window()),
+	        	?_test(partial_download_infinity_window()),
                 ?_test(partial_download_no_content_length()),
                 ?_test(partial_download_no_content()),
                 ?_test(limited_partial_download_identity()),
@@ -395,7 +395,7 @@ request_timeout() ->
 connection_timeout() ->
     Port = start(gen_tcp, [fun webserver_utils:simple_response/5, fun webserver_utils:simple_response/5]),
     URL = url(Port, "/close_conn"),
-    lhttpc:add_pool(lhttpc_manager),
+    {ok, _PoolManager} = lhttpc:add_pool(lhttpc_manager),
     lhttpc_manager:update_connection_timeout(lhttpc_manager, 50), % very short keep alive
     {ok, Response} = lhttpc:request(URL, get, [], 100),
     ?assertEqual({200, "OK"}, status(Response)),
@@ -424,12 +424,13 @@ suspended_manager() ->
 chunked_encoding() ->
     Port = start(gen_tcp, [fun webserver_utils:chunked_response/5, fun webserver_utils:chunked_response_t/5]),
     URL = url(Port, "/chunked"),
-    {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
+    {ok, Client} = lhttpc:connect_client(URL, []),	
+    {ok, FirstResponse} = lhttpc:request_client(Client, URL, get, [], 1000),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(FirstResponse)),
     ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
             headers(FirstResponse))),
-    {ok, SecondResponse} = lhttpc:request(URL, get, [], 50),
+    {ok, SecondResponse} = lhttpc:request_client(Client, URL, get, [], 1000),
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<"Again, great success!">>, body(SecondResponse)),
     ?assertEqual("ChUnKeD", lhttpc_lib:header_value("transfer-encoding",
@@ -501,7 +502,7 @@ partial_upload_chunked() ->
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response1))),
     % Make sure it works with no body part in the original request as well
     Headers = [{"Transfer-Encoding", "chunked"}],
-    {ok, UploadState2} = lhttpc:request(URL, post, Headers, [], 1000, Options),
+    {ok, partial_upload} = lhttpc:request_client(Client, URL, post, Headers, [], 1000, Options),
     upload_parts(Client, Body),
     {ok, Response2} = lhttpc:send_trailers(Client, [Trailer]),
     ?assertEqual({200, "OK"}, status(Response2)),
@@ -511,20 +512,22 @@ partial_upload_chunked() ->
     ?assertEqual(element(2, Trailer),
         lhttpc_lib:header_value("x-test-orig-trailer-1", headers(Response2))).
 
-%% partial_upload_chunked_no_trailer() ->
-%%     Port = start(gen_tcp, [fun webserver_utils:chunked_upload/5]),
-%%     URL = url(Port, "/partial_upload_chunked_no_trailer"),
-%%     Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
-%%     Options = [{partial_upload, 1}],
-%%     ok = lhttpc:request(URL, post, [], hd(Body), 1000, Options),
-%%     {ok, Response} = lhttpc:send_body_part(
-%% 		       lists:foldl(fun upload_parts/2, Client, tl(Body)),
-%% 		       http_eob
-%% 		      ),
-%%     ?assertEqual({200, "OK"}, status(Response)),
-%%     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)),
-%%     ?assertEqual("This is chunky stuff!",
-%%         lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
+partial_upload_chunked_no_trailer() ->
+    Port = start(gen_tcp, [fun webserver_utils:chunked_upload/5]),
+    URL = url(Port, "/partial_upload_chunked_no_trailer"),
+    Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
+    Options = [{partial_upload, true}],
+	{ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, partial_upload} = lhttpc:request_client(Client, URL, post, [], hd(Body), 1000, Options),
+	
+	ok = upload_parts(Client, tl(Body)),
+	
+	{ok, Response} = lhttpc:send_body_part(Client, http_eob, 1000),
+	
+    ?assertEqual({200, "OK"}, status(Response)),
+    ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)),
+    ?assertEqual("This is chunky stuff!",
+				 	lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
 
 partial_download_illegal_option() ->
     ?assertError({bad_option, {partial_download, {foo, bar}}},
@@ -686,14 +689,15 @@ close_connection() ->
 ssl_get() ->
     Port = start(ssl, [fun webserver_utils:simple_response/5]),
     URL = ssl_url(Port, "/simple"),
-    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    {ok, _PoolManager} = lhttpc:add_pool(lhttpc_manager),	
+    {ok, Response} = lhttpc:request(URL, "GET", [], [], 1000, [{pool_options, [{pool_ensure, true}, {pool, lhttpc_manager}]}]),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)).
 
 ssl_get_ipv6() ->
     Port = start(ssl, [fun webserver_utils:simple_response/5], inet6),
     URL = ssl_url(inet6, Port, "/simple"),
-    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+    {ok, Response} = lhttpc:request(URL, "GET", [], [], 1000, [{pool_options, [{pool_ensure, true}, {pool, lhttpc_manager}]}]),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)).
 
@@ -702,21 +706,22 @@ ssl_post() ->
     URL = ssl_url(Port, "/simple"),
     Body = "SSL Test <o/",
     BinaryBody = list_to_binary(Body),
-    {ok, Response} = lhttpc:request(URL, "POST", [], Body, 1000),
+    {ok, Response} = lhttpc:request(URL, "POST", [], Body, 1000, [{pool_options, [{pool_ensure, true}, {pool, lhttpc_manager}]}]),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(BinaryBody, body(Response)).
 
 ssl_chunked() ->
     Port = start(ssl, [fun webserver_utils:chunked_response/5, fun webserver_utils:chunked_response_t/5]),
     URL = ssl_url(Port, "/ssl_chunked"),
-    FirstResult = lhttpc:request(URL, get, [], 100),
+	{ok, Client} = lhttpc:connect_client(URL, []),
+    FirstResult = lhttpc:request_client(Client, URL, get, [], [], 100, [{pool_options, [{pool_ensure, true}, {pool, lhttpc_manager}]}]),
     ?assertMatch({ok, _}, FirstResult),
     {ok, FirstResponse} = FirstResult,
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(FirstResponse)),
     ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
             headers(FirstResponse))),
-    SecondResult = lhttpc:request(URL, get, [], 100),
+    SecondResult = lhttpc:request_client(Client, URL, get, [], [], 100, [{pool_options, [{pool_ensure, true}, {pool, lhttpc_manager}]}]),
     {ok, SecondResponse} = SecondResult,
     ?assertEqual({200, "OK"}, status(SecondResponse)),
     ?assertEqual(<<"Again, great success!">>, body(SecondResponse)),
