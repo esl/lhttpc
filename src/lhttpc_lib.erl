@@ -254,6 +254,11 @@ split_host([$: | PortPath], Host) ->
     {lists:reverse(Host), PortPath};
 split_host([$/ | _] = PortPath, Host) ->
     {lists:reverse(Host), PortPath};
+split_host([$? | _] = Query, Host) ->
+    %% The query string follows the hostname, without a slash.  The
+    %% path is empty, but for HTTP an empty path is equivalent to "/"
+    %% (RFC 3986, section 6.2.3), so let's add the slash ourselves.
+    {lists:reverse(Host), "/" ++ Query};
 split_host([H | T], Host) ->
     split_host(T, [H | Host]);
 split_host([], Host) ->
