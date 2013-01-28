@@ -40,7 +40,8 @@
          maybe_atom_to_list/1,
          format_hdrs/1,
          dec/1,
-	 get_cookies/1
+	 get_cookies/1,
+	 update_cookies/2
         ]).
 
 -include("lhttpc_types.hrl").
@@ -204,10 +205,47 @@ get_cookies(Hdrs) ->
     Values = [Value || {"Set-Cookie", Value} <- Hdrs],
     lists:map(fun create_cookie_record/1, Values).
 
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc Updated the state of the cookies. after we receive a response.
+%% @end
+%%------------------------------------------------------------------------------
+-spec update_cookies(headers(), [#lhttpc_cookie{}]) -> [#lhttpc_cookie{}].
+update_cookies(RespHeaders, StateCookies) ->
+    ReceivedCookies = lhttpc_lib:get_cookies(RespHeaders),
+    %substitute the cookies with the same name, add the others.
+    Names = [ X#lhttpc_cookie.name || X <- ReceivedCookies],
+    A = fun(List) ->
+		fun(X) ->
+			length(List) =:=
+			    length(lists:usort(List -- [X#lhttpc_cookie.name])) end
+	end,
+    OldCookies = lists:filter(A(Names), StateCookies),
+    FinalCookies = ReceivedCookies ++ OldCookies,
+    %delete the cookies whose value is set to "deleted"
+    DeleteCookies = [ X#lhttpc_cookie.name || X <- ReceivedCookies, X#lhttpc_cookie.name =:= "deleted"],
+    NewCookies = FinalCookies -- DeleteCookies,
+    %Delete the cookies that are expired (check max-age and expire fields).
+    delete_expired_cookies(NewCookies).
 
 %%==============================================================================
 %% Internal functions
 %%==============================================================================
+
+%%------------------------------------------------------------------------------
+%% @private
+%%------------------------------------------------------------------------------
+-spec delete_expired_cookies([#lhttpc_cookie{}]) -> [#lhttpc_cookie{}].
+delete_expired_cookies(Cookies) ->
+    MaxAges = [ X || X <- Cookies, X#lhttpc_cookie.max_age =/= undefined],
+    ToDelete1 = [ X || X <- MaxAges,
+		       timer:now_diff(erlang:timestamp(), X#lhttpc_cookie.timestamp)  > X#lhttpc_cookie.max_age],
+    NewCookies = Cookies -- ToDelete1,
+    Expires = [ X || X <- Cookies, X#lhttpc_cookie.expires =/= never],
+    ToDelete2 = [ X || X <- Expires,
+		       calendar:datetime_to_gregorian_seconds(calendar:universal_time())  >
+			   calendar:datetime_to_gregorian_seconds(X#lhttpc_cookie.expires)],
+    NewCookies -- ToDelete2.
 
 %%------------------------------------------------------------------------------
 %% @private
@@ -226,7 +264,7 @@ create_cookie_record(Cookie) ->
 			    {Name, Value}
 		    end,
     CookieRec = #lhttpc_cookie{name = Atr,
-			    value = AtrValue},
+			       value = AtrValue},
     other_cookie_elements(Rest, CookieRec).
 
 %%------------------------------------------------------------------------------
@@ -240,20 +278,70 @@ other_cookie_elements([], Cookie) ->
 % sometimes seems that the E is a capital letter...
 other_cookie_elements([" Expires" ++ Value | Rest], Cookie) ->
     "=" ++ FinalValue = Value,
-    other_cookie_elements(Rest, Cookie#lhttpc_cookie{expires = FinalValue});
+    Expires = expires_to_datetime(FinalValue),
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{expires = Expires});
 % ...sometimes it is not.
 other_cookie_elements([" expires" ++ Value | Rest], Cookie) ->
     "=" ++ FinalValue = Value,
-    other_cookie_elements(Rest, Cookie#lhttpc_cookie{expires = FinalValue});
+    Expires = expires_to_datetime(FinalValue),
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{expires = Expires});
 other_cookie_elements([" Path" ++ Value | Rest], Cookie) ->
     "=" ++ FinalValue = Value,
     other_cookie_elements(Rest, Cookie#lhttpc_cookie{path = FinalValue});
 other_cookie_elements([" path" ++ Value | Rest], Cookie) ->
     "=" ++ FinalValue = Value,
     other_cookie_elements(Rest, Cookie#lhttpc_cookie{path = FinalValue});
+other_cookie_elements([" Max-Age" ++ Value | Rest], Cookie) ->
+    "=" ++ FinalValue = Value,
+    {Integer, _Rest} = string:to_integer(FinalValue),
+    MaxAge = Integer * 1000000, %we need it in microseconds
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{max_age = MaxAge,
+						    timestamp = erlang:timestamp()});
+other_cookie_elements([" max-age" ++ Value | Rest], Cookie) ->
+    "=" ++ FinalValue = Value,
+    {Integer, _Rest} = string:to_integer(FinalValue),
+    MaxAge = Integer * 1000000, %we need it in microseconds
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{max_age = MaxAge,
+						    timestamp = erlang:timestamp()});
 % for the moment we ignore the other attributes.
 other_cookie_elements([_Element | Rest], Cookie) ->
     other_cookie_elements(Rest, Cookie).
+
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc Parses the string contained in the expires field of a cookie and returns
+%% the date in datetime() format defined in calendar module.
+%% @end
+%%------------------------------------------------------------------------------
+-spec expires_to_datetime(string()) ->
+				 {{integer(), integer(), integer()},
+				  {integer(),integer(),integer()}}.
+expires_to_datetime(ExpireDate) ->
+    {Day, _} = string:to_integer(string:substr(ExpireDate, 6, 2)),
+    Month = month_to_integer(string:substr(ExpireDate, 9, 3)),
+    {Year, _} = string:to_integer(string:substr(ExpireDate, 13, 4)),
+    {Hour, _} = string:to_integer(string:substr(ExpireDate, 18, 2)),
+    {Min, _} = string:to_integer(string:substr(ExpireDate, 21, 2)),
+    {Sec, _} = string:to_integer(string:substr(ExpireDate, 24, 2)),
+    {{Year, Month, Day}, {Hour, Min, Sec}}.
+
+
+%%------------------------------------------------------------------------------
+%% @private
+%%------------------------------------------------------------------------------
+-spec month_to_integer(string()) -> integer().
+month_to_integer("Jan") -> 1;
+month_to_integer("Feb") -> 2;
+month_to_integer("Mar") -> 3;
+month_to_integer("Apr") -> 4;
+month_to_integer("May") -> 5;
+month_to_integer("Jun") -> 6;
+month_to_integer("Jul") -> 7;
+month_to_integer("Aug") -> 8;
+month_to_integer("Sep") -> 9;
+month_to_integer("Oct") -> 10;
+month_to_integer("Nov") -> 11;
+month_to_integer("Dic") -> 12.
 
 %%------------------------------------------------------------------------------
 %% @private
