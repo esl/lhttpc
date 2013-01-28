@@ -42,7 +42,8 @@
 	 send_body_part/3,
 	 send_trailers/3,
 	 get_body_part/2,
-	 stop/1]).
+	 stop/1
+	]).
 
 %% gen_server callbacks
 -export([
@@ -525,13 +526,20 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 		{error, Reason} ->
 		    {{error, Reason}, NewState#client_state{socket = undefined}};
 		_ ->
-		    NewHdrs = element(2, Reply),
-		    NewCookies = [lhttpc_lib:get_cookies(NewHdrs) ++ State#client_state.cookies],
+	            NewHdrs = element(2, Reply),
+		    NewCookies = lhttpc_lib:get_cookies(NewHdrs),
+		    Names = [ X#lhttpc_cookie.name || X <- NewCookies],
+		    A = fun(List) ->
+				fun(X) ->
+					length(List) =:= length(lists:usort(List -- [X#lhttpc_cookie.name])) end
+			end,
+		    OldCookies = lists:filter(A(Names), State#client_state.cookies),
+		    FinalCookies = NewCookies ++ OldCookies,
 		    ReqHdrs = State#client_state.request_headers,
 		    NewSocket = maybe_close_socket(State, Vsn, ReqHdrs, NewHdrs),
 		    {reply, {ok, Reply}, NewState#client_state{socket = NewSocket,
 							       request = undefined,
-							      cookies = NewCookies}}
+							      cookies = FinalCookies}}
 	    end;
         {error, closed} ->
             %% TODO does it work for partial uploads? I think should return an error

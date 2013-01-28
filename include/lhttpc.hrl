@@ -36,5 +36,6 @@
 -record(lhttpc_cookie, {
 	  name = "" :: string(),
 	  value = "" :: string(),
-	  expires = never :: string() | atom()
+	  expires = never :: string() | atom(),
+	  path = undefined :: string() | atom()
 }).

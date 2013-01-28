@@ -151,7 +151,7 @@ parse_url(URL) ->
 -spec format_request(iolist(), method(), headers(), string(),
     integer(), iolist(), boolean(), [#lhttpc_cookie{}]) -> {boolean(), iolist()}.
 format_request(Path, Method, Hdrs, Host, Port, Body, PartialUpload, Cookies) ->
-    AllHdrs = add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload, Cookies),
+    AllHdrs = add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, Cookies),
     IsChunked = is_chunked(AllHdrs),
     {
         IsChunked,
@@ -199,6 +199,7 @@ format_hdrs(Headers) ->
 %% cookie records, one record for each set-cookie line on the headers.
 %% @end
 %%------------------------------------------------------------------------------
+-spec get_cookies(headers()) -> [#lhttpc_cookie{}].
 get_cookies(Hdrs) ->
     Values = [Value || {"Set-Cookie", Value} <- Hdrs],
     lists:map(fun create_cookie_record/1, Values).
@@ -229,6 +230,9 @@ create_cookie_record(Cookie) ->
     other_cookie_elements(Rest, CookieRec).
 
 %%------------------------------------------------------------------------------
+%% @doc Extracts the interesting fields from the cookie in the header. We ignore
+%% the domain since the client only connects to one domain at the same time.
+%% @end
 %% @private
 %%------------------------------------------------------------------------------
 other_cookie_elements([], Cookie) ->
@@ -241,6 +245,12 @@ other_cookie_elements([" Expires" ++ Value | Rest], Cookie) ->
 other_cookie_elements([" expires" ++ Value | Rest], Cookie) ->
     "=" ++ FinalValue = Value,
     other_cookie_elements(Rest, Cookie#lhttpc_cookie{expires = FinalValue});
+other_cookie_elements([" Path" ++ Value | Rest], Cookie) ->
+    "=" ++ FinalValue = Value,
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{path = FinalValue});
+other_cookie_elements([" path" ++ Value | Rest], Cookie) ->
+    "=" ++ FinalValue = Value,
+    other_cookie_elements(Rest, Cookie#lhttpc_cookie{path = FinalValue});
 % for the moment we ignore the other attributes.
 other_cookie_elements([_Element | Rest], Cookie) ->
     other_cookie_elements(Rest, Cookie).
@@ -397,11 +407,13 @@ format_body(Body, true) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec add_mandatory_hdrs(method(), headers(), host(), port_num(),
+-spec add_mandatory_hdrs(string(), method(), headers(), host(), port_num(),
                          iolist(), boolean(), [#lhttpc_cookie{}]) -> headers().
-add_mandatory_hdrs(Method, Hdrs, Host, Port, Body, PartialUpload, Cookies) ->
+add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, Cookies) ->
     ContentHdrs = add_content_headers(Method, Hdrs, Body, PartialUpload),
-    FinalHdrs = add_cookie_headers(ContentHdrs, Cookies),
+    % only include cookies if the path matches.
+     IncludeCookies = [ X || X <- Cookies, X#lhttpc_cookie.path =:= Path],
+    FinalHdrs = add_cookie_headers(ContentHdrs, IncludeCookies),
     add_host(FinalHdrs, Host, Port).
 
 %%------------------------------------------------------------------------------
