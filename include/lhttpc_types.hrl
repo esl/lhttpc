@@ -73,6 +73,7 @@
         {'partial_upload', non_neg_integer() | 'infinity'} |
         {'partial_download', [partial_download_option()]} |
         {'connect_options', socket_options()} |
+	{'use_cookies', boolean()} |
         {'proxy', string()} |
         {'proxy_ssl_options', socket_options()} |
 	{'pool_options', pool_options()} |

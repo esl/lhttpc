@@ -76,6 +76,7 @@
 	  request_headers :: headers(),
 	  requester,
 	  cookies = [] :: [#lhttpc_cookie{}],
+	  use_cookies = false :: boolean(),
 	  partial_upload = false :: boolean(),
 	  chunked_upload = false :: boolean(),
 	  partial_download = false :: boolean(),
@@ -143,8 +144,9 @@ init({Destination, Options}) ->
 				  ssl = Ssl,
 				  pool = Pool,
 				  connect_timeout = proplists:get_value(connect_timeout, Options,
-									infinity),
+				  					infinity),
 				  connect_options = proplists:get_value(connect_options, Options, []),
+				  use_cookies = proplists:get_value(use_cookies,  Options, false),
 				  pool_options = PoolOptions};
 		URL ->
 		    #lhttpc_url{host = Host,
@@ -158,6 +160,7 @@ init({Destination, Options}) ->
 				  connect_timeout = proplists:get_value(connect_timeout, Options,
 									infinity),
 				  connect_options = proplists:get_value(connect_options, Options, []),
+				  use_cookies = proplists:get_value(use_cookies,  Options, false),
 				  pool_options = PoolOptions}
     end,
     %% Get a socket for the pool or exit
@@ -176,7 +179,8 @@ init({Destination, Options}) ->
 %%------------------------------------------------------------------------------
 handle_call({request, Path, Method, Hdrs, Body, Options}, From,
 	    State = #client_state{ssl = Ssl, host = Host, port = Port,
-				  socket = Socket, cookies = Cookies}) ->
+				  socket = Socket, cookies = Cookies,
+				  use_cookies = UseCookies}) ->
     PartialUpload = proplists:get_value(partial_upload, Options, false),
     PartialDownload = proplists:is_defined(partial_download, Options),
     PartialDownloadOptions = proplists:get_value(partial_download, Options, []),
@@ -193,7 +197,7 @@ handle_call({request, Path, Method, Hdrs, Body, Options}, From,
             end,
     {ChunkedUpload, Request} = lhttpc_lib:format_request(
                                  Path, NormalizedMethod,
-                                 Hdrs, Host, Port, Body, PartialUpload, Cookies),
+                                 Hdrs, Host, Port, Body, PartialUpload, {UseCookies, Cookies}),
     NewState = State#client_state{
                  method = NormalizedMethod,
                  request = Request,
@@ -527,14 +531,20 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
 		    {{error, Reason}, NewState#client_state{socket = undefined}};
 		_ ->
 	            NewHdrs = element(2, Reply),
-		    NewCookies = lhttpc_lib:get_cookies(NewHdrs),
-		    Names = [ X#lhttpc_cookie.name || X <- NewCookies],
-		    A = fun(List) ->
-				fun(X) ->
-					length(List) =:= length(lists:usort(List -- [X#lhttpc_cookie.name])) end
-			end,
-		    OldCookies = lists:filter(A(Names), State#client_state.cookies),
-		    FinalCookies = NewCookies ++ OldCookies,
+		    case State#client_state.use_cookies of
+			true ->
+			    NewCookies = lhttpc_lib:get_cookies(NewHdrs),
+			    Names = [ X#lhttpc_cookie.name || X <- NewCookies],
+			    A = fun(List) ->
+					fun(X) ->
+						length(List) =:=
+						    length(lists:usort(List -- [X#lhttpc_cookie.name])) end
+				end,
+			    OldCookies = lists:filter(A(Names), State#client_state.cookies),
+			    FinalCookies = NewCookies ++ OldCookies;
+			_ ->
+			    FinalCookies = []
+		    end,
 		    ReqHdrs = State#client_state.request_headers,
 		    NewSocket = maybe_close_socket(State, Vsn, ReqHdrs, NewHdrs),
 		    {reply, {ok, Reply}, NewState#client_state{socket = NewSocket,

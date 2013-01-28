@@ -149,7 +149,7 @@ parse_url(URL) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec format_request(iolist(), method(), headers(), string(),
-    integer(), iolist(), boolean(), [#lhttpc_cookie{}]) -> {boolean(), iolist()}.
+    integer(), iolist(), boolean(), {boolean(), [#lhttpc_cookie{}]}) -> {boolean(), iolist()}.
 format_request(Path, Method, Hdrs, Host, Port, Body, PartialUpload, Cookies) ->
     AllHdrs = add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, Cookies),
     IsChunked = is_chunked(AllHdrs),
@@ -408,12 +408,17 @@ format_body(Body, true) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec add_mandatory_hdrs(string(), method(), headers(), host(), port_num(),
-                         iolist(), boolean(), [#lhttpc_cookie{}]) -> headers().
-add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, Cookies) ->
+                         iolist(), boolean(), {boolean(), [#lhttpc_cookie{}]}) -> headers().
+add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, {UseCookies, Cookies}) ->
     ContentHdrs = add_content_headers(Method, Hdrs, Body, PartialUpload),
-    % only include cookies if the path matches.
-     IncludeCookies = [ X || X <- Cookies, X#lhttpc_cookie.path =:= Path],
-    FinalHdrs = add_cookie_headers(ContentHdrs, IncludeCookies),
+    case UseCookies of
+	true ->
+	    % only include cookies if the path matches.
+	    IncludeCookies = [ X || X <- Cookies, X#lhttpc_cookie.path =:= Path],
+	    FinalHdrs = add_cookie_headers(ContentHdrs, IncludeCookies);
+	_ ->
+	    FinalHdrs = ContentHdrs
+    end,
     add_host(FinalHdrs, Host, Port).
 
 %%------------------------------------------------------------------------------
