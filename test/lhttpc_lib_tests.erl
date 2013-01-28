@@ -212,5 +212,15 @@ parse_url_test_() ->
                          user = "joe",
                          password = "erlang"
                         },
-                      lhttpc_lib:parse_url("http://joe:erlang@[1080:0:0:0:8:800:200C:417A]:180/foo/bar"))
+                      lhttpc_lib:parse_url("http://joe:erlang@[1080:0:0:0:8:800:200C:417A]:180/foo/bar")),
+
+        ?_assertEqual(#lhttpc_url{
+                         host = "www.example.com",
+                         port = 80,
+                         path = "/?a=b",
+                         is_ssl = false,
+                         user = "",
+                         password = ""
+                        },
+                      lhttpc_lib:parse_url("http://www.example.com?a=b"))
     ].
