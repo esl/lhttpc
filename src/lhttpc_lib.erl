@@ -215,11 +215,12 @@ update_cookies(RespHeaders, StateCookies) ->
     ReceivedCookies = lhttpc_lib:get_cookies(RespHeaders),
     %% substitute the cookies with the same name, add the others.
     Substituted =
-	lists:foldl(fun(X, Acc) ->
-			    lists:keyreplace(X#lhttpc_cookie.name, #lhttpc_cookie.name, Acc, X)
-		    end, StateCookies, ReceivedCookies),
+    	lists:foldl(fun(X, Acc) ->
+    			    lists:keystore(X#lhttpc_cookie.name,
+					   #lhttpc_cookie.name, Acc, X)
+    		    end, StateCookies, ReceivedCookies),
     %% delete the cookies whose value is set to "deleted"
-    NewCookies = [ X#lhttpc_cookie.name || X <- Substituted, X#lhttpc_cookie.value =:= "deleted"],
+    NewCookies = [ X || X <- Substituted, X#lhttpc_cookie.value =/= "deleted"],
     %% Delete the cookies that are expired (check max-age and expire fields).
     delete_expired_cookies(NewCookies).
 

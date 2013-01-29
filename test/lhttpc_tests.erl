@@ -116,11 +116,11 @@ ssl_test_() ->
             ]}
     }.
 
-other_test_() ->
-    [
-     ?_test(invalid_options()),
-     ?_test(cookies())
-    ].
+options_test() ->
+    invalid_options().
+
+cookies_test() ->
+    cookies().
 
 %%% Tests
 
