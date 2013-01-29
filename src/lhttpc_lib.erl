@@ -213,18 +213,14 @@ get_cookies(Hdrs) ->
 -spec update_cookies(headers(), [#lhttpc_cookie{}]) -> [#lhttpc_cookie{}].
 update_cookies(RespHeaders, StateCookies) ->
     ReceivedCookies = lhttpc_lib:get_cookies(RespHeaders),
-    %substitute the cookies with the same name, add the others.
-    Names = [ X#lhttpc_cookie.name || X <- ReceivedCookies],
-    A = fun(X) ->
-		length(Names) =:=
-		    length(lists:usort(Names -- [X#lhttpc_cookie.name]))
-	end,
-    OldCookies = lists:filter(A, StateCookies),
-    FinalCookies = ReceivedCookies ++ OldCookies,
-    %delete the cookies whose value is set to "deleted"
-    DeleteCookies = [ X#lhttpc_cookie.name || X <- ReceivedCookies, X#lhttpc_cookie.value =:= "deleted"],
-    NewCookies = FinalCookies -- DeleteCookies,
-    %Delete the cookies that are expired (check max-age and expire fields).
+    %% substitute the cookies with the same name, add the others.
+    Substituted =
+	lists:foldl(fun(X, Acc) ->
+			    lists:keyreplace(X#lhttpc_cookie.name, #lhttpc_cookie.name, Acc, X)
+		    end, StateCookies, ReceivedCookies),
+    %% delete the cookies whose value is set to "deleted"
+    NewCookies = [ X#lhttpc_cookie.name || X <- Substituted, X#lhttpc_cookie.value =:= "deleted"],
+    %% Delete the cookies that are expired (check max-age and expire fields).
     delete_expired_cookies(NewCookies).
 
 %%==============================================================================
@@ -236,14 +232,13 @@ update_cookies(RespHeaders, StateCookies) ->
 %%------------------------------------------------------------------------------
 -spec delete_expired_cookies([#lhttpc_cookie{}]) -> [#lhttpc_cookie{}].
 delete_expired_cookies(Cookies) ->
-    ToDelete = [ X || X <- Cookies,
-		      X#lhttpc_cookie.max_age =/= undefined andalso
-			  timer:now_diff(erlang:timestamp(), X#lhttpc_cookie.timestamp)  > X#lhttpc_cookie.max_age],
-    NewCookies = Cookies -- ToDelete,
-    ToDelete2 =  [ X || X <- Cookies, X#lhttpc_cookie.expires =/= never andalso
-			    calendar:datetime_to_gregorian_seconds(calendar:universal_time())  >
-			    calendar:datetime_to_gregorian_seconds(X#lhttpc_cookie.expires)],
-    NewCookies -- ToDelete2.
+    [ X || X <- Cookies,
+	   X#lhttpc_cookie.max_age =:= undefined orelse
+	       timer:now_diff(erlang:timestamp(), X#lhttpc_cookie.timestamp)
+	       =< X#lhttpc_cookie.max_age,
+	   X#lhttpc_cookie.expires =:= never orelse
+	       calendar:datetime_to_gregorian_seconds(calendar:universal_time())
+	       =< calendar:datetime_to_gregorian_seconds(X#lhttpc_cookie.expires)].
 
 %%------------------------------------------------------------------------------
 %% @private
@@ -315,14 +310,10 @@ other_cookie_elements([_Element | Rest], Cookie) ->
 				 {{integer(), integer(), integer()},
 				  {integer(),integer(),integer()}}.
 expires_to_datetime(ExpireDate) ->
-    [_Expires, Day, Month, Year, Hour, Min, Sec, _GMT] = string:tokens(ExpireDate, ", -:"),
-    {FinalDay, _} = string:to_integer(Day),
-    {FinalYear, _} = string:to_integer(Year),
-    {FinalHour, _} = string:to_integer(Hour),
-    {FinalMin, _} =string:to_integer(Min),
-    {FinalSec, _} =string:to_integer(Sec),
-    FinalMonth = month_to_integer(Month),
-    {{FinalYear, FinalMonth, FinalDay}, {FinalHour, FinalMin, FinalSec}}.
+    [_Expires, Day, Month, Year, Hour, Min, Sec, _GMT]
+	= string:tokens(ExpireDate, ", -:"),
+    {{list_to_integer(Year), month_to_integer(Month), list_to_integer(Day)},
+     {list_to_integer(Hour), list_to_integer(Min), list_to_integer(Sec)}}.
 
 
 %%------------------------------------------------------------------------------
