@@ -368,3 +368,63 @@ trailing_space_header(Module, Socket, _, _, _) ->
           "Content-Length: 14 \r\n\r\n"
           ?DEFAULT_STRING
     ).
+
+set_cookie_response(Module, Socket, _, _, _) ->
+     Module:send(
+      Socket,
+       "HTTP/1.1 200 OK\r\n"
+       "Connection: Keep-Alive\r\n"
+       "Set-Cookie: name=value\r\n"
+       "Set-Cookie: name2=value2; Expires=Wed, 09-Jun-2021 10:18:14 GMT\r\n"
+       "Content-type: text/plain\r\n"
+       "Content-length: 0\r\n\r\n"
+      ).
+
+
+expired_cookie_response(Module, Socket, _Request, Headers, _Body) ->
+    case lhttpc_lib:header_value("Cookie", Headers) of
+            undefined ->
+                Module:send(
+                    Socket,
+		     "HTTP/1.1 500 Internal Server Error\r\n"
+		     "Content-type: text/plain\r\n"
+		     "Content-length: 0\r\n\r\n"
+                );
+	"name=value; name2=value2" ->
+	    Module:send(
+	      Socket,
+	      "HTTP/1.1 200 OK\r\n"
+	      "Connection: Keep-Alive\r\n"
+	      "Set-Cookie: name2=value2; Expires=Wed, 09-Jun-1975 10:18:14 GMT\r\n"
+	      "Content-type: text/plain\r\n"
+              "Content-length: 0\r\n\r\n"
+	     );
+	%The order should not matter.
+	"name2=value2; name=value"->
+	    Module:send(
+	      Socket,
+	      "HTTP/1.1 200 OK\r\n"
+	      "Connection: Keep-Alive\r\n"
+	      "Set-Cookie: name2=value2; Expires=Wed, 09-Jun-1975 10:18:14 GMT\r\n"
+	      "Content-type: text/plain\r\n"
+              "Content-length: 0\r\n\r\n"
+	     )
+    end.
+
+receive_right_cookies(Module, Socket, _Request, Headers, _Body) ->
+    case proplists:get_value("Cookie", Headers) of
+	"name=value" ->
+	    Module:send(
+	      Socket,
+	      "HTTP/1.1 200 OK\r\n"
+	      "Content-type: text/plain\r\n"
+	      "Content-length: 0\r\n\r\n"
+	     );
+	_ ->
+	     Module:send(
+                    Socket,
+		     "HTTP/1.1 500 Internal Server Error\r\n"
+		     "Content-type: text/plain\r\n"
+		     "Content-length: 0\r\n\r\n"
+                )
+    end.

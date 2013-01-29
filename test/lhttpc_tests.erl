@@ -86,11 +86,11 @@ tcp_test_() ->
                 ?_test(chunked_encoding()),
                 ?_test(partial_upload_identity()),
                 ?_test(partial_upload_identity_iolist()),
-              	?_test(partial_upload_chunked()),
-              	?_test(partial_upload_chunked_no_trailer()),
+                ?_test(partial_upload_chunked()),
+                ?_test(partial_upload_chunked_no_trailer()),
                 ?_test(partial_download_illegal_option()),
                 ?_test(partial_download_identity()),
-	        	?_test(partial_download_infinity_window()),
+	        ?_test(partial_download_infinity_window()),
                 ?_test(partial_download_no_content_length()),
                 ?_test(partial_download_no_content()),
                 ?_test(limited_partial_download_identity()),
@@ -118,7 +118,8 @@ ssl_test_() ->
 
 other_test_() ->
     [
-        ?_test(invalid_options())
+     ?_test(invalid_options()),
+     ?_test(cookies())
     ].
 
 %%% Tests
@@ -424,7 +425,7 @@ suspended_manager() ->
 chunked_encoding() ->
     Port = start(gen_tcp, [fun webserver_utils:chunked_response/5, fun webserver_utils:chunked_response_t/5]),
     URL = url(Port, "/chunked"),
-    {ok, Client} = lhttpc:connect_client(URL, []),	
+    {ok, Client} = lhttpc:connect_client(URL, []),
     {ok, FirstResponse} = lhttpc:request_client(Client, URL, get, [], 1000),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(FirstResponse)),
@@ -519,11 +520,8 @@ partial_upload_chunked_no_trailer() ->
     Options = [{partial_upload, true}],
 	{ok, Client} = lhttpc:connect_client(URL, []),
     {ok, partial_upload} = lhttpc:request_client(Client, URL, post, [], hd(Body), 1000, Options),
-	
 	ok = upload_parts(Client, tl(Body)),
-	
 	{ok, Response} = lhttpc:send_body_part(Client, http_eob, 1000),
-	
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)),
     ?assertEqual("This is chunky stuff!",
@@ -689,7 +687,7 @@ close_connection() ->
 ssl_get() ->
     Port = start(ssl, [fun webserver_utils:simple_response/5]),
     URL = ssl_url(Port, "/simple"),
-    {ok, _PoolManager} = lhttpc:add_pool(lhttpc_manager),	
+    {ok, _PoolManager} = lhttpc:add_pool(lhttpc_manager),
     {ok, Response} = lhttpc:request(URL, "GET", [], [], 1000, [{pool_options, [{pool_ensure, true}, {pool, lhttpc_manager}]}]),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)).
@@ -743,6 +741,19 @@ invalid_options() ->
     ?assertError({bad_option, {foo, bar}},
         lhttpc:request("http://localhost/", get, [], <<>>, 1000,
             [{foo, bar}, bad_option])).
+
+cookies() ->
+    Port = start(gen_tcp, [fun webserver_utils:set_cookie_response/5, fun webserver_utils:expired_cookie_response/5,
+			fun webserver_utils:receive_right_cookies/5]),
+    URL = url(Port, "/cookies"),
+    Options = [{use_cookies, true}],
+    {ok, Client} = lhttpc:connect_client(URL, Options),
+    {ok, Response1} = lhttpc:request_client(Client, URL, get, [], 1000),
+    ?assertEqual({200, "OK"}, status(Response1)),
+    {ok, Response2} = lhttpc:request_client(Client, URL, get, [], 1000),
+    ?assertEqual({200, "OK"}, status(Response2)),
+    {ok, Response3} = lhttpc:request_client(Client, URL, get, [], 1000),
+    ?assertEqual({200, "OK"}, status(Response3)).
 
 
 %%% Helpers functions

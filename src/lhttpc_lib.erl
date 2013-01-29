@@ -223,7 +223,7 @@ update_cookies(RespHeaders, StateCookies) ->
     OldCookies = lists:filter(A(Names), StateCookies),
     FinalCookies = ReceivedCookies ++ OldCookies,
     %delete the cookies whose value is set to "deleted"
-    DeleteCookies = [ X#lhttpc_cookie.name || X <- ReceivedCookies, X#lhttpc_cookie.name =:= "deleted"],
+    DeleteCookies = [ X#lhttpc_cookie.name || X <- ReceivedCookies, X#lhttpc_cookie.value =:= "deleted"],
     NewCookies = FinalCookies -- DeleteCookies,
     %Delete the cookies that are expired (check max-age and expire fields).
     delete_expired_cookies(NewCookies).
@@ -502,7 +502,8 @@ add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, {UseCook
     case UseCookies of
 	true ->
 	    % only include cookies if the path matches.
-	    IncludeCookies = [ X || X <- Cookies, X#lhttpc_cookie.path =:= Path],
+	    IncludeCookies = [ X || X <- Cookies, X#lhttpc_cookie.path =:= Path orelse
+			    X#lhttpc_cookie.path =:= undefined ],
 	    FinalHdrs = add_cookie_headers(ContentHdrs, IncludeCookies);
 	_ ->
 	    FinalHdrs = ContentHdrs
