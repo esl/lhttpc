@@ -126,7 +126,7 @@ stop(Client) ->
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
--spec request(pid(), string(), method(), headers(), iolist(), options(), integer()) -> ok.
+-spec request(pid(), string(), method(), headers(), iolist(), options(), integer()) -> result().
 request(Client, Path, Method, Hdrs, Body, Options, Timeout) ->
     gen_server:call(Client,
                     {request, Path, Method, Hdrs, Body, Options}, Timeout).
