@@ -196,25 +196,7 @@ handle_call({request, PathOrUrl, Method, Hdrs, Body, Options}, From,
                     lhttpc_lib:parse_url(ProxyUrl)
             end,
     {FinalPath, FinalHeaders, Host, Port} =
-	try #lhttpc_url{ host = UrlHost, %its an URL
-			 port = UrlPort,
-			 path = Path,
-			 is_ssl = _Ssl,
-			 user = User,
-			 password = Passwd} = lhttpc_lib:parse_url(PathOrUrl),
-	     Headers =
-		 case User of
-		     "" ->
-			 Hdrs;
-		     _ ->
-			 Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
-			 lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
-		 end,
-	     {Path, Headers, UrlHost, UrlPort}
-        catch %if parse_url crashes we assume it is a path.
-            _:_ ->
-                {PathOrUrl, Hdrs, ClientHost, ClientPort}
-        end,
+	url_extract(PathOrUrl, Hdrs, ClientHost, ClientPort),
     case {Host, Port} =:= {ClientHost, ClientPort} of
 	true ->
 	    {ChunkedUpload, Request} =
@@ -349,6 +331,31 @@ code_change(_OldVsn, State, _Extra) ->
 %%==============================================================================
 %% Internal functions
 %%==============================================================================
+
+%%------------------------------------------------------------------------------
+%% @private
+%%------------------------------------------------------------------------------
+url_extract(PathOrUrl, Hdrs, ClientHost, ClientPort) ->
+    try #lhttpc_url{ host = UrlHost, %its an URL
+		     port = UrlPort,
+		     path = Path,
+		     is_ssl = _Ssl,
+		     user = User,
+		     password = Passwd} = lhttpc_lib:parse_url(PathOrUrl),
+	 Headers =
+	     case User of
+		 "" ->
+		     Hdrs;
+		 _ ->
+		     Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
+		     lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
+	     end,
+	 {Path, Headers, UrlHost, UrlPort}
+    catch %if parse_url crashes we assume it is a path.
+	_:_ ->
+	    {PathOrUrl, Hdrs, ClientHost, ClientPort}
+    end.
+
 %%------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
