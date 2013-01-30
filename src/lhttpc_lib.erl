@@ -235,7 +235,7 @@ update_cookies(RespHeaders, StateCookies) ->
 delete_expired_cookies(Cookies) ->
     [ X || X <- Cookies,
 	   X#lhttpc_cookie.max_age =:= undefined orelse
-	       timer:now_diff(erlang:timestamp(), X#lhttpc_cookie.timestamp)
+	       timer:now_diff(os:timestamp(), X#lhttpc_cookie.timestamp)
 	       =< X#lhttpc_cookie.max_age,
 	   X#lhttpc_cookie.expires =:= never orelse
 	       calendar:datetime_to_gregorian_seconds(calendar:universal_time())
@@ -290,13 +290,13 @@ other_cookie_elements([" Max-Age" ++ Value | Rest], Cookie) ->
     {Integer, _Rest} = string:to_integer(FinalValue),
     MaxAge = Integer * 1000000, %we need it in microseconds
     other_cookie_elements(Rest, Cookie#lhttpc_cookie{max_age = MaxAge,
-						    timestamp = erlang:timestamp()});
+						    timestamp = os:timestamp()});
 other_cookie_elements([" max-age" ++ Value | Rest], Cookie) ->
     "=" ++ FinalValue = Value,
     {Integer, _Rest} = string:to_integer(FinalValue),
     MaxAge = Integer * 1000000, %we need it in microseconds
     other_cookie_elements(Rest, Cookie#lhttpc_cookie{max_age = MaxAge,
-						    timestamp = erlang:timestamp()});
+						    timestamp = os:timestamp()});
 % for the moment we ignore the other attributes.
 other_cookie_elements([_Element | Rest], Cookie) ->
     other_cookie_elements(Rest, Cookie).
