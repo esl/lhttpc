@@ -177,8 +177,8 @@ init({Destination, Options}) ->
 %% socket used is new, it also makes the pool gen_server its controlling process.
 %% @end
 %%------------------------------------------------------------------------------
-handle_call({request, Path, Method, Hdrs, Body, Options}, From,
-	    State = #client_state{ssl = Ssl, host = Host, port = Port,
+handle_call({request, PathOrUrl, Method, Hdrs, Body, Options}, From,
+	    State = #client_state{ssl = Ssl, host = ClientHost, port = ClientPort,
 				  socket = Socket, cookies = Cookies,
 				  use_cookies = UseCookies}) ->
     PartialUpload = proplists:get_value(partial_upload, Options, false),
@@ -189,35 +189,62 @@ handle_call({request, Path, Method, Hdrs, Body, Options}, From,
                 undefined ->
                     undefined;
                 ProxyUrl when is_list(ProxyUrl), not Ssl ->
-						% The point of HTTP CONNECT proxying is to use TLS tunneled in
-						% a plain HTTP/1.1 connection to the proxy (RFC2817).
+	       % The point of HTTP CONNECT proxying is to use TLS tunneled in
+	       % a plain HTTP/1.1 connection to the proxy (RFC2817).
                     throw(origin_server_not_https);
                 ProxyUrl when is_list(ProxyUrl) ->
                     lhttpc_lib:parse_url(ProxyUrl)
             end,
-    {ChunkedUpload, Request} = lhttpc_lib:format_request(
-                                 Path, NormalizedMethod,
-                                 Hdrs, Host, Port, Body, PartialUpload, {UseCookies, Cookies}),
-    NewState = State#client_state{
-                 method = NormalizedMethod,
-                 request = Request,
-		 requester = From,
-                 request_headers = Hdrs,
-                 attempts = proplists:get_value(send_retry, Options, 1),
-                 partial_upload = PartialUpload,
-                 chunked_upload = ChunkedUpload,
-                 partial_download = PartialDownload,
-                 download_window = proplists:get_value(window_size,
-                                                       PartialDownloadOptions, infinity),
-                 download_proc = proplists:get_value(recv_proc,
-                                                     PartialDownloadOptions, infinity),
-                 part_size = proplists:get_value(part_size,
-                                                 PartialDownloadOptions, infinity),
-                 proxy = Proxy,
-                 proxy_setup = (Socket =/= undefined),
-                 proxy_ssl_options = proplists:get_value(proxy_ssl_options, Options, [])
-                },
-    send_request(NewState);
+    {FinalPath, FinalHeaders, Host, Port} =
+	try #lhttpc_url{ host = UrlHost, %its an URL
+			 port = UrlPort,
+			 path = Path,
+			 is_ssl = _Ssl,
+			 user = User,
+			 password = Passwd} = lhttpc_lib:parse_url(PathOrUrl),
+	     Headers =
+		 case User of
+		     "" ->
+			 Hdrs;
+		     _ ->
+			 Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
+			 lists:keystore("Authorization", 1, Hdrs, {"Authorization", Auth})
+		 end,
+	     {Path, Headers, UrlHost, UrlPort}
+        catch %if parse_url crashes we assume it is a path.
+            _:_ ->
+                {PathOrUrl, Hdrs, ClientHost, ClientPort}
+        end,
+    case {Host, Port} =:= {ClientHost, ClientPort} of
+	true ->
+	    {ChunkedUpload, Request} =
+		lhttpc_lib:format_request(
+		  FinalPath, NormalizedMethod,
+		  FinalHeaders, Host, Port, Body, PartialUpload, {UseCookies, Cookies}),
+	    NewState =
+		State#client_state{
+		  method = NormalizedMethod,
+		  request = Request,
+		  requester = From,
+		  request_headers = Hdrs,
+		  attempts = proplists:get_value(send_retry, Options, 1),
+		  partial_upload = PartialUpload,
+		  chunked_upload = ChunkedUpload,
+		  partial_download = PartialDownload,
+		  download_window = proplists:get_value(window_size,
+							PartialDownloadOptions, infinity),
+		  download_proc = proplists:get_value(recv_proc,
+						      PartialDownloadOptions, infinity),
+		  part_size = proplists:get_value(part_size,
+						  PartialDownloadOptions, infinity),
+		  proxy = Proxy,
+		  proxy_setup = (Socket =/= undefined),
+		  proxy_ssl_options = proplists:get_value(proxy_ssl_options, Options, [])
+		 },
+	    send_request(NewState);
+	_ ->
+	    {reply, {error, host_or_port_different_to_connected}, State}
+    end;
 handle_call(_Msg, _From, #client_state{request = undefined} = State) ->
     {reply, {error, no_pending_request}, State};
 handle_call({send_body_part, _}, _From, State = #client_state{partial_upload = false}) ->
