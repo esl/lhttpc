@@ -55,6 +55,7 @@ tcp_test_() ->
                 ?_test(simple_get()),
                 ?_test(simple_get_ipv6()),
                 ?_test(empty_get()),
+                ?_test(connection_refused()),
                 ?_test(basic_auth()),
                 ?_test(missing_basic_auth()),
                 ?_test(wrong_basic_auth()),
@@ -138,6 +139,10 @@ empty_get() ->
     {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(<<>>, body(Response)).
+
+connection_refused() ->
+    Response = lhttpc:request("http://127.0.0.1:50234/none", "GET", [], 100),
+    ?assertEqual({error, econnrefused}, Response).
 
 basic_auth() ->
     User = "foo",

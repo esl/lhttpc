@@ -487,7 +487,9 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
 		    {error, timeout}
 	    end;
 	{error, {timeout, _Reason}} ->
-	    {error, connection_timeout}
+	    {error, connection_timeout};
+    {error, _Reason} = Error ->
+        Error
     end.
 
 %%------------------------------------------------------------------------------
