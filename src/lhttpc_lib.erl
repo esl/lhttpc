@@ -492,9 +492,19 @@ add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, {UseCook
     ContentHdrs = add_content_headers(Method, Hdrs, Body, PartialUpload),
     case UseCookies of
 	true ->
-	    % only include cookies if the path matches.
-	    IncludeCookies = [ X || X <- Cookies, X#lhttpc_cookie.path =:= Path orelse
-			    X#lhttpc_cookie.path =:= undefined ],
+	    % only include cookies if the cookie path is a prefix of the request path
+	    % see RFC http://www.ietf.org/rfc/rfc2109.txt section 4.3.4
+	    IncludeCookies = 
+		lists:filter(fun(#lhttpc_cookie{path = undefined}) ->
+				     false;
+				(X) ->
+				     IsPrefix = string:str(Path, X#lhttpc_cookie.path),
+				     if (IsPrefix =/= 1) ->
+					     false;
+					true ->
+					     true
+				     end
+			     end, Cookies),
 	    FinalHdrs = add_cookie_headers(ContentHdrs, IncludeCookies);
 	_ ->
 	    FinalHdrs = ContentHdrs
