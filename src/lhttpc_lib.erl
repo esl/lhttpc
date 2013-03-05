@@ -332,7 +332,7 @@ month_to_integer("Aug") -> 8;
 month_to_integer("Sep") -> 9;
 month_to_integer("Oct") -> 10;
 month_to_integer("Nov") -> 11;
-month_to_integer("Dic") -> 12.
+month_to_integer("Dec") -> 12.
 
 %%------------------------------------------------------------------------------
 %% @private
