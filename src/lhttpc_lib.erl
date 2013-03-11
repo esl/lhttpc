@@ -496,7 +496,7 @@ add_mandatory_hdrs(Path, Method, Hdrs, Host, Port, Body, PartialUpload, {UseCook
 	    % see RFC http://www.ietf.org/rfc/rfc2109.txt section 4.3.4
 	    IncludeCookies = 
 		lists:filter(fun(#lhttpc_cookie{path = undefined}) ->
-				     false;
+				     true;
 				(X) ->
 				     IsPrefix = string:str(Path, X#lhttpc_cookie.path),
 				     if (IsPrefix =/= 1) ->
