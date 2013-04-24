@@ -38,8 +38,7 @@
          send/3,
          controlling_process/3,
          setopts/3,
-         close/2
-        ]).
+         close/2]).
 
 -include("lhttpc_types.hrl").
 
@@ -137,8 +136,7 @@ send(Socket, Request, false) ->
 %% Sets the controlling proces for the `Socket'.
 %% @end
 %%------------------------------------------------------------------------------
--spec controlling_process(socket(), pid() | atom(), boolean()) ->
-    ok | {error, atom()}.
+-spec controlling_process(socket(), pid() | atom(), boolean()) -> ok | {error, atom()}.
 controlling_process(Socket, Controller, IsSsl) when is_atom(Controller) ->
     controlling_process(Socket, whereis(Controller), IsSsl);
 controlling_process(Socket, Pid, true) ->

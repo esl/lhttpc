@@ -37,15 +37,14 @@
 
 -export([start/0, stop/0, start/2, stop/1,
          request/4, request/5, request/6, request/9,
-	 request_client/5, request_client/6, request_client/7,
+         request_client/5, request_client/6, request_client/7,
          add_pool/1, add_pool/2, add_pool/3,
          delete_pool/1,
-	 connect_client/2,
-	 disconnect_client/1,
+         connect_client/2,
+         disconnect_client/1,
          send_body_part/2, send_body_part/3,
          send_trailers/2, send_trailers/3,
-         get_body_part/1, get_body_part/2
-        ]).
+         get_body_part/1, get_body_part/2]).
 
 -include("lhttpc_types.hrl").
 -include("lhttpc.hrl").
@@ -57,8 +56,7 @@
 %%------------------------------------------------------------------------------
 %% @hidden
 %%------------------------------------------------------------------------------
--spec start(normal | {takeover, node()} | {failover, node()}, any()) ->
-    {ok, pid()}.
+-spec start(normal | {takeover, node()} | {failover, node()}, any()) -> {ok, pid()}.
 start(_, _) ->
     lhttpc_sup:start_link().
 
@@ -111,18 +109,14 @@ stop() ->
 add_pool(Name) when is_atom(Name) ->
     {ok, ConnTimeout} = application:get_env(lhttpc, connection_timeout),
     {ok, PoolSize} = application:get_env(lhttpc, pool_size),
-    add_pool(Name,
-             ConnTimeout,
-             PoolSize).
+    add_pool(Name, ConnTimeout, PoolSize).
 
 %%------------------------------------------------------------------------------
 %% @doc Add a new httpc_manager to the supervisor tree
 %% @end
 %%------------------------------------------------------------------------------
 -spec add_pool(atom(), non_neg_integer()) -> {ok, pid()} | {error, term()}.
-add_pool(Name, ConnTimeout) when is_atom(Name),
-                                 is_integer(ConnTimeout),
-                                 ConnTimeout > 0 ->
+add_pool(Name, ConnTimeout) when is_atom(Name), is_integer(ConnTimeout), ConnTimeout > 0 ->
     {ok, PoolSize} = application:get_env(lhttpc, pool_size),
     add_pool(Name, ConnTimeout, PoolSize).
 
@@ -130,8 +124,7 @@ add_pool(Name, ConnTimeout) when is_atom(Name),
 %% @doc Add a new httpc_manager to the supervisor tree
 %% @end
 %%------------------------------------------------------------------------------
--spec add_pool(atom(), non_neg_integer(), poolsize()) ->
-          {ok, pid()} | {error, term()}.
+-spec add_pool(atom(), non_neg_integer(), poolsize()) -> {ok, pid()} | {error, term()}.
 add_pool(Name, ConnTimeout, PoolSize) ->
     lhttpc_manager:new_pool(Name, ConnTimeout, PoolSize).
 
@@ -146,9 +139,9 @@ delete_pool(PoolPid) when is_pid(PoolPid) ->
 delete_pool(PoolName) when is_atom(PoolName) ->
     case supervisor:terminate_child(lhttpc_sup, PoolName) of
         ok -> case supervisor:delete_child(lhttpc_sup, PoolName) of
-                  ok -> ok;
-                  {error, not_found} -> ok
-              end;
+                ok -> ok;
+                {error, not_found} -> ok
+            end;
         {error, Reason} -> {error, Reason}
     end.
 
@@ -169,7 +162,6 @@ connect_client(Destination, Options) ->
 -spec disconnect_client(pid()) -> ok.
 disconnect_client(Client) ->
     lhttpc_client:stop(Client).
-
 
 %REQUESTS USING THE CLIENT
 
@@ -198,7 +190,7 @@ request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec request_client(pid(), string(), method(), headers(), iodata(),
-              pos_timeout(), options()) -> result().
+                     pos_timeout(), options()) -> result().
 request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
     try
@@ -304,19 +296,12 @@ request(URL, Method, Hdrs, Body, Timeout) ->
 %% @see request/9
 %% @end
 %%------------------------------------------------------------------------------
--spec request(string(), method(), headers(), iodata(),
-              pos_timeout(), options()) -> result().
+-spec request(string(), method(), headers(), iodata(), pos_timeout(), options()) -> result().
 request(URL, Method, Hdrs, Body, Timeout, Options) ->
-    #lhttpc_url{
-         host = Host,
-         port = Port,
-         path = Path,
-         is_ssl = Ssl,
-         user = User,
-         password = Passwd
-        } = lhttpc_lib:parse_url(URL),
+    #lhttpc_url{host = Host, port = Port, path = Path, is_ssl = Ssl,
+                user = User,password = Passwd} = lhttpc_lib:parse_url(URL),
     Headers = case User of
-        "" ->
+        [] ->
             Hdrs;
         _ ->
             Auth = "Basic " ++ binary_to_list(base64:encode(User ++ ":" ++ Passwd)),
@@ -472,24 +457,24 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec request(string(), port_num(), boolean(), string(), method(),
-    headers(), iodata(), pos_timeout(), options()) -> result().
+              headers(), iodata(), pos_timeout(), options()) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
     case connect_client({Host, Port, Ssl}, Options) of
-	{ok, Client} ->
-	    try
-		Reply = lhttpc_client:request(Client, Path, Method, Hdrs, Body, Options, Timeout),
-		disconnect_client(Client),
-		Reply
-	    catch
-		exit:{timeout, _} ->
-		    disconnect_client(Client),
-		    {error, timeout}
-	    end;
-	{error, {timeout, _Reason}} ->
-	    {error, connection_timeout};
-    {error, _Reason} = Error ->
-        Error
+        {ok, Client} ->
+            try
+                Reply = lhttpc_client:request(Client, Path, Method, Hdrs, Body, Options, Timeout),
+                disconnect_client(Client),
+                Reply
+            catch
+                exit:{timeout, _} ->
+                    disconnect_client(Client),
+                    {error, timeout}
+            end;
+        {error, {timeout, _Reason}} ->
+            {error, connection_timeout};
+        {error, _Reason} = Error ->
+            Error
     end.
 
 %%------------------------------------------------------------------------------
@@ -579,8 +564,7 @@ send_trailers(Client, Trailers) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec send_trailers({pid(), window_size()}, headers(), timeout()) -> result().
-send_trailers({Pid, _Window}, Trailers, Timeout)
-        when is_list(Trailers), is_pid(Pid) ->
+send_trailers({Pid, _Window}, Trailers, Timeout) when is_list(Trailers), is_pid(Pid) ->
     Pid ! {trailers, self(), Trailers},
     read_response(Pid, Timeout).
 
@@ -598,8 +582,7 @@ send_trailers({Pid, _Window}, Trailers, Timeout)
 %% `get_body_part(HTTPClient, infinity)'.
 %% @end
 %%------------------------------------------------------------------------------
--spec get_body_part(pid()) -> {ok, binary()} |
-                       {ok, {http_eob, headers()}} | {error, term()}.
+-spec get_body_part(pid()) -> {ok, binary()} | {ok, {http_eob, headers()}} | {error, term()}.
 get_body_part(Pid) ->
     get_body_part(Pid, infinity).
 
@@ -621,7 +604,7 @@ get_body_part(Pid) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec get_body_part(pid(), timeout()) -> {ok, binary()} |
-                           {ok, {http_eob, headers()}} | {error, term()}.
+                                         {ok, {http_eob, headers()}} | {error, term()}.
 get_body_part(Client, Timeout) ->
     lhttpc_client:get_body_part(Client, Timeout).
 
@@ -642,7 +625,7 @@ read_response(Pid, Timeout) ->
         {'EXIT', Pid, Reason} ->
             {error, Reason}
     after Timeout ->
-        kill_client(Pid)
+            kill_client(Pid)
     end.
 
 %%------------------------------------------------------------------------------
@@ -710,7 +693,7 @@ verify_pool_options([{pool_connection_timeout, Size} | Options])
     verify_pool_options(Options);
 verify_pool_options([{pool_max_size, Size} | Options])
         when is_integer(Size) orelse
-             Size =:= infinity->
+        Size =:= infinity->
     verify_pool_options(Options);
 verify_pool_options([Option | _Rest]) ->
     erlang:error({bad_option, Option});

@@ -31,7 +31,7 @@
     [{description, "Lightweight HTTP Client"},
         {vsn, "1.2.6"},
         {modules, []},
-        {registered, [lhttpc_manager]},
+        {registered, [lhttpc_sup, lhttpc_manager]},
         {applications, [kernel, stdlib, ssl, crypto]},
   {mod, {lhttpc, nil}},
   {env, [{connection_timeout, 300000}, {pool_size, 50}]}

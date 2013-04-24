@@ -41,7 +41,7 @@
 
 %% Exported functions
 -export([start_link/0, start_link/1,
-	 new_pool/3,
+         new_pool/3,
          client_count/1,
          connection_count/1, connection_count/2,
          update_connection_timeout/2,
@@ -50,8 +50,7 @@
          set_max_pool_size/2,
          ensure_call/6,
          client_done/5,
-	 close_socket/2
-        ]).
+         close_socket/2]).
 
 %% Callbacks
 -export([init/1,
@@ -59,8 +58,7 @@
          handle_cast/2,
          handle_info/2,
          code_change/3,
-         terminate/2
-        ]).
+         terminate/2]).
 
 -behaviour(gen_server).
 
@@ -68,13 +66,12 @@
 -include("lhttpc.hrl").
 
 -record(httpc_man, {
-        destinations = dict:new(),
-        sockets = dict:new(),
-        clients = dict:new(), % Pid => {Dest, MonRef}
-        queues = dict:new(),  % Dest => queue of Froms
-        max_pool_size = 50 :: non_neg_integer(),
-        timeout = 300000 :: non_neg_integer()
-    }).
+            destinations = dict:new(),
+            sockets = dict:new(),
+            clients = dict:new(), % Pid => {Dest, MonRef}
+            queues = dict:new(),  % Dest => queue of Froms
+            max_pool_size = 50 :: non_neg_integer(),
+            timeout = 300000 :: non_neg_integer()}).
 
 %%==============================================================================
 %% Exported functions
@@ -106,13 +103,13 @@ set_max_pool_size(PidOrName, Size) when is_integer(Size), Size > 0 ->
 list_pools() ->
     Children = supervisor:which_children(lhttpc_sup),
     lists:foldl(fun(In, Acc) ->
-                        case In of
-                            {N, P, _, [lhttpc_manager]} ->
-                                [{N, dump_settings(P)} | Acc];
-                            _ ->
-                                Acc
-                        end
-                end, [], Children).
+                case In of
+                    {N, P, _, [lhttpc_manager]} ->
+                        [{N, dump_settings(P)} | Acc];
+                    _ ->
+                        Acc
+                end
+        end, [], Children).
 
 %%------------------------------------------------------------------------------
 %% @spec (PoolPidOrName) -> Count
@@ -206,24 +203,24 @@ start_link(Options0) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec ensure_call(pool_id(), pid(), host(), port_num(), boolean(), pool_options()) ->
-                        {ok, socket()} | {ok, 'no_socket'} | {error, term()}.
+    {ok, socket()} | {ok, 'no_socket'} | {error, term()}.
 ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     SocketRequest = {socket, Pid, Host, Port, Ssl},
     try
-	gen_server:call(Pool, SocketRequest, 100)
+        gen_server:call(Pool, SocketRequest, 100)
     catch
         exit:{noproc, _Reason} ->
             case proplists:get_value(pool_ensure, Options, false) of
                 true ->
                     {ok, DefaultTimeout} = application:get_env(
-                                             lhttpc,
-                                             connection_timeout),
+                            lhttpc,
+                            connection_timeout),
                     ConnTimeout = proplists:get_value(pool_connection_timeout,
                                                       Options,
                                                       DefaultTimeout),
                     {ok, DefaultMaxPool} = application:get_env(
-                                             lhttpc,
-                                             pool_size),
+                            lhttpc,
+                            pool_size),
                     PoolMaxSize = proplists:get_value(pool_max_size,
                                                       Options,
                                                       DefaultMaxPool),
@@ -240,7 +237,7 @@ ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     end.
 
 -spec new_pool(atom(), non_neg_integer(), poolsize()) ->
-          {ok, pid()} | {error, term()}.
+    {ok, pid()} | {error, term()}.
 new_pool(Pool, ConnTimeout, PoolSize) ->
     ChildSpec = {Pool,
                  {lhttpc_manager, start_link, [[{name, Pool},
@@ -305,7 +302,7 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
         max_pool_size = MaxSize,
         clients = Clients,
         queues = Queues
-    } = State,
+        } = State,
     Dest = {Host, Port, Ssl},
     {Reply0, State2} = find_socket(Dest, Pid, State),
     case Reply0 of
@@ -322,7 +319,8 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
             end
     end;
 handle_call(dump_settings, _, State) ->
-    {reply, [{max_pool_size, State#httpc_man.max_pool_size}, {timeout, State#httpc_man.timeout}], State};
+    {reply, [{max_pool_size, State#httpc_man.max_pool_size},
+             {timeout, State#httpc_man.timeout}], State};
 handle_call(client_count, _, State) ->
     {reply, dict:size(State#httpc_man.clients), State};
 handle_call(connection_count, _, State) ->
@@ -420,9 +418,9 @@ find_socket({_, _, Ssl} = Dest, Pid, State) ->
                     {_, Timer} = dict:fetch(Socket, State#httpc_man.sockets),
                     cancel_timer(Timer, Socket),
                     NewState = State#httpc_man{
-                        destinations = update_dest(Dest, Sockets, Dests),
-                        sockets = dict:erase(Socket, State#httpc_man.sockets)
-                    },
+                            destinations = update_dest(Dest, Sockets, Dests),
+                            sockets = dict:erase(Socket, State#httpc_man.sockets)
+                            },
                     {{ok, Socket}, NewState};
                 {error, badarg} -> % Pid has timed out, reuse for someone else
                     lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
@@ -447,7 +445,7 @@ remove_socket(Socket, State) ->
             State#httpc_man{
                 destinations = update_dest(Dest, Sockets, Dests),
                 sockets = dict:erase(Socket, State#httpc_man.sockets)
-            };
+                };
         error ->
             State
     end.
@@ -468,7 +466,7 @@ store_socket({_, _, Ssl} = Dest, Socket, State) ->
     State#httpc_man{
         destinations = dict:store(Dest, Sockets, Dests),
         sockets = dict:store(Socket, {Dest, Timer}, State#httpc_man.sockets)
-    }.
+        }.
 
 %------------------------------------------------------------------------------
 %% @private
@@ -533,8 +531,8 @@ queue_out({_Host, _Port, _Ssl} = Dest, Queues) ->
 %------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-deliver_socket(Socket, {_, _, Ssl} = Dest, State) ->
-    case queue_out(Dest, State#httpc_man.queues) of
+deliver_socket(Socket, {_, _, Ssl} = Dest, #httpc_man{queues = Queues} = State) ->
+    case queue_out(Dest, Queues) of
         empty ->
             store_socket(Dest, Socket, State);
         {ok, {PidWaiter, _} = FromWaiter, Queues2} ->
@@ -555,9 +553,9 @@ deliver_socket(Socket, {_, _, Ssl} = Dest, State) ->
 %------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-monitor_client(Dest, {Pid, _} = _From, State) ->
+monitor_client(Dest, {Pid, _} = _From, #httpc_man{clients = Clients} = State) ->
     MonRef = erlang:monitor(process, Pid),
-    Clients2 = dict:store(Pid, {Dest, MonRef}, State#httpc_man.clients),
+    Clients2 = dict:store(Pid, {Dest, MonRef}, Clients),
     State#httpc_man{clients = Clients2}.
 
 %------------------------------------------------------------------------------

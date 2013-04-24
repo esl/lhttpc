@@ -523,14 +523,14 @@ partial_upload_chunked_no_trailer() ->
     URL = url(Port, "/partial_upload_chunked_no_trailer"),
     Body = [<<"This">>, <<" is ">>, <<"chunky">>, <<" stuff!">>],
     Options = [{partial_upload, true}],
-	{ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, Client} = lhttpc:connect_client(URL, []),
     {ok, partial_upload} = lhttpc:request_client(Client, URL, post, [], hd(Body), 1000, Options),
-	ok = upload_parts(Client, tl(Body)),
-	{ok, Response} = lhttpc:send_body_part(Client, http_eob, 1000),
+    ok = upload_parts(Client, tl(Body)),
+    {ok, Response} = lhttpc:send_body_part(Client, http_eob, 1000),
     ?assertEqual({200, "OK"}, status(Response)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response)),
     ?assertEqual("This is chunky stuff!",
-				 	lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
+                    lhttpc_lib:header_value("x-test-orig-body", headers(Response))).
 
 partial_download_illegal_option() ->
     ?assertError({bad_option, {partial_download, {foo, bar}}},
@@ -540,14 +540,14 @@ partial_download_illegal_option() ->
 long_body_part(Size) ->
     list_to_binary(
       lists:flatten(
-	[webserver_utils:long_body_part() || _ <- lists:seq(1, Size)])).
+    [webserver_utils:long_body_part() || _ <- lists:seq(1, Size)])).
 
 partial_download_identity() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
         {window_size, 1},
-	{recv_proc, self()}
+        {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -562,8 +562,8 @@ partial_download_infinity_window() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-		       {window_size, infinity},
-		       {recv_proc, self()}
+               {window_size, infinity},
+               {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -577,8 +577,8 @@ partial_download_no_content_length() ->
     Port = start(gen_tcp, [fun webserver_utils:no_content_length/5]),
     URL = url(Port, "/no_cl"),
     PartialDownload = [
-		       {window_size, 1},
-		       {recv_proc, self()}
+               {window_size, 1},
+               {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -592,8 +592,8 @@ partial_download_no_content() ->
     Port = start(gen_tcp, [fun webserver_utils:no_content_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-		       {window_size, 1},
-		       {recv_proc, self()}
+               {window_size, 1},
+               {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -606,10 +606,10 @@ limited_partial_download_identity() ->
     Port = start(gen_tcp, [fun webserver_utils:large_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-		       {window_size, 1},
-		       {part_size, 512}, % bytes
-		       {recv_proc, self()}
-		      ],
+               {window_size, 1},
+               {part_size, 512}, % bytes
+               {recv_proc, self()}
+              ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
     {ok, {Status, _Hdrs, partial_download}} =
@@ -622,9 +622,9 @@ partial_download_chunked() ->
     Port = start(gen_tcp, [fun webserver_utils:large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-		       {window_size, 1},
-		       {part_size, length(webserver_utils:long_body_part()) * 3},
-		       {recv_proc, self()}
+               {window_size, 1},
+               {part_size, length(webserver_utils:long_body_part()) * 3},
+               {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -638,9 +638,9 @@ partial_download_chunked_infinite_part() ->
     Port = start(gen_tcp, [fun webserver_utils:large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-		       {window_size, 1},
-		       {part_size, infinity},
-		       {recv_proc, self()}
+               {window_size, 1},
+               {part_size, infinity},
+               {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -655,9 +655,9 @@ partial_download_smallish_chunks() ->
     Port = start(gen_tcp, [fun webserver_utils:large_chunked_response/5]),
     URL = url(Port, "/partial_download_identity"),
     PartialDownload = [
-		       {window_size, 1},
-		       {part_size, length(webserver_utils:long_body_part()) - 1},
-		       {recv_proc, self()}
+               {window_size, 1},
+               {part_size, length(webserver_utils:long_body_part()) - 1},
+               {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -671,9 +671,9 @@ partial_download_slow_chunks() ->
     Port = start(gen_tcp, [fun webserver_utils:slow_chunked_response/5]),
     URL = url(Port, "/slow"),
     PartialDownload = [
-		       {window_size, 1},
-		       {part_size, length(webserver_utils:long_body_part()) div 2},
-		       {recv_proc, self()}
+               {window_size, 1},
+               {part_size, length(webserver_utils:long_body_part()) div 2},
+               {recv_proc, self()}
     ],
     Options = [{partial_download, PartialDownload}],
     {ok, Client} = lhttpc:connect_client(URL, []),
@@ -716,7 +716,7 @@ ssl_post() ->
 ssl_chunked() ->
     Port = start(ssl, [fun webserver_utils:chunked_response/5, fun webserver_utils:chunked_response_t/5]),
     URL = ssl_url(Port, "/ssl_chunked"),
-	{ok, Client} = lhttpc:connect_client(URL, []),
+    {ok, Client} = lhttpc:connect_client(URL, []),
     FirstResult = lhttpc:request_client(Client, URL, get, [], [], 100, [{pool_options, [{pool_ensure, true}, {pool, lhttpc_manager}]}]),
     ?assertMatch({ok, _}, FirstResult),
     {ok, FirstResponse} = FirstResult,
@@ -749,7 +749,7 @@ invalid_options() ->
 
 cookies() ->
     Port = start(gen_tcp, [fun webserver_utils:set_cookie_response/5, fun webserver_utils:expired_cookie_response/5,
-			fun webserver_utils:receive_right_cookies/5]),
+            fun webserver_utils:receive_right_cookies/5]),
     URL = url(Port, "/cookies"),
     Options = [{use_cookies, true}],
     {ok, Client} = lhttpc:connect_client(URL, Options),
@@ -764,8 +764,8 @@ cookies() ->
 %%% Helpers functions
 upload_parts(Client, Parts) ->
     lists:foldl(fun(BodyPart, _) ->
-			lhttpc:send_body_part(Client, BodyPart, 1000)
-		end, ok, Parts).
+            lhttpc:send_body_part(Client, BodyPart, 1000)
+        end, ok, Parts).
 
 read_partial_body(Client) ->
     read_partial_body(Client, infinity, <<>>).
@@ -775,28 +775,28 @@ read_partial_body(Client, Size) ->
 
 read_partial_body(Client, Size, Acc) ->
     receive
-	{body_part,  http_eob} ->
-	    %% chunked download
-	    ok = lhttpc:get_body_part(Client),
-	    read_partial_body(Client, Size, Acc);
-	{body_part,  window_finished} ->
-	    ok = lhttpc:get_body_part(Client),
-	    read_partial_body(Client, Size, Acc);
-	{body_part, Bin} ->
-	    if
+    {body_part,  http_eob} ->
+        %% chunked download
+        ok = lhttpc:get_body_part(Client),
+        read_partial_body(Client, Size, Acc);
+    {body_part,  window_finished} ->
+        ok = lhttpc:get_body_part(Client),
+        read_partial_body(Client, Size, Acc);
+    {body_part, Bin} ->
+        if
                 Size =:= infinity ->
                     ok;
                 Size =/= infinity ->
                     ?assert(Size >= iolist_size(Bin))
-	    end,
-	    read_partial_body(Client, Size, <<Acc/binary,Bin/binary>>);
-	{http_eob, Trailers} ->
-	    Acc;
-	{body_part_error, Reason} ->
-	    {error, Reason, Acc}
+        end,
+        read_partial_body(Client, Size, <<Acc/binary,Bin/binary>>);
+    {http_eob, Trailers} ->
+        Acc;
+    {body_part_error, Reason} ->
+        {error, Reason, Acc}
     after
-	1000 ->
-	    {error, receive_clause, Acc}
+    1000 ->
+        {error, receive_clause, Acc}
     end.
 
 simple(Method) ->

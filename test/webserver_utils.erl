@@ -71,9 +71,9 @@ long_body_part() ->
 long_body_part(Size) ->
     list_to_binary(
       lists:foldl(
-	fun(_, Acc) ->
-		Acc ++ " " ++ webserver_utils:long_body_part()
-	end, webserver_utils:long_body_part(), lists:seq(1, Size))).
+    fun(_, Acc) ->
+        Acc ++ " " ++ webserver_utils:long_body_part()
+    end, webserver_utils:long_body_part(), lists:seq(1, Size))).
 
 %%% Responders
 simple_response(Module, Socket, _Request, _Headers, Body) ->
@@ -313,10 +313,10 @@ close_connection(Module, Socket, _, _, _) ->
 not_modified_response(Module, Socket, _Request, _Headers, _Body) ->
     Module:send(
         Socket,
-		[
-			"HTTP/1.1 304 Not Modified\r\n"
-			"Date: Tue, 15 Nov 1994 08:12:31 GMT\r\n\r\n"
-		]
+        [
+            "HTTP/1.1 304 Not Modified\r\n"
+            "Date: Tue, 15 Nov 1994 08:12:31 GMT\r\n\r\n"
+        ]
     ).
 
 basic_auth_responder(User, Passwd) ->
@@ -386,45 +386,45 @@ expired_cookie_response(Module, Socket, _Request, Headers, _Body) ->
             undefined ->
                 Module:send(
                     Socket,
-		     "HTTP/1.1 500 Internal Server Error\r\n"
-		     "Content-type: text/plain\r\n"
-		     "Content-length: 0\r\n\r\n"
+             "HTTP/1.1 500 Internal Server Error\r\n"
+             "Content-type: text/plain\r\n"
+             "Content-length: 0\r\n\r\n"
                 );
-	"name=value; name2=value2" ->
-	    Module:send(
-	      Socket,
-	      "HTTP/1.1 200 OK\r\n"
-	      "Connection: Keep-Alive\r\n"
-	      "Set-Cookie: name2=value2; Expires=Wed, 09-Jun-1975 10:18:14 GMT\r\n"
-	      "Content-type: text/plain\r\n"
+    "name=value; name2=value2" ->
+        Module:send(
+          Socket,
+          "HTTP/1.1 200 OK\r\n"
+          "Connection: Keep-Alive\r\n"
+          "Set-Cookie: name2=value2; Expires=Wed, 09-Jun-1975 10:18:14 GMT\r\n"
+          "Content-type: text/plain\r\n"
               "Content-length: 0\r\n\r\n"
-	     );
-	%The order should not matter.
-	"name2=value2; name=value"->
-	    Module:send(
-	      Socket,
-	      "HTTP/1.1 200 OK\r\n"
-	      "Connection: Keep-Alive\r\n"
-	      "Set-Cookie: name2=value2; Expires=Wed, 09-Jun-1975 10:18:14 GMT\r\n"
-	      "Content-type: text/plain\r\n"
+         );
+    %The order should not matter.
+    "name2=value2; name=value"->
+        Module:send(
+          Socket,
+          "HTTP/1.1 200 OK\r\n"
+          "Connection: Keep-Alive\r\n"
+          "Set-Cookie: name2=value2; Expires=Wed, 09-Jun-1975 10:18:14 GMT\r\n"
+          "Content-type: text/plain\r\n"
               "Content-length: 0\r\n\r\n"
-	     )
+         )
     end.
 
 receive_right_cookies(Module, Socket, _Request, Headers, _Body) ->
     case proplists:get_value("Cookie", Headers) of
-	"name=value" ->
-	    Module:send(
-	      Socket,
-	      "HTTP/1.1 200 OK\r\n"
-	      "Content-type: text/plain\r\n"
-	      "Content-length: 0\r\n\r\n"
-	     );
-	_ ->
-	     Module:send(
+    "name=value" ->
+        Module:send(
+          Socket,
+          "HTTP/1.1 200 OK\r\n"
+          "Content-type: text/plain\r\n"
+          "Content-length: 0\r\n\r\n"
+         );
+    _ ->
+         Module:send(
                     Socket,
-		     "HTTP/1.1 500 Internal Server Error\r\n"
-		     "Content-type: text/plain\r\n"
-		     "Content-length: 0\r\n\r\n"
+             "HTTP/1.1 500 Internal Server Error\r\n"
+             "Content-type: text/plain\r\n"
+             "Content-length: 0\r\n\r\n"
                 )
     end.

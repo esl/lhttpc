@@ -32,19 +32,19 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(HEADER1, [{"X-Frame-Options","SAMEORIGIN"},
-		  {"X-Xss-Protection","1; mode=block"},
-		  {"Content-Length","221"},
-		  {"Server","gws"},
-		  {"Date","Tue, 29 Jan 2013 10:31:52 GMT"},
-		  {"P3p",
-		   "CP=\"This is not a P3P policy! See http://www.google.com/support/accounts/bin/answer.py?hl=en&answer=151657 for more info.\""},
-		  {"Set-Cookie",
-		   "NID=67=gWDe_1hs0LbFdFRIiHXh8qQT_oh_2T2e2tPU3su6azclQH0FGbIpkHYkZJ1kIENFScdIWsnaHd3fUL-J8dZ8YApccTTmpfAgxgCStTspaZrCBRLG0SHRiAZz-Lkj8tyk; expires=Wed, 31-Jul-2013 10:31:52 GMT; path=/; domain=.google.com; HttpOnly"},
-		  {"Set-Cookie",
-		   "PREF=ID=d8f03b98b080a98a:FF=0:TM=1359455512:LM=1359455512:S=x-lfwE8swDlcyxXl; expires=Thu, 29-Jan-2015 10:31:52 GMT; path=/; domain=.google.com"},
-		  {"Content-Type","text/html; charset=UTF-8"},
-		  {"Cache-Control","private"},
-		  {"Location","http://www.google.co.uk/"}]).
+          {"X-Xss-Protection","1; mode=block"},
+          {"Content-Length","221"},
+          {"Server","gws"},
+          {"Date","Tue, 29 Jan 2013 10:31:52 GMT"},
+          {"P3p",
+           "CP=\"This is not a P3P policy! See http://www.google.com/support/accounts/bin/answer.py?hl=en&answer=151657 for more info.\""},
+          {"Set-Cookie",
+           "NID=67=gWDe_1hs0LbFdFRIiHXh8qQT_oh_2T2e2tPU3su6azclQH0FGbIpkHYkZJ1kIENFScdIWsnaHd3fUL-J8dZ8YApccTTmpfAgxgCStTspaZrCBRLG0SHRiAZz-Lkj8tyk; expires=Wed, 31-Jul-2013 10:31:52 GMT; path=/; domain=.google.com; HttpOnly"},
+          {"Set-Cookie",
+           "PREF=ID=d8f03b98b080a98a:FF=0:TM=1359455512:LM=1359455512:S=x-lfwE8swDlcyxXl; expires=Thu, 29-Jan-2015 10:31:52 GMT; path=/; domain=.google.com"},
+          {"Content-Type","text/html; charset=UTF-8"},
+          {"Cache-Control","private"},
+          {"Location","http://www.google.co.uk/"}]).
 
 parse_url_test_() ->
     [
@@ -243,20 +243,20 @@ parse_url_test_() ->
 get_cookies_test_() ->
     [
         ?_assertEqual([#lhttpc_cookie{
-			  name = "NID",
-			  value = "67=gWDe_1hs0LbFdFRIiHXh8qQT_oh_2T2e2tPU3su6azclQH0FGbIpkHYkZJ1kIENFScdIWsnaHd3fUL-J8dZ8YApccTTmpfAgxgCStTspaZrCBRLG0SHRiAZz-Lkj8tyk",
-			  expires = {{2013, 7, 31}, {10, 31, 52}},
-			  path = "/",
-			  max_age = undefined,
-			  timestamp = undefined
-			 },
-		       #lhttpc_cookie{
-				       name = "PREF",
-				       value = "ID=d8f03b98b080a98a:FF=0:TM=1359455512:LM=1359455512:S=x-lfwE8swDlcyxXl",
-				       expires = {{2015, 1, 29}, {10, 31, 52}},
-				       path = "/",
-				       max_age = undefined,
-				       timestamp = undefined
-				      }],
+              name = "NID",
+              value = "67=gWDe_1hs0LbFdFRIiHXh8qQT_oh_2T2e2tPU3su6azclQH0FGbIpkHYkZJ1kIENFScdIWsnaHd3fUL-J8dZ8YApccTTmpfAgxgCStTspaZrCBRLG0SHRiAZz-Lkj8tyk",
+              expires = {{2013, 7, 31}, {10, 31, 52}},
+              path = "/",
+              max_age = undefined,
+              timestamp = undefined
+             },
+               #lhttpc_cookie{
+                       name = "PREF",
+                       value = "ID=d8f03b98b080a98a:FF=0:TM=1359455512:LM=1359455512:S=x-lfwE8swDlcyxXl",
+                       expires = {{2015, 1, 29}, {10, 31, 52}},
+                       path = "/",
+                       max_age = undefined,
+                       timestamp = undefined
+                      }],
                       lhttpc_lib:get_cookies(?HEADER1))
     ].
