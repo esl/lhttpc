@@ -1048,19 +1048,15 @@ is_ipv6_host(Host) ->
 %% pool dinamically.
 %% @end
 %%------------------------------------------------------------------------------
-connect_socket(State = #client_state{pool = Pool}) ->
-    Connection = case Pool of
-		     undefined ->
-			 new_socket(State);
-		     _ ->
-			 connect_pool(State)
-		 end,
-    case Connection of
-	{ok, Socket} ->
-	    {ok, State#client_state{socket = Socket}};
-	Error ->
-	    {Error, State}
-    end.
+connect_socket(#client_state{pool = undefined} = State) ->
+    connect_socket_return(new_socket(State), State);
+connect_socket(#client_state{pool = _Pool} = State) ->
+    connect_socket_return(connect_pool(State), State).
+
+connect_socket_return({ok, Socket}, State) ->
+    {ok, State#client_state{socket = Socket}};
+connect_socket_return(Error, State) ->
+    {Error, State}.
 
 -spec connect_pool(#client_state{}) -> {ok, socket()} | {error, atom()}.
 connect_pool(State = #client_state{pool_options = Options,
