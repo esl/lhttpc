@@ -483,7 +483,7 @@ partial_upload_identity_iolist() ->
     ?assertEqual("This is chunky stuff!",
         lhttpc_lib:header_value("x-test-orig-body", headers(Response1))),
     % Make sure it works with no body part in the original request as well
-    {ok, UploadState2} = lhttpc:request_client(Client, URL, post, Hdrs, [], 1000, Options),
+    {ok, _UploadState2} = lhttpc:request_client(Client, URL, post, Hdrs, [], 1000, Options),
     {ok, Response2} = upload_parts(Client, Body ++ [http_eob]),
     ?assertEqual({200, "OK"}, status(Response2)),
     ?assertEqual(list_to_binary(webserver_utils:default_string()), body(Response2)),
@@ -790,7 +790,7 @@ read_partial_body(Client, Size, Acc) ->
                     ?assert(Size >= iolist_size(Bin))
         end,
         read_partial_body(Client, Size, <<Acc/binary,Bin/binary>>);
-    {http_eob, Trailers} ->
+    {http_eob, _Trailers} ->
         Acc;
     {body_part_error, Reason} ->
         {error, Reason, Acc}
