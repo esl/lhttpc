@@ -57,7 +57,7 @@
 
 -define(HTTP_LINE_END, "\r\n").
 -define(CONNECTION_HDR(HDRS, DEFAULT),
-        string:to_lower(lhttpc_lib:header_value("connection", HDRS, DEFAULT))).
+        lhttpc_lib:to_lower(lhttpc_lib:header_value("connection", HDRS, DEFAULT))).
 
 -record(client_state, {
         host :: string(),
@@ -184,7 +184,7 @@ handle_call({request, PathOrUrl, Method, Hdrs, Body, Options}, From,
         ProxyUrl when is_list(ProxyUrl) ->
             lhttpc_lib:parse_url(ProxyUrl)
     end,
-    FinalPath, FinalHeaders, Host, Port} =
+    {FinalPath, FinalHeaders, Host, Port} =
         url_extract(PathOrUrl, Hdrs, ClientHost, ClientPort),
     case {Host, Port} =:= {ClientHost, ClientPort} of
         true ->
@@ -654,7 +654,7 @@ has_body(_, _, _) ->
 body_type(Hdrs) ->
     case lhttpc_lib:header_value("content-length", Hdrs) of
         undefined ->
-            TransferEncoding = string:to_lower(
+            TransferEncoding = lhttpc_lib:to_lower(
                     lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined")
                     ),
             case TransferEncoding of
@@ -922,13 +922,13 @@ read_infinite_body_part(#client_state{socket = Socket, ssl = Ssl}) ->
 %%------------------------------------------------------------------------------
 check_infinite_response({1, Minor}, Hdrs) when Minor >= 1 ->
     HdrValue = lhttpc_lib:header_value("connection", Hdrs, "keep-alive"),
-    case string:to_lower(HdrValue) of
+    case lhttpc_lib:to_lower(HdrValue) of
         "close" -> ok;
         _       -> erlang:error(no_content_length)
     end;
 check_infinite_response(_, Hdrs) ->
     HdrValue = lhttpc_lib:header_value("connection", Hdrs, "close"),
-    case string:to_lower(HdrValue) of
+    case lhttpc_lib:to_lower(HdrValue) of
         "keep-alive" -> erlang:error(no_content_length);
         _            -> ok
     end.

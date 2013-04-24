@@ -41,7 +41,8 @@
          format_hdrs/1,
          dec/1,
          get_cookies/1,
-         update_cookies/2]).
+         update_cookies/2,
+         to_lower/1]).
 
 -include("lhttpc_types.hrl").
 -include("lhttpc.hrl").
@@ -90,7 +91,7 @@ header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_atom(ThisHdr) ->
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_binary(ThisHdr) ->
     header_value(Hdr, [{binary_to_list(ThisHdr), Value}| Hdrs], Default);
 header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) ->
-    case string:equal(string:to_lower(ThisHdr), Hdr) of
+    case string:equal(lhttpc_lib:to_lower(ThisHdr), Hdr) of
         true  -> case is_list(Value) of
                 true -> string:strip(Value);
                 false -> Value
@@ -129,7 +130,7 @@ parse_url(URL) ->
     {User, Passwd, HostPortPath} = split_credentials(CredsHostPortPath),
     {Host, PortPath} = split_host(HostPortPath, []),
     {Port, Path} = split_port(Scheme, PortPath, []),
-    #lhttpc_url{host = string:to_lower(Host), port = Port, path = Path,
+    #lhttpc_url{host = lhttpc_lib:to_lower(Host), port = Port, path = Path,
                 user = User, password = Passwd, is_ssl = (Scheme =:= https)}.
 
 %%------------------------------------------------------------------------------
@@ -215,6 +216,15 @@ update_cookies(RespHeaders, StateCookies) ->
     NewCookies = [ X || X <- Substituted, X#lhttpc_cookie.value /= "deleted"],
     %% Delete the cookies that are expired (check max-age and expire fields).
     delete_expired_cookies(NewCookies).
+
+
+%%------------------------------------------------------------------------------
+%% @doc Converts characters in a string ro lower case.
+%% @end
+%%------------------------------------------------------------------------------
+-spec to_lower(string()) -> string().
+to_lower(String) ->
+    [char_to_lower(X) || X <- String].
 
 %%==============================================================================
 %% Internal functions
@@ -555,7 +565,7 @@ add_content_headers(Hdrs, _Body, true) ->
         {undefined, undefined} ->
             [{"Transfer-Encoding", "chunked"} | Hdrs];
         {undefined, TransferEncoding} ->
-            case string:to_lower(TransferEncoding) of
+            case lhttpc_lib:to_lower(TransferEncoding) of
                 "chunked" -> Hdrs;
                 _ -> erlang:error({error, unsupported_transfer_encoding})
             end;
@@ -586,7 +596,7 @@ add_host(Hdrs, Host, Port) ->
 %%------------------------------------------------------------------------------
 -spec is_chunked(headers()) -> boolean().
 is_chunked(Hdrs) ->
-    TransferEncoding = string:to_lower(
+    TransferEncoding = lhttpc_lib:to_lower(
             header_value("transfer-encoding", Hdrs, "undefined")),
     case TransferEncoding of
         "chunked" -> true;
@@ -619,3 +629,36 @@ maybe_ipv6_enclose(Host) ->
         _ ->
             Host
     end.
+
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+char_to_lower($A) -> $a;
+char_to_lower($B) -> $b;
+char_to_lower($C) -> $c;
+char_to_lower($D) -> $d;
+char_to_lower($E) -> $e;
+char_to_lower($F) -> $f;
+char_to_lower($G) -> $g;
+char_to_lower($H) -> $h;
+char_to_lower($I) -> $i;
+char_to_lower($J) -> $j;
+char_to_lower($K) -> $k;
+char_to_lower($L) -> $l;
+char_to_lower($M) -> $m;
+char_to_lower($N) -> $n;
+char_to_lower($O) -> $o;
+char_to_lower($P) -> $p;
+char_to_lower($Q) -> $q;
+char_to_lower($R) -> $r;
+char_to_lower($S) -> $s;
+char_to_lower($T) -> $t;
+char_to_lower($U) -> $u;
+char_to_lower($V) -> $v;
+char_to_lower($W) -> $w;
+char_to_lower($X) -> $x;
+char_to_lower($Y) -> $y;
+char_to_lower($Z) -> $z;
+char_to_lower(Ch) -> Ch.
