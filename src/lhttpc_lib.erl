@@ -138,7 +138,8 @@ parse_url(URL) ->
     }.
 
 %%------------------------------------------------------------------------------
-%% @spec (Path, Method, Headers, Host, Port, Body, PartialUpload) -> Request
+%% @spec (Path, Method, Headers, Host, Port, Body, PartialUpload, Cookies) ->
+%%    Request
 %% Path = iolist()
 %% Method = atom() | string()
 %% Headers = [{atom() | string(), string()}]
@@ -146,6 +147,7 @@ parse_url(URL) ->
 %% Port = integer()
 %% Body = iolist()
 %% PartialUpload = true | false
+%% Cookies = [#lhttpc_cookie{}]
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
