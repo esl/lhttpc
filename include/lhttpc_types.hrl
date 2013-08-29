@@ -52,20 +52,15 @@
 
 -type poolsize() :: non_neg_integer() | atom().
 
--type invalid_option() :: any().
-
 -type pool_id() ::  pid() | atom().
 
--type destination() :: {string(), pos_integer(), boolean()}.
+-type destination() :: {host(), pos_integer(), boolean()} | string().
 
 -type raw_headers() :: [{atom() | binary() | string(), binary() | string()}].
 
 -type partial_download_option() ::
         {'window_size', window_size()} |
-        {'part_size', non_neg_integer() | 'infinity'} |
-        invalid_option().
-
-
+        {'part_size', non_neg_integer() | 'infinity'}.
 
 -type option() ::
         {'connect_timeout', timeout()} |
@@ -76,8 +71,7 @@
 	{'use_cookies', boolean()} |
         {'proxy', string()} |
         {'proxy_ssl_options', socket_options()} |
-	{'pool_options', pool_options()} |
-        invalid_option().
+	{'pool_options', pool_options()}.
 
 -type pool_option() ::
 	{'pool_ensure', boolean()} |
@@ -99,11 +93,13 @@
 
 -type upload_state() :: {partial_upload, pid()}.
 
--type body()         :: binary()    |
-                        'undefined' | % HEAD request.
-                        pid().        % When partial_download option is used.
+-type response() ::  {{pos_integer(), string()}, headers(), body()}.
+
+-type body() :: binary()    |
+               'undefined' | % HEAD request.
+               pid().        % When partial_download option is used.
 
 -type result() ::
-        {ok, {{pos_integer(), string()}, headers(), body()}} |
+        {ok, response()} |
         {ok, upload_state()} |
         {error, atom()}.

@@ -114,14 +114,6 @@ stop(Client) ->
     gen_server:cast(Client, stop).
 
 %%------------------------------------------------------------------------------
-%% @spec (Client, Path, Method, Hdrs, RequestBody, Options, Timeout) -> ok
-%%    From = pid()
-%%    Method = atom() | string()
-%%    Hdrs = [Header]
-%%    Header = {string() | atom(), string()}
-%%    Body = iolist()
-%%    Options = [Option]
-%%    Option = {connect_timeout, Milliseconds}
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
@@ -257,10 +249,6 @@ handle_call(get_body_part, From, State) ->
 %% @private
 %% @doc
 %% Handling cast messages
-%%
-%% @spec handle_cast(Msg, State) -> {noreply, State} |
-%%                                  {noreply, State, Timeout} |
-%%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
 handle_cast(stop, State) ->
@@ -289,7 +277,6 @@ handle_info(_Info, State) ->
 %% necessary cleaning up. When it returns, the gen_server terminates
 %% with Reason. The return value is ignored.
 %%
-%% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, State = #client_state{pool = Pool, host = Host, ssl = Ssl,
@@ -314,8 +301,6 @@ terminate(_Reason, State = #client_state{pool = Pool, host = Host, ssl = Ssl,
 %% @private
 %% @doc
 %% Convert process state when code is changed
-%%
-%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
 %% @end
 %%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->

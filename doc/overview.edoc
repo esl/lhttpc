@@ -1,11 +1,28 @@
 @author Oscar Hellström <oscar@hellstrom.st>
-@doc A lightweight HTTP client.
-The only functions of much interest right now are {@link
+@author Diana Parra Corbacho <diana.corbacho@erlang-solutions.com>
+@author Ramon Lastres Guerrero <ramon.lastres@erlang-solutions.com>
+@doc A Lightweight HTTP client.
+
+Users can send simple requests using standalone request functions {@link
 lhttpc:request/4}, {@link lhttpc:request/5}, {@link lhttpc:request/6} and
 {@link lhttpc:request/9}.
 
-<h1>Configuration</h1>
+It is also possible to independently create a client process that can be reused for several requests, using {@link connect_client/2}
+and then generate requests with {@link lhttpc:request_client/5}, {@link lhttpc:request_client/6}, {@link lhttpc:request_client/7} and
+{@link lhttpc:request_client/9}.
+
+It supports pools of connections that can be added and deleted:
+{@link add_pool/1}
+{@link add_pool/2}
+{@link delete_pool/1}
+
+The  {@link lhttpc_manager} module provides basic functionalities to handle the different pools.
+
+<h1>Configuration Parameters</h1>
+Configuration parameters specified in the app.src file.
 <h2>`connection_timeout'</h2>
 The maximum time (in milliseconds) the client will keep a TCP connection
-open to a server.
+open to a server. Default parameter that can be overriden by the request options.
+<h2>`pool_size'</h2>
+The size of every pool created. Default parameter that can be overriden by the request options.
 @end

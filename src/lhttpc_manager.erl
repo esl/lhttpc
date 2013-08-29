@@ -30,11 +30,8 @@
 %%% @author Diana Parra Corbacho <diana.corbacho@erlang-solutions.com>
 %%% @author Ramon Lastres Guerrero <ramon.lastres@erlang-solutions.com>
 %%% @doc Connection manager for the HTTP client.
-%%% This gen_server is responsible for keeping track of persistent
-%%% connections to HTTP servers. The only interesting API is
-%%% `connection_count/0' and `connection_count/1'.
-%%% The gen_server is supposed to be started by a supervisor, which is
-%%% normally {@link lhttpc_sup}.
+%%% This module provides the pool of connections functionality. It exports funcions
+%%% intended to provide information and manage the existing pools.
 %%% @end
 %%------------------------------------------------------------------------------
 -module(lhttpc_manager).
@@ -78,7 +75,6 @@
 %%==============================================================================
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName) -> list()
 %% @doc Returns the current settings in state for the
 %% specified lhttpc pool (manager).
 %% @end
@@ -112,8 +108,6 @@ list_pools() ->
         end, [], Children).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName) -> Count
-%%    Count = integer()
 %% @doc Returns the total number of active clients maintained by the
 %% specified lhttpc pool (manager).
 %% @end
@@ -123,8 +117,6 @@ client_count(PidOrName) ->
     gen_server:call(PidOrName, client_count).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName) -> Count
-%%    Count = integer()
 %% @doc Returns the total number of active connections maintained by the
 %% specified lhttpc pool (manager).
 %% @end
@@ -134,26 +126,16 @@ connection_count(PidOrName) ->
     gen_server:call(PidOrName, connection_count).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName, Destination) -> Count
-%%    PoolPidOrName = pid() | atom()
-%%    Destination = {Host, Port, Ssl}
-%%    Host = string()
-%%    Port = integer()
-%%    Ssl = boolean()
-%%    Count = integer()
 %% @doc Returns the number of active connections to the specific
 %% `Destination' maintained by the httpc manager.
 %% @end
 %%------------------------------------------------------------------------------
--spec connection_count(pool_id(), destination()) -> non_neg_integer().
+-spec connection_count(pool_id(), Destination :: destination()) -> non_neg_integer().
 connection_count(PidOrName, {Host, Port, Ssl}) ->
     Destination = {string:to_lower(Host), Port, Ssl},
     gen_server:call(PidOrName, {connection_count, Destination}).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName, Timeout) -> ok
-%%    PoolPidOrName = pid() | atom()
-%%    Timeout = integer()
 %% @doc Updates the timeout for persistent connections.
 %% This will only affect future sockets handed to the manager. The sockets
 %% already managed will keep their timers.
@@ -164,6 +146,7 @@ update_connection_timeout(PidOrName, Milliseconds) ->
     gen_server:cast(PidOrName, {update_timeout, Milliseconds}).
 
 %%------------------------------------------------------------------------------
+%% @private
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
@@ -171,7 +154,7 @@ close_socket(PidOrName, Socket) ->
     gen_server:cast(PidOrName, {remove_socket, Socket}).
 
 %%------------------------------------------------------------------------------
-%% @spec () -> {ok, pid()}
+%% @private
 %% @doc Starts and link to the gen server.
 %% This is normally called by a supervisor.
 %% @end
@@ -182,6 +165,7 @@ start_link() ->
 
 
 %%------------------------------------------------------------------------------
+%% @private
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
@@ -197,6 +181,7 @@ start_link(Options0) ->
     end.
 
 %%------------------------------------------------------------------------------
+%% @private
 %% @doc If call contains pool_ensure option, dynamically create the pool with
 %% configured parameters. Checks the pool for a socket connected to the
 %% destination and returns it if it exists, 'undefined' otherwise.
@@ -236,6 +221,11 @@ ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
             end
     end.
 
+%%------------------------------------------------------------------------------
+%% @private
+%% @doc Creates a new pool.
+%% @end
+%%------------------------------------------------------------------------------
 -spec new_pool(atom(), non_neg_integer(), poolsize()) ->
     {ok, pid()} | {error, term()}.
 new_pool(Pool, ConnTimeout, PoolSize) ->
@@ -256,6 +246,7 @@ new_pool(Pool, ConnTimeout, PoolSize) ->
     end.
 
 %%------------------------------------------------------------------------------
+%% @private
 %% @doc A client has finished one request and returns the socket to the pool,
 %% which can be new or not.
 %% @end

@@ -25,6 +25,7 @@
 %%% ----------------------------------------------------------------------------
 
 %%------------------------------------------------------------------------------
+%%% @private
 %%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @doc Top supervisor for the lhttpc application.
 %%% This is normally started by the application behaviour implemented in
@@ -42,8 +43,7 @@
 -export([init/1]).
 
 %%------------------------------------------------------------------------------
-%% @spec () -> {ok, pid()} | {error, Reason}
-%% Reason = atom()
+%% @private
 %% @doc Starts and links to the supervisor.
 %% This is normally called from an application behaviour or from another
 %% supervisor.

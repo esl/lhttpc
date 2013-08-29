@@ -48,6 +48,7 @@
 
 -include("lhttpc_types.hrl").
 -include("lhttpc.hrl").
+%% @headerfile "lhttpc.hrl"
 
 %%==============================================================================
 %% Exported functions
@@ -69,8 +70,6 @@ stop(_) ->
 
 
 %%------------------------------------------------------------------------------
-%% @spec () -> ok | {error, Reason}
-%%   Reason = term()
 %% @doc Start the application.
 %% This is a helper function that will call `application:start(lhttpc)' to
 %% allow the library to be started using the `-s' flag.
@@ -85,8 +84,6 @@ start() ->
     application:start(lhttpc).
 
 %%------------------------------------------------------------------------------
-%% @spec () -> ok | {error, Reason}
-%%   Reason = term()
 %% @doc Stops the application.
 %% This is a helper function that will call `application:stop(lhttpc)'.
 %%
@@ -98,11 +95,7 @@ stop() ->
     application:stop(lhttpc).
 
 %%------------------------------------------------------------------------------
-%% @spec (Name) -> {ok, Pid} | {error, Reason}
-%%   Name = atom()
-%%   Pid = pid()
-%%   Reason = term()
-%% @doc Add a new named httpc_manager pool to the supervisor tree
+%% @doc Create a new named httpc_manager pool.
 %% @end
 %%------------------------------------------------------------------------------
 -spec add_pool(atom()) -> {ok, pid()} | {error, term()}.
@@ -112,7 +105,8 @@ add_pool(Name) when is_atom(Name) ->
     add_pool(Name, ConnTimeout, PoolSize).
 
 %%------------------------------------------------------------------------------
-%% @doc Add a new httpc_manager to the supervisor tree
+%% @doc Create a new named httpc_manager pool with the specified connection
+%% timeout.
 %% @end
 %%------------------------------------------------------------------------------
 -spec add_pool(atom(), non_neg_integer()) -> {ok, pid()} | {error, term()}.
@@ -121,7 +115,8 @@ add_pool(Name, ConnTimeout) when is_atom(Name), is_integer(ConnTimeout), ConnTim
     add_pool(Name, ConnTimeout, PoolSize).
 
 %%------------------------------------------------------------------------------
-%% @doc Add a new httpc_manager to the supervisor tree
+%% @doc Create a new named httpc_manager pool with the specified connection
+%% timeout and size.
 %% @end
 %%------------------------------------------------------------------------------
 -spec add_pool(atom(), non_neg_integer(), poolsize()) -> {ok, pid()} | {error, term()}.
@@ -129,7 +124,7 @@ add_pool(Name, ConnTimeout, PoolSize) ->
     lhttpc_manager:new_pool(Name, ConnTimeout, PoolSize).
 
 %%------------------------------------------------------------------------------
-%% @doc Delete a pool
+%% @doc Delete an existing pool
 %% @end
 %%------------------------------------------------------------------------------
 -spec delete_pool(atom() | pid()) -> ok.
@@ -146,17 +141,61 @@ delete_pool(PoolName) when is_atom(PoolName) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @doc Starts a Client.
+%% @doc Starts a Client process and connects it to a Destination, which can be
+%% either an URL or a tuple
+%% `{Host, Port, Ssl}'
+%% If the pool is provided whithin the options, it uses the pool to get an
+%% existing connection or creates a new one managed by it.
+%% This is intended to be able to create a client process that will generate many
+%% requests to a given destination, keeping the process alive, using
+%% {@link request_client/5}, {@link request_client/5} or {@link request_client/7}.
+%%
+%% The only relevant options to be included here (other options will be ignored) are:
+%%
+%% `{connect_timeout, Milliseconds}' specifies how many milliseconds the
+%% client can spend trying to establish a connection to the server. This
+%% doesn't affect the overall request timeout. However, if it's longer than
+%% the overall timeout it will be ignored. Also note that the TCP layer my
+%% choose to give up earlier than the connect timeout, in which case the
+%% client will also give up. The default value is infinity, which means that
+%% it will either give up when the TCP stack gives up, or when the overall
+%% request timeout is reached.
+%%
+%% `{connect_options, Options}' specifies options to pass to the socket at
+%% connect time. This makes it possible to specify both SSL options and
+%% regular socket options, such as which IP/Port to connect from etc.
+%% Some options must not be included here, namely the mode, `binary'
+%% or `list', `{active, boolean()}', `{active, once}' or `{packet, Packet}'.
+%% These options would confuse the client if they are included.
+%% Please note that these options will only have an effect on *new*
+%% connections, and it isn't possible for different requests
+%% to the same host uses different options unless the connection is closed
+%% between the requests. Using HTTP/1.0 or including the "Connection: close"
+%% header would make the client close the connection after the first
+%% response is received.
+%%
+%% `{use_cookies, UseCookies}' If set to true, the client will automatically
+%% handle the cookies for the user. Considering that the Cookies get stored
+%% in the client process state, the usage of this option only has effect when
+%% using the request_client() functions, NOT when using standalone requests,
+%% since in such case a new process is spawned each time.
+%%
+%% `{pool_options, PoolOptions}' This are the configuration options regarding the
+%% pool of connections usage. If the `pool_ensure' option is true, the pool with
+%% the given name in the `pool_name' option will be created and then used if it
+%% does not exist.
+%% The `pool_connection_timeout' specifies the time that the pool keeps a
+%% connection open before it gets closed, `pool_max_size' specifies the number of
+%% connections the pool can handle.
 %% @end
 %%------------------------------------------------------------------------------
-%-spec connect( ,options()) -> {ok,Pid} | ignore | {error,Error}.
-% WHICH TIMEOUT TO USE?
+-spec connect_client(destination(), options()) -> {ok, pid()} | ignore | {error, term()}.
 connect_client(Destination, Options) ->
-    %Gs_Options = ??
     lhttpc_client:start({Destination, Options}, []).
 
 %%------------------------------------------------------------------------------
-%% @doc Stops a Client.
+%% @doc Stops a Client process and closes the connection (if no pool is used) or
+%% it returns the connection to the pool (if pool is used).
 %% @end
 %%------------------------------------------------------------------------------
 -spec disconnect_client(pid()) -> ok.
@@ -167,7 +206,8 @@ disconnect_client(Client) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Makes a request using a client already connected.
-%% It can receive either a URL or a path
+%% It can receive either a URL or a path.
+%% Would be the same as calling {@link request_client/6} with an empty body.
 %% @end
 %%------------------------------------------------------------------------------
 -spec request_client(pid(), string(), method(), headers(), pos_timeout()) -> result().
@@ -176,7 +216,8 @@ request_client(Client, PathOrUrl, Method, Hdrs, Timeout) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Makes a request using a client already connected.
-%% It can receive either a URL or a path. It allows to add the body.
+%% It can receive either a URL or a path.
+%% %% Would be the same as calling {@link request_client/7} with no options.
 %% @end
 %%------------------------------------------------------------------------------
 -spec request_client(pid(), string(), method(), headers(), iodata(), pos_timeout()) -> result().
@@ -186,7 +227,66 @@ request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout) ->
 %%------------------------------------------------------------------------------
 %% @doc Makes a request using a client already connected.
 %% It can receive either a URL or a path. It allows to add the body and specify
-%% options, which are the same than for request (without client) functions.
+%% options. The only relevant options here are:
+%%
+%% `{send_retry, N}' specifies how many times the client should retry
+%% sending a request if the connection is closed after the data has been
+%% sent. The default value is `1'. If `{partial_upload, WindowSize}'
+%% (see below) is specified, the client cannot retry after the first part
+%% of the body has been sent since it doesn't keep the whole entitity body
+%% in memory.
+%%
+%% `{partial_upload, WindowSize}' means that the request entity body will be
+%% supplied in parts to the client by the calling process. The `WindowSize'
+%% specifies how many parts can be sent to the process controlling the socket
+%% before waiting for an acknowledgement. This is to create a kind of
+%% internal flow control if the network is slow and the client process is
+%% blocked by the TCP stack. Flow control is disabled if `WindowSize' is
+%% `infinity'. If `WindowSize' is an integer, it must be >= 0. If partial
+%% upload is specified and no `Content-Length' is specified in `Hdrs' the
+%% client will use chunked transfer encoding to send the entity body.
+%% If a content length is specified, this must be the total size of the entity
+%% body.
+%% The call to {@link request/6} will return `{ok, UploadState}'. The
+%% `UploadState' is supposed to be used as the first argument to the {@link
+%% send_body_part/2} or {@link send_body_part/3} functions to send body parts.
+%% Partial upload is intended to avoid keeping large request bodies in
+%% memory but can also be used when the complete size of the body isn't known
+%% when the request is started.
+%%
+%% `{partial_download, PartialDownloadOptions}' means that the response body
+%% will be supplied in parts by the client to the calling process. The partial
+%% download option `{window_size, WindowSize}' specifies how many part will be
+%% sent to the calling process before waiting for an acknowledgement. This is
+%% to create a kind of internal flow control if the calling process is slow to
+%% process the body part and the network and server are considerably faster.
+%% Flow control is disabled if `WindowSize' is `infinity'. If `WindowSize'
+%% is an integer it must be >=0. The partial download option `{part_size,
+%% PartSize}' specifies the size the body parts should come in. Note however
+%% that if the body size is not determinable (e.g entity body is termintated
+%% by closing the socket) it will be delivered in pieces as it is read from
+%% the wire. There is no caching of the body parts until the amount reaches
+%% body size. If the body size is bounded (e.g `Content-Length' specified or
+%% `Transfer-Encoding: chunked' specified) it will be delivered in `PartSize'
+%% pieces. Note however that the last piece might be smaller than `PartSize'.
+%% Size bounded entity bodies are handled the same way as unbounded ones if
+%% `PartSize' is `infinity'. If `PartSize' is integer it must be >= 0.
+%% If `{partial_download, PartialDownloadOptions}' is specified the
+%% `ResponseBody' will be a `pid()' unless the response has no body
+%% (for example in case of `HEAD' requests). In that case it will be be
+%% `undefined'. The functions {@link get_body_part/1} and
+%% {@link get_body_part/2} can be used to read body parts in the calling
+%% process.
+%%
+%% `{proxy, ProxyUrl}' if this option is specified, a proxy server is used as
+%% an intermediary for all communication with the destination server. The link
+%% to the proxy server is established with the HTTP CONNECT method (RFC2817).
+%% Example value: {proxy, "http://john:doe@myproxy.com:3128"}
+%%
+%% `{proxy_ssl_options, SslOptions}' this is a list of SSL options to use for
+%% the SSL session created after the proxy connection is established. For a
+%% list of all available options, please check OTP's ssl module manpage.
+%%
 %% @end
 %%------------------------------------------------------------------------------
 -spec request_client(pid(), string(), method(), headers(), iodata(),
@@ -202,19 +302,6 @@ request_client(Client, PathOrUrl, Method, Hdrs, Body, Timeout, Options) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @spec (URL, Method, Hdrs, Timeout) -> Result
-%%   URL = string()
-%%   Method = string() | atom()
-%%   Hdrs = [{Header, Value}]
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
-%%   Timeout = integer() | infinity
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
-%%            | {error, Reason}
-%%   StatusCode = integer()
-%%   ReasonPhrase = string()
-%%   ResponseBody = binary()
-%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request without a body.
 %% Would be the same as calling {@link request/5} with an empty body,
 %% `request(URL, Method, Hdrs, [], Timeout)' or
@@ -227,20 +314,6 @@ request(URL, Method, Hdrs, Timeout) ->
     request(URL, Method, Hdrs, [], Timeout, []).
 
 %%------------------------------------------------------------------------------
-%% @spec (URL, Method, Hdrs, RequestBody, Timeout) -> Result
-%%   URL = string()
-%%   Method = string() | atom()
-%%   Hdrs = [{Header, Value}]
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
-%%   RequestBody = iodata()
-%%   Timeout = integer() | infinity
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
-%%            | {error, Reason}
-%%   StatusCode = integer()
-%%   ReasonPhrase = string()
-%%   ResponseBody = binary()
-%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling {@link request/6} with no options,
 %% `request(URL, Method, Hdrs, Body, Timeout, [])'.
@@ -252,39 +325,6 @@ request(URL, Method, Hdrs, Body, Timeout) ->
     request(URL, Method, Hdrs, Body, Timeout, []).
 
 %%------------------------------------------------------------------------------
-%% @spec (URL, Method, Hdrs, RequestBody, Timeout, Options) -> Result
-%%   URL = string()
-%%   Method = string() | atom()
-%%   Hdrs = [{Header, Value}]
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
-%%   RequestBody = iodata()
-%%   Timeout = integer() | infinity
-%%   Options = [Option]
-%%   Option = {connect_timeout, Milliseconds | infinity} |
-%%            {connect_options, [ConnectOptions]} |
-%%            {send_retry, integer()} |
-%%            {partial_upload, WindowSize} |
-%%            {partial_download, PartialDownloadOptions} |
-%%            {proxy, ProxyUrl} |
-%%            {proxy_ssl_options, SslOptions} |
-%%            {pool, LhttcPool}
-%%   Milliseconds = integer()
-%%   ConnectOptions = term()
-%%   WindowSize = integer() | infinity
-%%   PartialDownloadOptions = [PartialDownloadOption]
-%%   PartialDowloadOption = {window_size, WindowSize} |
-%%                          {part_size, PartSize}
-%%   ProxyUrl = string()
-%%   SslOptions = [any()]
-%%   LhttcPool = pid() | atom()
-%%   PartSize = integer() | infinity
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}} |
-%%            {ok, UploadState} | {error, Reason}
-%%   StatusCode = integer()
-%%   ReasonPhrase = string()
-%%   ResponseBody = binary() | pid() | undefined
-%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a request with a body.
 %% Would be the same as calling <pre>
 %% #lhttpc_url{host = Host, port = Port, path = Path, is_ssl = Ssl} = lhttpc_lib:parse_url(URL),
@@ -310,43 +350,9 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
     request(Host, Port, Ssl, Path, Method, Headers, Body, Timeout, Options).
 
 %%------------------------------------------------------------------------------
-%% @spec (Host, Port, Ssl, Path, Method, Hdrs, RequestBody, Timeout, Options) ->
-%%                                                                        Result
-%%   Host = string()
-%%   Port = integer()
-%%   Ssl = boolean()
-%%   Path = string()
-%%   Method = string() | atom()
-%%   Hdrs = [{Header, Value}]
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
-%%   RequestBody = iodata()
-%%   Timeout = integer() | infinity
-%%   Options = [Option]
-%%   Option = {connect_timeout, Milliseconds | infinity} |
-%%            {connect_options, [ConnectOptions]} |
-%%            {send_retry, integer()} |
-%%            {partial_upload, WindowSize} |
-%%            {partial_download, PartialDownloadOptions} |
-%%            {proxy, ProxyUrl} |
-%%            {proxy_ssl_options, SslOptions} |
-%%            {pool, LhttcPool}
-%%   Milliseconds = integer()
-%%   WindowSize = integer()
-%%   PartialDownloadOptions = [PartialDownloadOption]
-%%   PartialDowloadOption = {window_size, WindowSize} |
-%%                          {part_size, PartSize}
-%%   ProxyUrl = string()
-%%   SslOptions = [any()]
-%%   LhttcPool = pid() | atom()
-%%   PartSize = integer() | infinity
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
-%%          | {error, Reason}
-%%   StatusCode = integer()
-%%   ReasonPhrase = string()
-%%   ResponseBody = binary() | pid() | undefined
-%%   Reason = connection_closed | connect_timeout | timeout
-%% @doc Sends a request with a body.
+%% @doc Sends a request with a body. For this, a new client process is created,
+%% it creates a connection or takes it from a pool (depends of the options) and
+%% uses that client process to send the request. Then it stops the process.
 %%
 %% Instead of building and parsing URLs the target server is specified with
 %% a host, port, weither SSL should be used or not and a path on the server.
@@ -446,6 +452,12 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% {@link get_body_part/2} can be used to read body parts in the calling
 %% process.
 %%
+%% `{use_cookies, UseCookies}' If set to true, the client will automatically
+%% handle the cookies for the user. Considering that the Cookies get stored
+%% in the client process state, the usage of this option only has effect when
+%% using the request_client() functions, NOT when using standalone requests,
+%% since in such case a new process is spawned each time.
+%%
 %% `{proxy, ProxyUrl}' if this option is specified, a proxy server is used as
 %% an intermediary for all communication with the destination server. The link
 %% to the proxy server is established with the HTTP CONNECT method (RFC2817).
@@ -454,9 +466,17 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %% `{proxy_ssl_options, SslOptions}' this is a list of SSL options to use for
 %% the SSL session created after the proxy connection is established. For a
 %% list of all available options, please check OTP's ssl module manpage.
+%%
+%% `{pool_options, PoolOptions}' This are the configuration options regarding the
+%% pool of connections usage. If the `pool_ensure' option is true, the pool with
+%% the given name in the `pool_name' option will be created and then used if it
+%% does not exist.
+%% The `pool_connection_timeout' specifies the time that the pool keeps a
+%% connection open before it gets closed, `pool_max_size' specifies the number of
+%% connections the pool can handle.
 %% @end
 %%------------------------------------------------------------------------------
--spec request(string(), port_num(), boolean(), string(), method(),
+-spec request(host(), port_num(), boolean(), string(), method(),
               headers(), iodata(), pos_timeout(), options()) -> result().
 request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     verify_options(Options),
@@ -478,11 +498,6 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
     end.
 
 %%------------------------------------------------------------------------------
-%% @spec (UploadState :: UploadState, BodyPart :: BodyPart) -> Result
-%%   BodyPart = iodata() | binary()
-%%   Timeout = integer() | infinity
-%%   Result = {error, Reason} | UploadState
-%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a body part to an ongoing request when
 %% `{partial_upload, WindowSize}' is used. The default timeout, `infinity'
 %% will be used. Notice that if `WindowSize' is infinity, this call will never
@@ -496,11 +511,6 @@ send_body_part({Pid, Window}, IoList) ->
     send_body_part({Pid, Window}, IoList, infinity).
 
 %%------------------------------------------------------------------------------
-%% @spec (UploadState :: UploadState, BodyPart :: BodyPart, Timeout) -> Result
-%%   BodyPart = iodata() | binary()
-%%   Timeout = integer() | infinity
-%%   Result = {error, Reason} | UploadState
-%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends a body part to an ongoing request when
 %% `{partial_upload, WindowSize}' is used.
 %% `Timeout' is the timeout for the request in milliseconds.
@@ -523,12 +533,6 @@ send_body_part(Client, BodyPart, Timeout)  ->
     lhttpc_client:send_body_part(Client, BodyPart, Timeout).
 
 %%------------------------------------------------------------------------------
-%% @spec (UploadState :: UploadState, Trailers) -> Result
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
-%%            | {error, Reason}
-%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends trailers to an ongoing request when `{partial_upload,
 %% WindowSize}' is used and no `Content-Length' was specified. The default
 %% timout `infinity' will be used. Plase note that after this the request is
@@ -542,14 +546,6 @@ send_trailers(Client, Trailers) ->
     lhttpc_client:send_trailers(Client, Trailers, infinity).
 
 %%------------------------------------------------------------------------------
-%% @spec (UploadState :: UploadState, Trailers, Timeout) -> Result
-%%   Trailers = [{Header, Value}]
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
-%%   Timeout = integer() | infinity
-%%   Result = {ok, {{StatusCode, ReasonPhrase}, Hdrs, ResponseBody}}
-%%            | {error, Reason}
-%%   Reason = connection_closed | connect_timeout | timeout
 %% @doc Sends trailers to an ongoing request when
 %% `{partial_upload, WindowSize}' is used and no `Content-Length' was
 %% specified.
@@ -569,12 +565,6 @@ send_trailers({Pid, _Window}, Trailers, Timeout) when is_list(Trailers), is_pid(
     read_response(Pid, Timeout).
 
 %%------------------------------------------------------------------------------
-%% @spec (HTTPClient :: pid()) -> Result
-%%   Result = {ok, BodyPart} | {ok, {http_eob, Trailers}}
-%%   BodyPart = binary()
-%%   Trailers = [{Header, Value}]
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
 %% @doc Reads a body part from an ongoing response when
 %% `{partial_download, PartialDownloadOptions}' is used. The default timeout,
 %% `infinity' will be used.
@@ -587,13 +577,6 @@ get_body_part(Pid) ->
     get_body_part(Pid, infinity).
 
 %%------------------------------------------------------------------------------
-%% @spec (HTTPClient :: pid(), Timeout:: Timeout) -> Result
-%%   Timeout = integer() | infinity
-%%   Result = {ok, BodyPart} | {ok, {http_eob, Trailers}}
-%%   BodyPart = binary()
-%%   Trailers = [{Header, Value}]
-%%   Header = string() | binary() | atom()
-%%   Value = string() | binary()
 %% @doc Reads a body part from an ongoing response when
 %% `{partial_download, PartialDownloadOptions}' is used.
 %% `Timeout' is the timeout for reading the next body part in milliseconds.

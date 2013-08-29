@@ -25,6 +25,8 @@
 %%% ----------------------------------------------------------------------------
 
 %%% @author Oscar Hellström <oscar@hellstrom.st>
+%%% @author Diana Parra Corbacho <diana.corbacho@erlang-solutions.com>
+%%% @author Ramon Lastres Guerrero <ramon.lastres@erlang-solutions.com>
 %%% @doc This is the specification for the lhttpc application.
 %%% @end
 {application, lhttpc,
