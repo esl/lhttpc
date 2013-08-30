@@ -182,7 +182,7 @@ delete_pool(PoolName) when is_atom(PoolName) ->
 %%
 %% `{pool_options, PoolOptions}' This are the configuration options regarding the
 %% pool of connections usage. If the `pool_ensure' option is true, the pool with
-%% the given name in the `pool_name' option will be created and then used if it
+%% the given name in the `pool' option will be created and then used if it
 %% does not exist.
 %% The `pool_connection_timeout' specifies the time that the pool keeps a
 %% connection open before it gets closed, `pool_max_size' specifies the number of
@@ -469,7 +469,7 @@ request(URL, Method, Hdrs, Body, Timeout, Options) ->
 %%
 %% `{pool_options, PoolOptions}' This are the configuration options regarding the
 %% pool of connections usage. If the `pool_ensure' option is true, the pool with
-%% the given name in the `pool_name' option will be created and then used if it
+%% the given name in the `pool' option will be created and then used if it
 %% does not exist.
 %% The `pool_connection_timeout' specifies the time that the pool keeps a
 %% connection open before it gets closed, `pool_max_size' specifies the number of
@@ -499,28 +499,19 @@ request(Host, Port, Ssl, Path, Method, Hdrs, Body, Timeout, Options) ->
 
 %%------------------------------------------------------------------------------
 %% @doc Sends a body part to an ongoing request when
-%% `{partial_upload, WindowSize}' is used. The default timeout, `infinity'
-%% will be used. Notice that if `WindowSize' is infinity, this call will never
-%% block.
-%% Would be the same as calling
-%% `send_body_part(UploadState, BodyPart, infinity)'.
+%% `{partial_upload, true}' is used. The default timeout, `infinity'
+%% will be used. Would be the same as calling
+%% `send_body_part(Client, BodyPart, infinity)'.
 %% @end
 %%------------------------------------------------------------------------------
--spec send_body_part(upload_state(), bodypart()) -> result().
-send_body_part({Pid, Window}, IoList) ->
-    send_body_part({Pid, Window}, IoList, infinity).
+-spec send_body_part(pid(), bodypart()) -> result().
+send_body_part(Client, BodyPart) ->
+    send_body_part(Client, BodyPart, infinity).
 
 %%------------------------------------------------------------------------------
 %% @doc Sends a body part to an ongoing request when
-%% `{partial_upload, WindowSize}' is used.
+%% `{partial_upload, true}' is used.
 %% `Timeout' is the timeout for the request in milliseconds.
-%%
-%% If the window size reaches 0 the call will block for at maximum Timeout
-%% milliseconds. If there is no acknowledgement received during that time the
-%% the request is cancelled and `{error, timeout}' is returned.
-%%
-%% As long as the window size is larger than 0 the function will return
-%% immediately after sending the body part to the request handling process.
 %%
 %% The `BodyPart' `http_eob' signals an end of the entity body, the request
 %% is considered sent and the response will be read from the socket. If
@@ -528,26 +519,26 @@ send_body_part({Pid, Window}, IoList) ->
 %% canceled and `{error, timeout}' is returned.
 %% @end
 %%------------------------------------------------------------------------------
--spec send_body_part(upload_state(), bodypart(), timeout()) -> result().
+-spec send_body_part(pid(), bodypart(), timeout()) -> result().
 send_body_part(Client, BodyPart, Timeout)  ->
     lhttpc_client:send_body_part(Client, BodyPart, Timeout).
 
 %%------------------------------------------------------------------------------
 %% @doc Sends trailers to an ongoing request when `{partial_upload,
-%% WindowSize}' is used and no `Content-Length' was specified. The default
+%% true}' is used and no `Content-Length' was specified. The default
 %% timout `infinity' will be used. Plase note that after this the request is
 %% considered complete and the response will be read from the socket.
 %% Would be the same as calling
-%% `send_trailers(UploadState, BodyPart, infinity)'.
+%% `send_trailers(Client, BodyPart, infinity)'.
 %% @end
 %%------------------------------------------------------------------------------
--spec send_trailers({pid(), window_size()}, headers()) -> result().
+-spec send_trailers(pid(), headers()) -> result().
 send_trailers(Client, Trailers) ->
     lhttpc_client:send_trailers(Client, Trailers, infinity).
 
 %%------------------------------------------------------------------------------
 %% @doc Sends trailers to an ongoing request when
-%% `{partial_upload, WindowSize}' is used and no `Content-Length' was
+%% `{partial_upload, true}' is used and no `Content-Length' was
 %% specified.
 %% `Timeout' is the timeout for sending the trailers and reading the
 %% response in milliseconds.
@@ -559,10 +550,9 @@ send_trailers(Client, Trailers) ->
 %% returned.
 %% @end
 %%------------------------------------------------------------------------------
--spec send_trailers({pid(), window_size()}, headers(), timeout()) -> result().
-send_trailers({Pid, _Window}, Trailers, Timeout) when is_list(Trailers), is_pid(Pid) ->
-    Pid ! {trailers, self(), Trailers},
-    read_response(Pid, Timeout).
+-spec send_trailers(pid(), headers(), timeout()) -> result().
+send_trailers(Client, Trailers, Timeout) when is_list(Trailers), is_pid(Client) ->
+    lhttpc_client:send_trailers(Client, Trailers, Timeout).
 
 %%------------------------------------------------------------------------------
 %% @doc Reads a body part from an ongoing response when
@@ -594,38 +584,6 @@ get_body_part(Client, Timeout) ->
 %%==============================================================================
 %% Internal functions
 %%==============================================================================
-
-%%------------------------------------------------------------------------------
-%% @private
-%%------------------------------------------------------------------------------
--spec read_response(pid(), timeout()) -> result().
-read_response(Pid, Timeout) ->
-    receive
-        {ack, Pid} ->
-            read_response(Pid, Timeout);
-        {response, Pid, R} ->
-            R;
-        {'EXIT', Pid, Reason} ->
-            {error, Reason}
-    after Timeout ->
-            kill_client(Pid)
-    end.
-
-%%------------------------------------------------------------------------------
-%% @private
-%%------------------------------------------------------------------------------
--spec kill_client(pid()) -> any() | {error, any()}.
-kill_client(Pid) ->
-    Monitor = erlang:monitor(process, Pid),
-    unlink(Pid), % or we'll kill ourself :O
-    exit(Pid, timeout),
-    receive
-        {response, Pid, R} ->
-            erlang:demonitor(Monitor, [flush]),
-            R;
-        {'DOWN', _, process, Pid, Reason}  ->
-            {error, Reason}
-    end.
 
 %%------------------------------------------------------------------------------
 %% @private

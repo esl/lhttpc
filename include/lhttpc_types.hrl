@@ -65,7 +65,7 @@
 -type option() ::
         {'connect_timeout', timeout()} |
         {'send_retry', non_neg_integer()} |
-        {'partial_upload', non_neg_integer() | 'infinity'} |
+        {'partial_upload', boolean()} |
         {'partial_download', [partial_download_option()]} |
         {'connect_options', socket_options()} |
 	{'use_cookies', boolean()} |
@@ -77,7 +77,7 @@
 	{'pool_ensure', boolean()} |
 	{'pool_connection_timeout', pos_timeout()} |
 	{'pool_max_size' | integer()} |
-	{'pool_name', pool_id()}.
+	{'pool', pool_id()}.
 
 -type pool_options() :: [pool_option()].
 
@@ -91,8 +91,6 @@
 
 -type window_size() :: non_neg_integer() | 'infinity'.
 
--type upload_state() :: {partial_upload, pid()}.
-
 -type response() ::  {{pos_integer(), string()}, headers(), body()}.
 
 -type body() :: binary()    |
@@ -101,5 +99,5 @@
 
 -type result() ::
         {ok, response()} |
-        {ok, upload_state()} |
+        {ok, partial_upload} |
         {error, atom()}.
