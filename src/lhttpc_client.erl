@@ -537,17 +537,18 @@ has_body(_, _, _) ->
 %%------------------------------------------------------------------------------
 -spec body_type(headers()) -> 'chunked' | 'infinite' | {fixed_length, integer()}.
 body_type(Hdrs) ->
-    case lhttpc_lib:header_value("content-length", Hdrs) of
-        undefined ->
-            TransferEncoding = string:to_lower(
-                lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined")
-            ),
-            case TransferEncoding of
-                "chunked" -> chunked;
-                _         -> infinite
-            end;
-        ContentLength ->
-            {fixed_length, list_to_integer(ContentLength)}
+    TransferEncoding = string:to_lower(
+        lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined")
+    ),
+    case TransferEncoding of
+        "chunked" -> chunked;
+        _ ->
+            case lhttpc_lib:header_value("content-length", Hdrs) of
+                undefined -> 
+                    infinite;
+                ContentLength ->
+                    {fixed_length, list_to_integer(ContentLength)}
+            end
     end.
 
 %%------------------------------------------------------------------------------

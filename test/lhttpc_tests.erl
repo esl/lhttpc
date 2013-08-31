@@ -99,6 +99,7 @@ test_no(N, Tests) ->
 %%% Eunit setup stuff
 
 start_app() ->
+    application:start(asn1),
     application:start(crypto),
     application:start(public_key),
     ok = application:start(ssl),
@@ -482,7 +483,7 @@ suspended_manager() ->
     ?assertEqual(<<?DEFAULT_STRING>>, body(SecondResponse)).
 
 chunked_encoding() ->
-    Port = start(gen_tcp, [fun chunked_response/5, fun chunked_response_t/5]),
+    Port = start(gen_tcp, [fun chunked_response/5, fun chunked_response_t/5, fun chunked_response_with_length/5]),
     URL = url(Port, "/chunked"),
     {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
@@ -497,7 +498,13 @@ chunked_encoding() ->
     ?assertEqual("1", lhttpc_lib:header_value("trailer-1",
             headers(SecondResponse))),
     ?assertEqual("2", lhttpc_lib:header_value("trailer-2",
-            headers(SecondResponse))).
+            headers(SecondResponse))),
+    {ok, ThirdResponse} = lhttpc:request(URL, get, [], 50),
+    ?assertEqual({200, "OK"}, status(ThirdResponse)),
+    ?assertEqual(<<"Again, great success!">>, body(ThirdResponse)),
+    ?assertEqual("chunked", lhttpc_lib:header_value("transfer-encoding",
+            headers(ThirdResponse))),
+    ok.
 
 partial_upload_identity() ->
     Port = start(gen_tcp, [fun simple_response/5, fun simple_response/5]),
@@ -1075,6 +1082,21 @@ chunked_response_t(Module, Socket, _, _, _) ->
         "0\r\n"
         "Trailer-1: 1\r\n"
         "Trailer-2: 2\r\n"
+        "\r\n"
+    ).
+
+chunked_response_with_length(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\nTransfer-Encoding: chunked\r\n"
+        "Content-Length: 21\r\n"
+        "\r\n"
+        "7\r\n"
+        "Again, \r\n"
+        "E\r\n"
+        "great success!\r\n"
+        "0\r\n"
         "\r\n"
     ).
 
