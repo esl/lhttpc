@@ -2,6 +2,18 @@
 
 Copyright (c) 2009-2013 Erlang Solutions Ltd.
 
+## Features
+
+Some of the basic features provided by Lhttpc:
+
+- HTTP basic auth
+- SSL support
+- Keepalive connections
+- Pools for managing connections
+- Support for IPv6
+- Optional automatic cookie handling
+- Chunked encoding
+
 ## Starting
 
 Download the sources or clone the git repository. Then you can build with:
@@ -78,4 +90,12 @@ Lhttpc supports basic cookie handling. If you want the client process to automat
 
 ### Transfering the body by chunks
 
-If you want to send the body of the request by chunks, you can specify the `{partial_upload, true}` option. Then use the `send_body_part/2` and `send_body_part/3` functions to send the body parts.
+If you want to send the body of the request by chunks, you can specify the `{partial_upload, true}` option. Then use the `send_body_part/2` and `send_body_part/3` functions to send the body parts. `http_eob` signals the end of the body. As an example:
+
+```erlang
+{ok, Client} = lhttpc:connect_client("http://erlang-solutions.com", []),
+lhttpc:request_client(Client, "/", get, [], [], 100, [{partial_upload, true}]),
+lhttpc:send_body_part(Client, <<"some part of the body">>),
+lhttpc:send_body_part(Client, <<"more body">>),
+lhttpc:send_body_part(Client, http_eob).
+```
