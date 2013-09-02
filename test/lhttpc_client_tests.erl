@@ -1,5 +1,5 @@
 %%%=============================================================================
-%%% @copyright (C) 1999-2012, Erlang Solutions Ltd
+%%% @copyright (C) 1999-2013, Erlang Solutions Ltd
 %%% @author Diana Corbacho <diana.corbacho@erlang-solutions.com>
 %%% @doc Unit tests for lhttpc_client
 %%% @end
