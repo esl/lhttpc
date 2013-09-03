@@ -1,5 +1,5 @@
 %%% ----------------------------------------------------------------------------
-%%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
+%%% Copyright (c) 2009-2013, Erlang Solutions Ltd.
 %%% All rights reserved.
 %%%
 %%% Redistribution and use in source and binary forms, with or without
@@ -9,14 +9,14 @@
 %%%    * Redistributions in binary form must reproduce the above copyright
 %%%      notice, this list of conditions and the following disclaimer in the
 %%%      documentation and/or other materials provided with the distribution.
-%%%    * Neither the name of Erlang Training and Consulting Ltd. nor the
+%%%    * Neither the name of Erlang Solutions Ltd. nor the
 %%%      names of its contributors may be used to endorse or promote products
 %%%      derived from this software without specific prior written permission.
 %%%
-%%% THIS SOFTWARE IS PROVIDED BY Erlang Training and Consulting Ltd. ''AS IS''
+%%% THIS SOFTWARE IS PROVIDED BY Erlang Solutions Ltd. ''AS IS''
 %%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 %%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-%%% ARE DISCLAIMED. IN NO EVENT SHALL Erlang Training and Consulting Ltd. BE
+%%% ARE DISCLAIMED. IN NO EVENT SHALL Erlang Solutions Ltd. BE
 %%% LIABLE SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
 %%% BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 %%% WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
@@ -52,29 +52,34 @@
 
 -type poolsize() :: non_neg_integer() | atom().
 
--type invalid_option() :: any().
-
 -type pool_id() ::  pid() | atom().
 
--type destination() :: {string(), pos_integer(), boolean()}.
+-type destination() :: {host(), pos_integer(), boolean()} | string().
 
 -type raw_headers() :: [{atom() | binary() | string(), binary() | string()}].
 
 -type partial_download_option() ::
         {'window_size', window_size()} |
-        {'part_size', non_neg_integer() | 'infinity'} |
-        invalid_option().
+        {'part_size', non_neg_integer() | 'infinity'}.
 
 -type option() ::
         {'connect_timeout', timeout()} |
         {'send_retry', non_neg_integer()} |
-        {'partial_upload', non_neg_integer() | 'infinity'} |
+        {'partial_upload', boolean()} |
         {'partial_download', [partial_download_option()]} |
         {'connect_options', socket_options()} |
+	{'use_cookies', boolean()} |
         {'proxy', string()} |
         {'proxy_ssl_options', socket_options()} |
-        {'pool', pid() | atom()} |
-        invalid_option().
+	{'pool_options', pool_options()}.
+
+-type pool_option() ::
+	{'pool_ensure', boolean()} |
+	{'pool_connection_timeout', pos_timeout()} |
+	{'pool_max_size' | integer()} |
+	{'pool', pool_id()}.
+
+-type pool_options() :: [pool_option()].
 
 -type options() :: [option()].
 
@@ -86,13 +91,13 @@
 
 -type window_size() :: non_neg_integer() | 'infinity'.
 
--type upload_state() :: {pid(), window_size()}.
+-type response() ::  {{pos_integer(), string()}, headers(), body()}.
 
--type body()         :: binary()    |
-                        'undefined' | % HEAD request.
-                        pid().        % When partial_download option is used.
+-type body() :: binary()    |
+               'undefined' | % HEAD request.
+               pid().        % When partial_download option is used.
 
 -type result() ::
-        {ok, {{pos_integer(), string()}, headers(), body()}} |
-        {ok, upload_state()} |
+        {ok, response()} |
+        {ok, partial_upload} |
         {error, atom()}.

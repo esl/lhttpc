@@ -1,7 +1,7 @@
 %%% ----------------------------------------------------------------------------
-%%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
+%%% Copyright (c) 2009-2013, Erlang Solutions Ltd.
 %%% All rights reserved.
-%%% 
+%%%
 %%% Redistribution and use in source and binary forms, with or without
 %%% modification, are permitted provided that the following conditions are met:
 %%%    * Redistributions of source code must retain the above copyright
@@ -9,14 +9,14 @@
 %%%    * Redistributions in binary form must reproduce the above copyright
 %%%      notice, this list of conditions and the following disclaimer in the
 %%%      documentation and/or other materials provided with the distribution.
-%%%    * Neither the name of Erlang Training and Consulting Ltd. nor the
+%%%    * Neither the name of Erlang Solutions Ltd. nor the
 %%%      names of its contributors may be used to endorse or promote products
 %%%      derived from this software without specific prior written permission.
-%%% 
-%%% THIS SOFTWARE IS PROVIDED BY Erlang Training and Consulting Ltd. ''AS IS''
+%%%
+%%% THIS SOFTWARE IS PROVIDED BY Erlang Solutions Ltd. ''AS IS''
 %%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 %%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-%%% ARE DISCLAIMED. IN NO EVENT SHALL Erlang Training and Consulting Ltd. BE
+%%% ARE DISCLAIMED. IN NO EVENT SHALL Solutions Ltd. BE
 %%% LIABLE SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
 %%% BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 %%% WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
@@ -61,13 +61,14 @@ manager_test_() ->
 
 empty_manager() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     Client = spawn_client(),
     ?assertEqual(ok, ping_client(Client)),
 
-    ?assertEqual(no_socket, client_peek_socket(Client)),
+    ?assertEqual({ok, no_socket}, client_peek_socket(Client)),
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client)),
@@ -79,6 +80,7 @@ empty_manager() ->
 
 one_socket() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
@@ -111,6 +113,7 @@ one_socket() ->
 
 connection_timeout() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ok = lhttpc_manager:update_connection_timeout(lhttpc_manager, 3000),
     erlang:yield(), % make sure lhttpc_manager processes the message
@@ -149,6 +152,7 @@ connection_timeout() ->
     ok.
 
 many_sockets() ->
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     LS = socket_server:listen(),
     Client1 = spawn_client(),
@@ -279,6 +283,7 @@ many_sockets() ->
 
 closed_race_cond() ->
     LS = socket_server:listen(),
+    lhttpc:add_pool(lhttpc_manager),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
@@ -312,7 +317,7 @@ closed_race_cond() ->
         after 5000 -> erlang:error("Timeout receiving result from child process")
     end,
 
-    ?assertMatch(no_socket, Result2),
+    ?assertMatch({ok, no_socket}, Result2),
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client)),
@@ -345,7 +350,7 @@ client_loop(Parent, Socket) ->
         {connect, Ref} ->
             Args = {socket, self(), ?HOST, get_port(), ?SSL},
             NewSocket = case gen_server:call(lhttpc_manager, Args, infinity) of
-                no_socket ->
+                {ok, no_socket}->
                     socket_server:connect(get_port());
                 {ok, S} ->
                     S

@@ -1,5 +1,5 @@
 %%% ----------------------------------------------------------------------------
-%%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
+%%% Copyright (c) 2009-2013, Erlang Solutions Ltd.
 %%% All rights reserved.
 %%%
 %%% Redistribution and use in source and binary forms, with or without
@@ -9,14 +9,14 @@
 %%%    * Redistributions in binary form must reproduce the above copyright
 %%%      notice, this list of conditions and the following disclaimer in the
 %%%      documentation and/or other materials provided with the distribution.
-%%%    * Neither the name of Erlang Training and Consulting Ltd. nor the
+%%%    * Neither the name of Erlang Solutions Ltd. nor the
 %%%      names of its contributors may be used to endorse or promote products
 %%%      derived from this software without specific prior written permission.
 %%%
-%%% THIS SOFTWARE IS PROVIDED BY Erlang Training and Consulting Ltd. ''AS IS''
+%%% THIS SOFTWARE IS PROVIDED BY Erlang Solutions Ltd. ''AS IS''
 %%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 %%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-%%% ARE DISCLAIMED. IN NO EVENT SHALL Erlang Training and Consulting Ltd. BE
+%%% ARE DISCLAIMED. IN NO EVENT SHALL Erlang Solutions Ltd. BE
 %%% LIABLE SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
 %%% BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 %%% WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
@@ -27,18 +27,18 @@
 %%------------------------------------------------------------------------------
 %%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @author Filipe David Manana <fdmanana@apache.org>
+%%% @author Diana Parra Corbacho <diana.corbacho@erlang-solutions.com>
+%%% @author Ramon Lastres Guerrero <ramon.lastres@erlang-solutions.com>
 %%% @doc Connection manager for the HTTP client.
-%%% This gen_server is responsible for keeping track of persistent
-%%% connections to HTTP servers. The only interesting API is
-%%% `connection_count/0' and `connection_count/1'.
-%%% The gen_server is supposed to be started by a supervisor, which is
-%%% normally {@link lhttpc_sup}.
+%%% This module provides the pool of connections functionality. It exports funcions
+%%% intended to provide information and manage the existing pools.
 %%% @end
 %%------------------------------------------------------------------------------
 -module(lhttpc_manager).
 
 %% Exported functions
 -export([start_link/0, start_link/1,
+         new_pool/3,
          client_count/1,
          connection_count/1, connection_count/2,
          update_connection_timeout/2,
@@ -46,8 +46,8 @@
          list_pools/0,
          set_max_pool_size/2,
          ensure_call/6,
-         client_done/5
-        ]).
+         client_done/5,
+         close_socket/2]).
 
 %% Callbacks
 -export([init/1,
@@ -55,8 +55,7 @@
          handle_cast/2,
          handle_info/2,
          code_change/3,
-         terminate/2
-        ]).
+         terminate/2]).
 
 -behaviour(gen_server).
 
@@ -64,20 +63,18 @@
 -include("lhttpc.hrl").
 
 -record(httpc_man, {
-        destinations = dict:new(),
-        sockets = dict:new(),
-        clients = dict:new(), % Pid => {Dest, MonRef}
-        queues = dict:new(),  % Dest => queue of Froms
-        max_pool_size = 50 :: non_neg_integer(),
-        timeout = 300000 :: non_neg_integer()
-    }).
+            destinations = dict:new(),
+            sockets = dict:new(),
+            clients = dict:new(), % Pid => {Dest, MonRef}
+            queues = dict:new(),  % Dest => queue of Froms
+            max_pool_size = 50 :: non_neg_integer(),
+            timeout = 300000 :: non_neg_integer()}).
 
 %%==============================================================================
 %% Exported functions
 %%==============================================================================
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName) -> list()
 %% @doc Returns the current settings in state for the
 %% specified lhttpc pool (manager).
 %% @end
@@ -102,17 +99,15 @@ set_max_pool_size(PidOrName, Size) when is_integer(Size), Size > 0 ->
 list_pools() ->
     Children = supervisor:which_children(lhttpc_sup),
     lists:foldl(fun(In, Acc) ->
-                        case In of
-                            {N, P, _, [lhttpc_manager]} ->
-                                [{N, dump_settings(P)} | Acc];
-                            _ ->
-                                Acc
-                        end
-                end, [], Children).
+                case In of
+                    {N, P, _, [lhttpc_manager]} ->
+                        [{N, dump_settings(P)} | Acc];
+                    _ ->
+                        Acc
+                end
+        end, [], Children).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName) -> Count
-%%    Count = integer()
 %% @doc Returns the total number of active clients maintained by the
 %% specified lhttpc pool (manager).
 %% @end
@@ -122,8 +117,6 @@ client_count(PidOrName) ->
     gen_server:call(PidOrName, client_count).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName) -> Count
-%%    Count = integer()
 %% @doc Returns the total number of active connections maintained by the
 %% specified lhttpc pool (manager).
 %% @end
@@ -133,26 +126,16 @@ connection_count(PidOrName) ->
     gen_server:call(PidOrName, connection_count).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName, Destination) -> Count
-%%    PoolPidOrName = pid() | atom()
-%%    Destination = {Host, Port, Ssl}
-%%    Host = string()
-%%    Port = integer()
-%%    Ssl = boolean()
-%%    Count = integer()
 %% @doc Returns the number of active connections to the specific
 %% `Destination' maintained by the httpc manager.
 %% @end
 %%------------------------------------------------------------------------------
--spec connection_count(pool_id(), destination()) -> non_neg_integer().
+-spec connection_count(pool_id(), Destination :: destination()) -> non_neg_integer().
 connection_count(PidOrName, {Host, Port, Ssl}) ->
     Destination = {string:to_lower(Host), Port, Ssl},
     gen_server:call(PidOrName, {connection_count, Destination}).
 
 %%------------------------------------------------------------------------------
-%% @spec (PoolPidOrName, Timeout) -> ok
-%%    PoolPidOrName = pid() | atom()
-%%    Timeout = integer()
 %% @doc Updates the timeout for persistent connections.
 %% This will only affect future sockets handed to the manager. The sockets
 %% already managed will keep their timers.
@@ -163,7 +146,15 @@ update_connection_timeout(PidOrName, Milliseconds) ->
     gen_server:cast(PidOrName, {update_timeout, Milliseconds}).
 
 %%------------------------------------------------------------------------------
-%% @spec () -> {ok, pid()}
+%% @private
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+close_socket(PidOrName, Socket) ->
+    gen_server:cast(PidOrName, {remove_socket, Socket}).
+
+%%------------------------------------------------------------------------------
+%% @private
 %% @doc Starts and link to the gen server.
 %% This is normally called by a supervisor.
 %% @end
@@ -174,6 +165,7 @@ start_link() ->
 
 
 %%------------------------------------------------------------------------------
+%% @private
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
@@ -189,52 +181,72 @@ start_link(Options0) ->
     end.
 
 %%------------------------------------------------------------------------------
+%% @private
 %% @doc If call contains pool_ensure option, dynamically create the pool with
 %% configured parameters. Checks the pool for a socket connected to the
 %% destination and returns it if it exists, 'undefined' otherwise.
 %% @end
 %%------------------------------------------------------------------------------
--spec ensure_call(pool_id(), pid(), host(), port_num(), boolean(), options()) ->
-                        socket() | 'no_socket'.
+-spec ensure_call(pool_id(), pid(), host(), port_num(), boolean(), pool_options()) ->
+    {ok, socket()} | {ok, 'no_socket'} | {error, term()}.
 ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     SocketRequest = {socket, Pid, Host, Port, Ssl},
-    try gen_server:call(Pool, SocketRequest, infinity) of
-        {ok, S} ->
-            %% Re-using HTTP/1.1 connections
-            S;
-        no_socket ->
-            %% Opening a new HTTP/1.1 connection
-            undefined
+    try
+        gen_server:call(Pool, SocketRequest, 100)
     catch
-        exit:{noproc, Reason} ->
+        exit:{noproc, _Reason} ->
             case proplists:get_value(pool_ensure, Options, false) of
                 true ->
                     {ok, DefaultTimeout} = application:get_env(
-                                             lhttpc,
-                                             connection_timeout),
+                            lhttpc,
+                            connection_timeout),
                     ConnTimeout = proplists:get_value(pool_connection_timeout,
                                                       Options,
                                                       DefaultTimeout),
                     {ok, DefaultMaxPool} = application:get_env(
-                                             lhttpc,
-                                             pool_size),
+                            lhttpc,
+                            pool_size),
                     PoolMaxSize = proplists:get_value(pool_max_size,
                                                       Options,
                                                       DefaultMaxPool),
-                    case lhttpc:add_pool(Pool, ConnTimeout, PoolMaxSize) of
+                    case new_pool(Pool, ConnTimeout, PoolMaxSize) of
                         {ok, _Pid} ->
                             ensure_call(Pool, Pid, Host, Port, Ssl, Options);
-                        _ ->
-                            %% Failed to create pool, exit as expected
-                            exit({noproc, Reason})
+                        Error ->
+                            Error
                     end;
                 false ->
                     %% No dynamic pool creation, exit as expected
-                    exit({noproc, Reason})
+                    {error, unknown_pool}
             end
     end.
 
 %%------------------------------------------------------------------------------
+%% @private
+%% @doc Creates a new pool.
+%% @end
+%%------------------------------------------------------------------------------
+-spec new_pool(atom(), non_neg_integer(), poolsize()) ->
+    {ok, pid()} | {error, term()}.
+new_pool(Pool, ConnTimeout, PoolSize) ->
+    ChildSpec = {Pool,
+                 {lhttpc_manager, start_link, [[{name, Pool},
+                                                {connection_timeout, ConnTimeout},
+                                                {pool_size, PoolSize}]]},
+                 permanent, 10000, worker, [lhttpc_manager]},
+    case supervisor:start_child(lhttpc_sup, ChildSpec) of
+        {error, {already_started, _Pid}} ->
+            {error, already_exists};
+        {error, Error} ->
+            {error, Error};
+        {ok, Pid} ->
+            {ok, Pid};
+        {ok, Pid, _Info} ->
+            {ok, Pid}
+    end.
+
+%%------------------------------------------------------------------------------
+%% @private
 %% @doc A client has finished one request and returns the socket to the pool,
 %% which can be new or not.
 %% @end
@@ -281,7 +293,7 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
         max_pool_size = MaxSize,
         clients = Clients,
         queues = Queues
-    } = State,
+        } = State,
     Dest = {Host, Port, Ssl},
     {Reply0, State2} = find_socket(Dest, Pid, State),
     case Reply0 of
@@ -294,11 +306,12 @@ handle_call({socket, Pid, Host, Port, Ssl}, {Pid, _Ref} = From, State) ->
                     Queues2 = add_to_queue(Dest, From, Queues),
                     {noreply, State2#httpc_man{queues = Queues2}};
                 false ->
-                    {reply, no_socket, monitor_client(Dest, From, State2)}
+                    {reply, {ok, no_socket}, monitor_client(Dest, From, State2)}
             end
     end;
 handle_call(dump_settings, _, State) ->
-    {reply, [{max_pool_size, State#httpc_man.max_pool_size}, {timeout, State#httpc_man.timeout}], State};
+    {reply, [{max_pool_size, State#httpc_man.max_pool_size},
+             {timeout, State#httpc_man.timeout}], State};
 handle_call(client_count, _, State) ->
     {reply, dict:size(State#httpc_man.clients), State};
 handle_call(connection_count, _, State) ->
@@ -328,6 +341,8 @@ handle_cast({update_timeout, Milliseconds}, State) ->
     {noreply, State#httpc_man{timeout = Milliseconds}};
 handle_cast({set_max_pool_size, Size}, State) ->
     {noreply, State#httpc_man{max_pool_size = Size}};
+handle_cast({remove_socket, Socket}, State) ->
+    {noreply, remove_socket(Socket, State)};
 handle_cast(_, State) ->
     {noreply, State}.
 
@@ -356,7 +371,7 @@ handle_info({'DOWN', MonRef, process, Pid, _Reason}, State) ->
         empty ->
             {noreply, State#httpc_man{clients = Clients2}};
         {ok, From, Queues2} ->
-            gen_server:reply(From, no_socket),
+            gen_server:reply(From, {ok, no_socket}),
             State2 = State#httpc_man{queues = Queues2, clients = Clients2},
             {noreply, monitor_client(Dest, From, State2)}
     end;
@@ -394,9 +409,9 @@ find_socket({_, _, Ssl} = Dest, Pid, State) ->
                     {_, Timer} = dict:fetch(Socket, State#httpc_man.sockets),
                     cancel_timer(Timer, Socket),
                     NewState = State#httpc_man{
-                        destinations = update_dest(Dest, Sockets, Dests),
-                        sockets = dict:erase(Socket, State#httpc_man.sockets)
-                    },
+                            destinations = update_dest(Dest, Sockets, Dests),
+                            sockets = dict:erase(Socket, State#httpc_man.sockets)
+                            },
                     {{ok, Socket}, NewState};
                 {error, badarg} -> % Pid has timed out, reuse for someone else
                     lhttpc_sock:setopts(Socket, [{active, once}], Ssl),
@@ -421,7 +436,7 @@ remove_socket(Socket, State) ->
             State#httpc_man{
                 destinations = update_dest(Dest, Sockets, Dests),
                 sockets = dict:erase(Socket, State#httpc_man.sockets)
-            };
+                };
         error ->
             State
     end.
@@ -442,7 +457,7 @@ store_socket({_, _, Ssl} = Dest, Socket, State) ->
     State#httpc_man{
         destinations = dict:store(Dest, Sockets, Dests),
         sockets = dict:store(Socket, {Dest, Timer}, State#httpc_man.sockets)
-    }.
+        }.
 
 %------------------------------------------------------------------------------
 %% @private
@@ -507,8 +522,8 @@ queue_out({_Host, _Port, _Ssl} = Dest, Queues) ->
 %------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-deliver_socket(Socket, {_, _, Ssl} = Dest, State) ->
-    case queue_out(Dest, State#httpc_man.queues) of
+deliver_socket(Socket, {_, _, Ssl} = Dest, #httpc_man{queues = Queues} = State) ->
+    case queue_out(Dest, Queues) of
         empty ->
             store_socket(Dest, Socket, State);
         {ok, {PidWaiter, _} = FromWaiter, Queues2} ->
@@ -529,9 +544,9 @@ deliver_socket(Socket, {_, _, Ssl} = Dest, State) ->
 %------------------------------------------------------------------------------
 %% @private
 %%------------------------------------------------------------------------------
-monitor_client(Dest, {Pid, _} = _From, State) ->
+monitor_client(Dest, {Pid, _} = _From, #httpc_man{clients = Clients} = State) ->
     MonRef = erlang:monitor(process, Pid),
-    Clients2 = dict:store(Pid, {Dest, MonRef}, State#httpc_man.clients),
+    Clients2 = dict:store(Pid, {Dest, MonRef}, Clients),
     State#httpc_man{clients = Clients2}.
 
 %------------------------------------------------------------------------------

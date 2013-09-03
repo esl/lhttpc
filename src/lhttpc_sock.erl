@@ -1,5 +1,5 @@
 %%% ----------------------------------------------------------------------------
-%%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
+%%% Copyright (c) 2009-2013, Erlang Solutions Ltd.
 %%% All rights reserved.
 %%%
 %%% Redistribution and use in source and binary forms, with or without
@@ -9,14 +9,14 @@
 %%%    * Redistributions in binary form must reproduce the above copyright
 %%%      notice, this list of conditions and the following disclaimer in the
 %%%      documentation and/or other materials provided with the distribution.
-%%%    * Neither the name of Erlang Training and Consulting Ltd. nor the
+%%%    * Neither the name of Erlang Solutions Ltd. nor the
 %%%      names of its contributors may be used to endorse or promote products
 %%%      derived from this software without specific prior written permission.
 %%%
-%%% THIS SOFTWARE IS PROVIDED BY Erlang Training and Consulting Ltd. ''AS IS''
+%%% THIS SOFTWARE IS PROVIDED BY Erlang Solutions Ltd. ''AS IS''
 %%% AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 %%% IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-%%% ARE DISCLAIMED. IN NO EVENT SHALL Erlang Training and Consulting Ltd. BE
+%%% ARE DISCLAIMED. IN NO EVENT SHALL Erlang Solutions Ltd. BE
 %%% LIABLE SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
 %%% BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 %%% WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
@@ -38,8 +38,7 @@
          send/3,
          controlling_process/3,
          setopts/3,
-         close/2
-        ]).
+         close/2]).
 
 -include("lhttpc_types.hrl").
 
@@ -48,14 +47,6 @@
 %%==============================================================================
 
 %%------------------------------------------------------------------------------
-%% @spec (Host, Port, Options, Timeout, SslFlag) -> {ok, Socket} | {error, Reason}
-%%   Host = string() | ip_address()
-%%   Port = integer()
-%%   Options = [{atom(), term()} | atom()]
-%%   Timeout = infinity | integer()
-%%   SslFlag = boolean()
-%%   Socket = socket()
-%%   Reason = atom()
 %% @doc
 %% Connects to `Host' and `Port'.
 %% Will use the `ssl' module if `SslFlag' is `true' and gen_tcp otherwise.
@@ -70,12 +61,6 @@ connect(Host, Port, Options, Timeout, false) ->
     gen_tcp:connect(Host, Port, Options, Timeout).
 
 %%------------------------------------------------------------------------------
-%% @spec (Socket, SslFlag) -> {ok, Data} | {error, Reason}
-%%   Socket = socket()
-%%   Length = integer()
-%%   SslFlag = boolean()
-%%   Data = term()
-%%   Reason = atom()
 %% @doc
 %% Reads available bytes from `Socket'.
 %% Will block untill data is available on the socket and return the first
@@ -90,12 +75,6 @@ recv(Socket, false) ->
     gen_tcp:recv(Socket, 0).
 
 %%------------------------------------------------------------------------------
-%% @spec (Socket, Length, SslFlag) -> {ok, Data} | {error, Reason}
-%%   Socket = socket()
-%%   Length = integer()
-%%   SslFlag = boolean()
-%%   Data = term()
-%%   Reason = atom()
 %% @doc
 %% Receives `Length' bytes from `Socket'.
 %% Will block untill `Length' bytes is available.
@@ -110,11 +89,6 @@ recv(Socket, Length, false) ->
     gen_tcp:recv(Socket, Length).
 
 %%------------------------------------------------------------------------------
-%% @spec (Socket, Data, SslFlag) -> ok | {error, Reason}
-%%   Socket = socket()
-%%   Data = iolist()
-%%   SslFlag = boolean()
-%%   Reason = atom()
 %% @doc
 %% Sends data on a socket.
 %% Will use the `ssl' module if `SslFlag' is set to `true', otherwise the
@@ -137,8 +111,7 @@ send(Socket, Request, false) ->
 %% Sets the controlling proces for the `Socket'.
 %% @end
 %%------------------------------------------------------------------------------
--spec controlling_process(socket(), pid() | atom(), boolean()) ->
-    ok | {error, atom()}.
+-spec controlling_process(socket(), pid() | atom(), boolean()) -> ok | {error, atom()}.
 controlling_process(Socket, Controller, IsSsl) when is_atom(Controller) ->
     controlling_process(Socket, whereis(Controller), IsSsl);
 controlling_process(Socket, Pid, true) ->
@@ -147,11 +120,6 @@ controlling_process(Socket, Pid, false) ->
     gen_tcp:controlling_process(Socket, Pid).
 
 %%------------------------------------------------------------------------------
-%% @spec (Socket, Options, SslFlag) -> ok | {error, Reason}
-%%   Socket = socket()
-%%   Options = [atom() | {atom(), term()}]
-%%   SslFlag = boolean()
-%%   Reason = atom()
 %% @doc
 %% Sets options for a socket. Look in `inet:setopts/2' for more info.
 %% @end
@@ -163,10 +131,6 @@ setopts(Socket, Options, false) ->
     inet:setopts(Socket, Options).
 
 %%------------------------------------------------------------------------------
-%% @spec (Socket, SslFlag) -> ok | {error, Reason}
-%%   Socket = socket()
-%%   SslFlag = boolean()
-%%   Reason = atom()
 %% @doc
 %% Closes a socket.
 %% @end

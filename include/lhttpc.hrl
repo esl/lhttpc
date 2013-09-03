@@ -1,5 +1,5 @@
 %%% ----------------------------------------------------------------------------
-%%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
+%%% Copyright (c) 2009-2013, Erlang Solutions Ltd.
 %%% All rights reserved.
 %%%
 %%% Redistribution and use in source and binary forms, with or without
@@ -31,4 +31,14 @@
     is_ssl:: boolean(),
     user = "" :: string(),
     password = "" :: string()
+}).
+
+-record(lhttpc_cookie, {
+	  name = "" :: string(),
+	  value = "" :: string(),
+	  expires = 'never' :: {{integer(), integer(), integer()},
+				{integer(), integer(), integer()}} | atom(),
+	  path = 'undefined' :: string() | atom(),
+	  max_age = 'undefined' :: integer() | atom(),
+	  timestamp = 'undefined' :: atom() | {integer(), integer(), integer()}
 }).
