@@ -313,11 +313,16 @@ handle_call({connection_count, Destination}, _, State) ->
 handle_call({done, Host, Port, Ssl, Socket}, {Pid, _} = From, State) ->
     gen_server:reply(From, ok),
     Dest = {Host, Port, Ssl},
-    {Dest, MonRef} = dict:fetch(Pid, State#httpc_man.clients),
-    true = erlang:demonitor(MonRef, [flush]),
-    Clients2 = dict:erase(Pid, State#httpc_man.clients),
-    State2 = deliver_socket(Socket, Dest, State#httpc_man{clients = Clients2}),
-    {noreply, State2};
+    case dict:find(Pid, State#httpc_man.clients) of
+        {value, {Dest, MonRef}} ->
+            true = erlang:demonitor(MonRef, [flush]),
+            Clients2 = dict:erase(Pid, State#httpc_man.clients),
+            State2 = deliver_socket(Socket, Dest, State#httpc_man{clients = Clients2}),
+            {noreply, State2};
+        error ->
+            lhttpc_sock:close(Socket, Ssl),
+            {noreply, State}
+    end;
 handle_call(_, _, State) ->
     {reply, {error, unknown_request}, State}.
 
