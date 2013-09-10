@@ -314,7 +314,7 @@ handle_call({done, Host, Port, Ssl, Socket}, {Pid, _} = From, State) ->
     gen_server:reply(From, ok),
     Dest = {Host, Port, Ssl},
     case dict:find(Pid, State#httpc_man.clients) of
-        {value, {Dest, MonRef}} ->
+        {ok, {Dest, MonRef}} ->
             true = erlang:demonitor(MonRef, [flush]),
             Clients2 = dict:erase(Pid, State#httpc_man.clients),
             State2 = deliver_socket(Socket, Dest, State#httpc_man{clients = Clients2}),
