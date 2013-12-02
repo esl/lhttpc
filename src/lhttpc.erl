@@ -603,6 +603,8 @@ get_body_part(Pid, Timeout) ->
             {ok, Bin};
         {http_eob, Pid, Trailers} ->
             {ok, {http_eob, Trailers}};
+        {response, Pid, {error, Reason}} ->
+            {error, Reason};
         {error, Pid, Reason} ->
             {error, Reason}
     after Timeout ->
