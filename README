@@ -10,3 +10,7 @@ Configuration: (environment variables)
                        kepp a HTTP/1.1 connection open. Changing this value
                        in runtime has no effect, this can however be done
                        through lhttpc_manager:update_connection_timeout/1.
+
+Contributing to this project:
+ * Please provide minimal pull requests solving one thing at a time
+   * Changes fixing code style should be distinct from changes to the implementation.
