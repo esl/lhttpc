@@ -32,7 +32,7 @@
         {vsn, "1.3.0"},
         {modules, []},
         {registered, [lhttpc_manager]},
-        {applications, [kernel, stdlib, ssl, crypto]},
+        {applications, [kernel, stdlib, ssl, crypto, public_key]},
   {mod, {lhttpc, nil}},
   {env, [{connection_timeout, 300000}, {pool_size, 50}]}
  ]}.

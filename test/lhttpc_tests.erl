@@ -99,14 +99,18 @@ test_no(N, Tests) ->
 %%% Eunit setup stuff
 
 start_app() ->
-    application:start(crypto),
-    application:start(public_key),
-    ok = application:start(ssl),
-    ok = lhttpc:start().
+    AppsToStart = [asn1,  public_key, ssl],
+    lists:map(fun(App) ->
+                      ok = application:start(App)
+              end, AppsToStart),
+    ok = lhttpc:start(),
+    AppsToStart.
 
-stop_app(_) ->
+stop_app(StartedApps) ->
     ok = lhttpc:stop(),
-    ok = application:stop(ssl).
+    lists:map(fun(App) ->
+                      ok = application:stop(App)
+              end, lists:reverse(StartedApps)).
 
 tcp_test_() ->
     {inorder, 
