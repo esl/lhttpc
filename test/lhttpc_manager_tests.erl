@@ -24,7 +24,7 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
-%%% @author Oscar Hellström <oscar@hellstrom.st>
+%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
 %%% @author Filipe David Manana <fdmanana@apache.org>
 -module(lhttpc_manager_tests).
 
@@ -36,6 +36,8 @@
 %%% Eunit setup stuff
 
 start_app() ->
+	application:start(crypto),
+	application:start(asn1),
     application:start(public_key),
     ok = application:start(ssl),
     _ = application:load(lhttpc),
