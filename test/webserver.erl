@@ -24,7 +24,7 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
-%%% @author Oscar Hellström <oscar@hellstrom.st>
+%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
 %%% @author Magnus Henoch <magnus@erlang-consulting.com>
 %%% @doc Simple web server for testing purposes
 %%% @end
