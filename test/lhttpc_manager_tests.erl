@@ -53,7 +53,8 @@ manager_test_() ->
                 ?_test(one_socket()),
                 {timeout, 60, ?_test(connection_timeout())},
                 {timeout, 60, ?_test(many_sockets())},
-                {timeout, 60, ?_test(closed_race_cond())}
+                {timeout, 60, ?_test(closed_race_cond())},
+                {timeout, 60, ?_test(dyn_pool_race())}
             ]}
     }.
 
@@ -319,6 +320,43 @@ closed_race_cond() ->
     catch gen_tcp:close(LS),
     unlink(whereis(lhttpc_manager)),
     ok.
+
+dyn_pool_race() ->
+    ?assertEqual(undefined, whereis(mypool)),
+
+    %% suspend the supervisor so both process reaches
+    %% and gets stuck in lhttpc:add_pool/3
+    erlang:suspend_process(whereis(lhttpc_sup)),
+
+    Parent = self(),
+    Pid1 = spawn_pool_req(Parent),
+    Pid2 = spawn_pool_req(Parent),
+
+    erlang:yield(), % make sure that the spawned processes have run
+    erlang:resume_process(whereis(lhttpc_sup)),
+
+    worker_done([Pid1, Pid2]),
+    ?assertNotEqual(undefined, whereis(mypool)),
+    ok.
+
+spawn_pool_req(Parent) ->
+    spawn_link(
+      fun() ->
+              Opts = [{pool, mypool}, {pool_ensure, true}],
+              undefined = lhttpc_manager:ensure_call(
+                            mypool, self(), ?HOST, get_port(), ?SSL, Opts),
+              Parent ! {self(), done}
+      end).
+
+worker_done([Pid|Pids]) ->
+    receive
+        {Pid, done} -> worker_done(Pids)
+    after
+        1000 -> error({error, worker_timeout})
+    end;
+worker_done([]) ->
+    ok.
+
 
 %%% Helpers functions
 
