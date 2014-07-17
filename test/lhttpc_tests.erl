@@ -99,6 +99,7 @@ test_no(N, Tests) ->
 %%% Eunit setup stuff
 
 start_app() ->
+    application:start(asn1),
     application:start(crypto),
     application:start(public_key),
     ok = application:start(ssl),
