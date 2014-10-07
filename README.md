@@ -1,3 +1,9 @@
+# NOTICE
+**This project is not supported anymore.**
+It's still here just to support legacy projects that may have it as a dependency.
+It's operational (at least, for Erlang versions lower than R17)
+If you're looking for a HTTP client, we would recommend you to switch to [shotgun](https://github.com/inaka/shotgun) or [fusco](https://github.com/esl/fusco)
+
 Dependencies:
  * Erlang/OTP R13-B or newer
    * Application compiler to build, kernel, stdlib and ssl to run
