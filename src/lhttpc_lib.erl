@@ -371,6 +371,8 @@ add_content_headers("PUT", Hdrs, Body, PartialUpload) ->
     add_content_headers(Hdrs, Body, PartialUpload);
 add_content_headers("PATCH", Hdrs, Body, PartialUpload) ->
     add_content_headers(Hdrs, Body, PartialUpload);
+add_content_headers("DELETE", Hdrs, Body, PartialUpload) ->
+    add_content_headers(Hdrs, Body, PartialUpload);
 add_content_headers(_, Hdrs, _, _PartialUpload) ->
     Hdrs.
 
