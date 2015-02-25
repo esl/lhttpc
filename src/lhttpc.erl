@@ -1,3 +1,4 @@
+%% -*- coding: latin-1 -*-
 %%% ----------------------------------------------------------------------------
 %%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
 %%% All rights reserved.
@@ -603,6 +604,8 @@ get_body_part(Pid, Timeout) ->
             {ok, Bin};
         {http_eob, Pid, Trailers} ->
             {ok, {http_eob, Trailers}};
+        {response, Pid, {error, Reason}} ->
+            {error, Reason};
         {error, Pid, Reason} ->
             {error, Reason}
     after Timeout ->
