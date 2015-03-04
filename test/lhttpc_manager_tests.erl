@@ -36,15 +36,21 @@
 %%% Eunit setup stuff
 
 start_app() ->
-    application:start(public_key),
+    ok = application:start(asn1),
+    ok = application:start(public_key),
     ok = application:start(ssl),
-    _ = application:load(lhttpc),
+    case application:load(lhttpc) of
+        ok -> ok;
+        {error, {already_loaded, lhttpc}} -> ok
+    end,
     ok = application:set_env(lhttpc, pool_size, 3),
     ok = application:start(lhttpc).
 
 stop_app(_) ->
     ok = application:stop(lhttpc),
-    ok = application:stop(ssl).
+    ok = application:stop(ssl),
+    ok = application:stop(public_key),
+    ok = application:stop(asn1).
 
 manager_test_() ->
     {inorder,
