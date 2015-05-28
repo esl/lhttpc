@@ -26,7 +26,7 @@
 
 %%------------------------------------------------------------------------------
 %%% @private
-%%% @author Oscar Hellström <oscar@hellstrom.st>
+%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
 %%% @doc
 %%% This module implements wrappers for socket operations.
 %%% Makes it possible to have the same interface to ssl and tcp sockets.
@@ -40,6 +40,8 @@
          setopts/3,
          close/2
         ]).
+
+-define(OTP_TCP_LIMIT, 67108864).
 
 -include("lhttpc_types.hrl").
 
@@ -102,11 +104,34 @@ recv(Socket, false) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec recv(socket(), integer(), boolean()) -> {ok, any()} | {error, atom()}.
-recv(_, 0, _) ->
-    {ok, <<>>};
-recv(Socket, Length, true) ->
+recv(Socket, Length, SslFlag) ->
+    recv(Socket, Length, SslFlag, <<>>).
+-spec recv(socket(), integer(), boolean(), binary()) ->
+        {ok, any()} | {error, atom()}.
+recv(_, 0, _, Accum) ->
+    {ok, Accum};
+%% HACK: gen_tcp:recv limits transfers at 64M for some reason
+recv(Socket, Length, SslFlag, Accum) when (Length > ?OTP_TCP_LIMIT) ->
+    case recv_len(Socket, ?OTP_TCP_LIMIT, SslFlag) of
+        {ok, Part} ->
+            Accum0 = <<Accum/binary, Part/binary>>,
+            Length0 = Length-?OTP_TCP_LIMIT,
+            recv(Socket, Length0, SslFlag, Accum0);
+        Error ->
+            Error
+    end;
+recv(Socket, Length, SslFlag, Accum) ->
+    case recv_len(Socket, Length, SslFlag) of
+        {ok, Part} ->
+            Accum0 = <<Accum/binary, Part/binary>>,
+            {ok, Accum0};
+        Error ->
+            Error
+    end.
+-spec recv_len(socket(), integer(), boolean()) -> {ok, any()} | {error, atom()}.
+recv_len(Socket, Length, true) ->
     ssl:recv(Socket, Length);
-recv(Socket, Length, false) ->
+recv_len(Socket, Length, false) ->
     gen_tcp:recv(Socket, Length).
 
 %%------------------------------------------------------------------------------
