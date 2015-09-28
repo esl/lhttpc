@@ -1,3 +1,4 @@
+%%% -*- coding: latin-1 -*-
 -module(simple_load).
 -behaviour(gen_httpd).
 
