@@ -195,7 +195,7 @@ start_link(Options0) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec ensure_call(pool_id(), pid(), host(), port_num(), boolean(), options()) ->
-                        socket() | 'no_socket'.
+                        socket() | 'undefined'.
 ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
     SocketRequest = {socket, Pid, Host, Port, Ssl},
     try gen_server:call(Pool, SocketRequest, infinity) of
@@ -223,6 +223,8 @@ ensure_call(Pool, Pid, Host, Port, Ssl, Options) ->
                                                       DefaultMaxPool),
                     case lhttpc:add_pool(Pool, ConnTimeout, PoolMaxSize) of
                         {ok, _Pid} ->
+                            ensure_call(Pool, Pid, Host, Port, Ssl, Options);
+                        {error, already_exists} ->
                             ensure_call(Pool, Pid, Host, Port, Ssl, Options);
                         _ ->
                             %% Failed to create pool, exit as expected
