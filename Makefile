@@ -5,7 +5,7 @@ PROJECT = lhttpc
 REBAR := ./rebar
 DIALYZER = dialyzer
 
-APPS = kernel stdlib sasl inets ssl public_key crypto compiler
+APPS = kernel erts stdlib sasl inets ssl public_key crypto compiler
 
 all: compile doc
 
@@ -18,7 +18,7 @@ doc:
 test:	compile
 	$(REBAR) eunit
 
-release: all dialyze test
+release: all dialyzer test
 	$(REBAR) release
 
 clean:
