@@ -282,6 +282,7 @@ send_request(State) ->
             lhttpc_sock:close(Socket, Ssl),
             NewState = State#client_state{
                 socket = undefined,
+                proxy_setup = false,
                 attempts = State#client_state.attempts - 1
             },
             send_request(NewState);
@@ -457,6 +458,7 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
             lhttpc_sock:close(Socket, Ssl),
             NewState = State#client_state{
                 socket = undefined,
+                proxy_setup = false,
                 attempts = State#client_state.attempts - 1
             },
             send_request(NewState);
