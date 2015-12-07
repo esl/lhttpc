@@ -1,4 +1,4 @@
-@author Oscar Hellström <oscar@hellstrom.st>
+@author Oscar HellstrÃ¶m <oscar@hellstrom.st>
 @doc A lightweight HTTP client.
 The only functions of much interest right now are {@link
 lhttpc:request/4}, {@link lhttpc:request/5}, {@link lhttpc:request/6} and
