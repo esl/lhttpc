@@ -99,10 +99,8 @@ test_no(N, Tests) ->
 %%% Eunit setup stuff
 
 start_app() ->
-    application:start(crypto),
-    application:start(public_key),
-    ok = application:start(ssl),
-    ok = lhttpc:start().
+    {ok, _} = application:ensure_all_started(lhttpc),
+    ok.
 
 stop_app(_) ->
     ok = lhttpc:stop(),
