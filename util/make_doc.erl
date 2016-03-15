@@ -24,7 +24,7 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
-%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
+%%% @author Oscar Hellström <oscar@hellstrom.st>
 -module(make_doc).
 -export([edoc/0]).
 

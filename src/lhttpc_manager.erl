@@ -1,3 +1,4 @@
+%%% -*- coding: latin-1 -*-
 %%% ----------------------------------------------------------------------------
 %%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
 %%% All rights reserved.
@@ -25,7 +26,7 @@
 %%% ----------------------------------------------------------------------------
 
 %%------------------------------------------------------------------------------
-%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
+%%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @author Filipe David Manana <fdmanana@apache.org>
 %%% @doc Connection manager for the HTTP client.
 %%% This gen_server is responsible for keeping track of persistent

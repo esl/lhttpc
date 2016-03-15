@@ -1,3 +1,4 @@
+%%% -*- coding: latin-1 -*-
 %%% ----------------------------------------------------------------------------
 %%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
 %%% All rights reserved.
@@ -24,7 +25,7 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
-%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
+%%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @author Magnus Henoch <magnus@erlang-consulting.com>
 %%% @doc Simple web server for testing purposes
 %%% @end
