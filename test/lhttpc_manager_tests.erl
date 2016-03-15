@@ -1,3 +1,4 @@
+%%% -*- coding: latin-1 -*-
 %%% ----------------------------------------------------------------------------
 %%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
 %%% All rights reserved.
@@ -24,7 +25,7 @@
 %%% ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 %%% ----------------------------------------------------------------------------
 
-%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
+%%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @author Filipe David Manana <fdmanana@apache.org>
 -module(lhttpc_manager_tests).
 
@@ -36,8 +37,6 @@
 %%% Eunit setup stuff
 
 start_app() ->
-	application:start(crypto),
-	application:start(asn1),
     application:start(public_key),
     ok = application:start(ssl),
     _ = application:load(lhttpc),

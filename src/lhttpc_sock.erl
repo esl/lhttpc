@@ -1,3 +1,4 @@
+%%% -*- coding: latin-1 -*-
 %%% ----------------------------------------------------------------------------
 %%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
 %%% All rights reserved.
@@ -26,7 +27,7 @@
 
 %%------------------------------------------------------------------------------
 %%% @private
-%%% @author Oscar HellstrÃ¶m <oscar@hellstrom.st>
+%%% @author Oscar Hellström <oscar@hellstrom.st>
 %%% @doc
 %%% This module implements wrappers for socket operations.
 %%% Makes it possible to have the same interface to ssl and tcp sockets.
