@@ -228,21 +228,26 @@ split_scheme("https://" ++ HostPortPath) ->
 %% @end
 %%------------------------------------------------------------------------------
 split_credentials(CredsHostPortPath) ->
-    case string:tokens(CredsHostPortPath, "@") of
-        [HostPortPath] ->
-            {"", "", HostPortPath};
-        [Creds, HostPortPath] ->
+    [CredsHostPort | Path] = string:tokens(CredsHostPortPath, "/"),
+    case string:tokens(CredsHostPort, "@") of
+        [HostPort] ->
+            {"", "", string:join([HostPort | Path], "/")};
+        [Creds, HostPort] ->
             % RFC1738 (section 3.1) says:
             % "The user name (and password), if present, are followed by a
-            % commercial at-sign "@". Within the user and password field, any ":",
+            % commercial at-sign "@", but it is only valid before the first
+            % "/".
+            % Within the user and password field, any ":",
             % "@", or "/" must be encoded."
             % The mentioned encoding is the "percent" encoding.
             case string:tokens(Creds, ":") of
                 [User] ->
                     % RFC1738 says ":password" is optional
-                    {http_uri:decode(User), "", HostPortPath};
+                    {http_uri:decode(User), "",
+                     string:join([HostPort | Path], "/")};
                 [User, Passwd] ->
-                    {http_uri:decode(User), http_uri:decode(Passwd), HostPortPath}
+                    {http_uri:decode(User), http_uri:decode(Passwd),
+                     string:join([HostPort | Path], "/")}
             end
     end.
 
