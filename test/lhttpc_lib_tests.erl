@@ -176,6 +176,16 @@ parse_url_test_() ->
                       lhttpc_lib:parse_url("http://joe%3aarm:erlang%2Fotp@host:180/foo/bar")),
 
         ?_assertEqual(#lhttpc_url{
+                         host = "host",
+                         port = 80,
+                         path = "/foo?bar=joe@moose.nu",
+                         is_ssl = false,
+                         user = "",
+                         password = ""
+                        },
+                      lhttpc_lib:parse_url("http://host/foo?bar=joe@moose.nu")),
+
+        ?_assertEqual(#lhttpc_url{
                          host = "::1",
                          port = 80,
                          path = "/foo/bar",
