@@ -76,6 +76,26 @@ parse_url_test_() ->
 
         ?_assertEqual(#lhttpc_url{
                          host = "host",
+                         port = 443,
+                         path = "/foo",
+                         is_ssl = true,
+                         user = "",
+                         password = ""
+                        },
+                      lhttpc_lib:parse_url("https://host/foo")),
+
+        ?_assertEqual(#lhttpc_url{
+                         host = "host",
+                         port = 443,
+                         path = "/foo/",
+                         is_ssl = true,
+                         user = "",
+                         password = ""
+                        },
+                      lhttpc_lib:parse_url("https://host/foo/")),
+
+        ?_assertEqual(#lhttpc_url{
+                         host = "host",
                          port = 180,
                          path = "/",
                          is_ssl = false,

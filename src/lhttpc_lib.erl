@@ -228,7 +228,7 @@ split_scheme("https://" ++ HostPortPath) ->
 %% @end
 %%------------------------------------------------------------------------------
 split_credentials(CredsHostPortPath) ->
-    [CredsHostPort | Path] = string:tokens(CredsHostPortPath, "/"),
+    [CredsHostPort | Path] = re:split(CredsHostPortPath, "/", [{return, list}]),
     case string:tokens(CredsHostPort, "@") of
         [HostPort] ->
             {"", "", string:join([HostPort | Path], "/")};
