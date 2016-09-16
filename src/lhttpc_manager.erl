@@ -258,6 +258,7 @@ client_done(Pool, Host, Port, Ssl, Socket) ->
 %%------------------------------------------------------------------------------
 -spec init(any()) -> {ok, #httpc_man{}}.
 init(Options) ->
+    process_flag(trap_exit, true),
     process_flag(priority, high),
     case lists:member({seed,1}, ssl:module_info(exports)) of
         true ->
@@ -312,11 +313,16 @@ handle_call({connection_count, Destination}, _, State) ->
 handle_call({done, Host, Port, Ssl, Socket}, {Pid, _} = From, State) ->
     gen_server:reply(From, ok),
     Dest = {Host, Port, Ssl},
-    {Dest, MonRef} = dict:fetch(Pid, State#httpc_man.clients),
-    true = erlang:demonitor(MonRef, [flush]),
-    Clients2 = dict:erase(Pid, State#httpc_man.clients),
-    State2 = deliver_socket(Socket, Dest, State#httpc_man{clients = Clients2}),
-    {noreply, State2};
+    case dict:find(Pid, State#httpc_man.clients) of
+        {ok, {Dest, MonRef}} ->
+            true = erlang:demonitor(MonRef, [flush]),
+            Clients2 = dict:erase(Pid, State#httpc_man.clients),
+            State2 = deliver_socket(Socket, Dest, State#httpc_man{clients = Clients2}),
+            {noreply, State2};
+        error ->
+            lhttpc_sock:close(Socket, Ssl),
+            {noreply, State}
+    end;
 handle_call(_, _, State) ->
     {reply, {error, unknown_request}, State}.
 
@@ -360,6 +366,8 @@ handle_info({'DOWN', MonRef, process, Pid, _Reason}, State) ->
             State2 = State#httpc_man{queues = Queues2, clients = Clients2},
             {noreply, monitor_client(Dest, From, State2)}
     end;
+handle_info({'EXIT', Pid, Reason}, State) ->
+    {stop, {received_exit, Pid, Reason}, State};
 handle_info(_, State) ->
     {noreply, State}.
 
