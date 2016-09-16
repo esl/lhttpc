@@ -36,13 +36,10 @@
 %%% Eunit setup stuff
 
 start_app() ->
-	application:start(crypto),
-	application:start(asn1),
-    application:start(public_key),
-    ok = application:start(ssl),
     _ = application:load(lhttpc),
     ok = application:set_env(lhttpc, pool_size, 3),
-    ok = application:start(lhttpc).
+    {ok, _} = application:ensure_all_started(lhttpc),
+    ok.
 
 stop_app(_) ->
     ok = application:stop(lhttpc),
@@ -55,7 +52,8 @@ manager_test_() ->
                 ?_test(one_socket()),
                 {timeout, 60, ?_test(connection_timeout())},
                 {timeout, 60, ?_test(many_sockets())},
-                {timeout, 60, ?_test(closed_race_cond())}
+                {timeout, 60, ?_test(closed_race_cond(true))},
+                {timeout, 60, ?_test(closed_race_cond(false))}
             ]}
     }.
 
@@ -279,7 +277,7 @@ many_sockets() ->
     unlink(whereis(lhttpc_manager)),
     ok.
 
-closed_race_cond() ->
+closed_race_cond(CloseBeforeDispatch) ->
     LS = socket_server:listen(),
     link(whereis(lhttpc_manager)), % want to make sure it doesn't crash
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
@@ -289,7 +287,7 @@ closed_race_cond() ->
 
     Result1 = connect_client(Client),
     ?assertMatch({ok, _}, Result1),
-    {ok, Socket} = Result1,
+    {ok, _} = Result1,
     ?assertEqual(ok, ping_client(Client)),
 
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
@@ -300,13 +298,27 @@ closed_race_cond() ->
     ManagerPid = whereis(lhttpc_manager),
     true = erlang:suspend_process(ManagerPid),
 
+    case CloseBeforeDispatch of
+        true ->
+            gen_tcp:close(LS), % a closed message should be sent to the manager
+            timer:sleep(1000);
+        false -> ok
+    end,
+
     Pid = self(),
     spawn_link(fun() ->
         Pid ! {result, client_peek_socket(Client)}
     end),
-
     erlang:yield(), % make sure that the spawned process has run
-    gen_tcp:close(Socket), % a closed message should be sent to the manager
+    timer:sleep(1000),
+
+    case CloseBeforeDispatch of
+        true -> ok;
+        false ->
+            gen_tcp:close(LS), % a closed message should be sent to the client
+            timer:sleep(1000)
+    end,
+
     true = erlang:resume_process(ManagerPid),
 
     Result2 = receive
@@ -318,7 +330,6 @@ closed_race_cond() ->
     ?assertEqual(0, lhttpc_manager:connection_count(lhttpc_manager)),
 
     ?assertEqual(ok, stop_client(Client)),
-    catch gen_tcp:close(LS),
     unlink(whereis(lhttpc_manager)),
     ok.
 
