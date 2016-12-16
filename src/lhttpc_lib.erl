@@ -1,3 +1,4 @@
+%%% -*- coding: latin-1 -*-
 %%% ----------------------------------------------------------------------------
 %%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
 %%% All rights reserved.
@@ -38,7 +39,9 @@
          normalize_method/1,
          maybe_atom_to_list/1,
          format_hdrs/1,
-         dec/1
+         dec/1,
+         canonical_headers/1,
+         canonical_header/1
         ]).
 
 -include("lhttpc_types.hrl").
@@ -72,30 +75,43 @@ header_value(Hdr, Hdrs) ->
 %% @doc
 %% Returns the value associated with the `Header' in `Headers'.
 %% `Header' must be a lowercase string, since every header is mangled to
-%% check the match.  If no match is found, `Default' is returned.
+%% check the match.  `Headres' must be canonical.
+%% If no match is found, `Default' is returned.
 %% @end
 %%------------------------------------------------------------------------------
 -spec header_value(string(), headers(), term()) -> term().
-header_value(Hdr, [{Hdr, Value} | _], _) ->
-    case is_list(Value) of
-        true -> string:strip(Value);
-        false -> Value
-    end;
-header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_atom(ThisHdr) ->
-    header_value(Hdr, [{atom_to_list(ThisHdr), Value}| Hdrs], Default);
-header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) when is_binary(ThisHdr) ->
-    header_value(Hdr, [{binary_to_list(ThisHdr), Value}| Hdrs], Default);
-header_value(Hdr, [{ThisHdr, Value}| Hdrs], Default) ->
-    case string:equal(string:to_lower(ThisHdr), Hdr) of
-        true  -> case is_list(Value) of
-                     true -> string:strip(Value);
-                     false -> Value
-                 end;
+header_value(Hdr, Headers, Default) ->
+    case lists:keyfind(Hdr, 1, Headers) of
         false ->
-            header_value(Hdr, Hdrs, Default)
-    end;
-header_value(_, [], Default) ->
-    Default.
+            Default;
+        {_, Value} when is_list(Value) ->
+            string:strip(Value);
+        {_, Value} ->
+            %% ransomr: not sure why we only need to strip list values, but
+            %% but leaving as-is
+            Value
+    end.
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+canonical_headers(Headers) ->
+    [canonical_header(Header) || Header <- Headers].
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% @end
+%%------------------------------------------------------------------------------
+canonical_header({Name, Value}) ->
+    {canonical_header_name(Name), Value}.
+
+canonical_header_name(Name) when is_list(Name) ->
+    string:to_lower(Name);
+canonical_header_name(Name) when is_atom(Name) ->
+    canonical_header_name(atom_to_list(Name));
+canonical_header_name(Name) when is_binary(Name) ->
+    canonical_header_name(binary_to_list(Name)).
 
 %%------------------------------------------------------------------------------
 %% @spec (Item) -> OtherItem
@@ -189,8 +205,7 @@ dec(Else)                     -> Else.
 %%------------------------------------------------------------------------------
 -spec format_hdrs(headers()) -> [string()].
 format_hdrs(Headers) ->
-    NormalizedHeaders = normalize_headers(Headers),
-    format_hdrs(NormalizedHeaders, []).
+    format_hdrs(Headers, []).
 
 %%==============================================================================
 %% Internal functions
@@ -286,44 +301,12 @@ split_port(Scheme, [P | T], Port) ->
 
 %%------------------------------------------------------------------------------
 %% @private
-%% @spec normalize_headers(RawHeaders) -> Headers
-%%   RawHeaders = [{atom() | binary() | string(), binary() | string()}]
-%%   Headers = headers()
-%% @doc Turns the headers into binaries suitable for inclusion in a HTTP request
-%% line.
-%% @end
-%%------------------------------------------------------------------------------
--spec normalize_headers(raw_headers()) -> headers().
-normalize_headers(Headers) ->
-    normalize_headers(Headers, []).
-
-%%------------------------------------------------------------------------------
-%% @private
-%% @doc
-%% @end
-%%------------------------------------------------------------------------------
--spec normalize_headers(raw_headers(), headers()) -> headers().
-normalize_headers([{Header, Value} | T], Acc) when is_list(Header) ->
-    NormalizedHeader = try list_to_existing_atom(Header)
-                      catch
-                           error:badarg -> Header
-                       end,
-    NewAcc = [{NormalizedHeader, Value} | Acc],
-    normalize_headers(T, NewAcc);
-normalize_headers([{Header, Value} | T], Acc) ->
-    NewAcc = [{Header, Value} | Acc],
-    normalize_headers(T, NewAcc);
-normalize_headers([], Acc) ->
-    Acc.
-
-%%------------------------------------------------------------------------------
-%% @private
 %% @doc
 %% @end
 %%------------------------------------------------------------------------------
 format_hdrs([{Hdr, Value} | T], Acc) ->
     NewAcc =
-        [maybe_atom_to_list(Hdr), ": ", maybe_atom_to_list(Value), "\r\n" | Acc],
+        [Hdr, ": ", Value, "\r\n" | Acc],
     format_hdrs(T, NewAcc);
 format_hdrs([], Acc) ->
     [Acc, "\r\n"].

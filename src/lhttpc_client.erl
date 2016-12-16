@@ -1,3 +1,4 @@
+%%% -*- coding: latin-1 -*-
 %%% ----------------------------------------------------------------------------
 %%% Copyright (c) 2009, Erlang Training and Consulting Ltd.
 %%% All rights reserved.
@@ -118,7 +119,7 @@ request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
 %% socket used is new, it also makes the pool gen_server its controlling process.
 %% @end
 %%------------------------------------------------------------------------------
-execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
+execute(From, Host, Port, Ssl, Path, Method, Hdrs0, Body, Options) ->
     UploadWindowSize = proplists:get_value(partial_upload, Options),
     PartialUpload = proplists:is_defined(partial_upload, Options),
     PartialDownload = proplists:is_defined(partial_download, Options),
@@ -134,6 +135,7 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
         ProxyUrl when is_list(ProxyUrl) ->
             lhttpc_lib:parse_url(ProxyUrl)
     end,
+    Hdrs = lhttpc_lib:canonical_headers(Hdrs0),
     {ChunkedUpload, Request} = lhttpc_lib:format_request(Path, NormalizedMethod,
         Hdrs, Host, Port, Body, PartialUpload),
     %SocketRequest = {socket, self(), Host, Port, Ssl},
@@ -431,7 +433,7 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
             NewStatus = {NewStatusCode, Reason},
             read_response(State, NewVsn, NewStatus, Hdrs);
         {ok, {http_header, _, Name, _, Value}} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
+            Header = lhttpc_lib:canonical_header({Name, Value}),
             read_response(State, Vsn, Status, [Header | Hdrs]);
         {ok, http_eoh} when StatusCode >= 100, StatusCode =< 199 ->
             % RFC 2616, section 10.1:
