@@ -30,11 +30,13 @@
 %%% @end
 {application, lhttpc,
     [{description, "Lightweight HTTP Client"},
-        {vsn, "1.3.0"},
+        {vsn, git},
         {modules, []},
         {registered, [lhttpc_manager]},
         {applications, [kernel, stdlib, ssl, crypto]},
   {mod, {lhttpc, nil}},
-  {env, [{connection_timeout, 300000}, {pool_size, 50}]}
+  %% make default pool ~ all possible ports for a single IP interface. e.g. Usual 1025-65535
+  %% define your pool or other size if you want to limit it or have more IP interfaces
+  {env, [{connection_timeout, 300000}, {pool_size, 64000}]}
  ]}.
 
