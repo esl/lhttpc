@@ -37,6 +37,6 @@
   {mod, {lhttpc, nil}},
   %% make default pool ~ all possible ports for a single IP interface. e.g. Usual 1025-65535
   %% define your pool or other size if you want to limit it or have more IP interfaces
-  {env, [{connection_timeout, 300000}, {pool_size, 64000}]}
+  {env, [{connection_timeout, 300000}, {pool_size, 1000}]}
  ]}.
 
