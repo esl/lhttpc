@@ -80,7 +80,8 @@ header_value(Hdr, Hdrs) ->
 %% @end
 %%------------------------------------------------------------------------------
 -spec header_value(string(), headers(), term()) -> term().
-header_value(Hdr, Headers, Default) ->
+header_value(MaybeUpperHdr, Headers, Default) ->
+    Hdr = string:to_lower(MaybeUpperHdr),
     case lists:keyfind(Hdr, 1, Headers) of
         false ->
             Default;

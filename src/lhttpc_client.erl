@@ -786,7 +786,7 @@ read_trailers(Socket, Ssl, Trailers, Hdrs) ->
         {ok, http_eoh} ->
             {Trailers, Hdrs};
         {ok, {http_header, _, Name, _, Value}} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
+            Header = lhttpc_lib:canonical_header({Name, Value}),
             read_trailers(Socket, Ssl, [Header | Trailers], [Header | Hdrs]);
         {error, {http_error, Data}} ->
             erlang:error({bad_trailer, Data})
