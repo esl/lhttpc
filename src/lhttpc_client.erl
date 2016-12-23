@@ -529,27 +529,24 @@ has_body(_, _, _) ->
 %%------------------------------------------------------------------------------
 %% @private
 %% @doc  Find out how to read the entity body from the request.
+% * If Transfer-Encoding is set to chunked, we should read one chunk at
+%   the time, ignoring a Content-Length header if it is present in error
 % * If we have a Content-Length, just use that and read the complete
 %   entity.
-% * If Transfer-Encoding is set to chunked, we should read one chunk at
-%   the time
 % * If neither of this is true, we need to read until the socket is
 %   closed (AFAIK, this was common in versions before 1.1).
 %% @end
 %%------------------------------------------------------------------------------
 -spec body_type(headers()) -> 'chunked' | 'infinite' | {fixed_length, integer()}.
 body_type(Hdrs) ->
-    case lhttpc_lib:header_value("content-length", Hdrs) of
-        undefined ->
-            TransferEncoding = string:to_lower(
-                lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined")
-            ),
-            case TransferEncoding of
-                "chunked" -> chunked;
-                _         -> infinite
-            end;
-        ContentLength ->
-            {fixed_length, list_to_integer(ContentLength)}
+    case {string:to_lower(
+           lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined") ),
+          lhttpc_lib:header_value("content-length", Hdrs)} of
+        {"undefined", ContentLength} when ContentLength =/= undefined ->
+            ContentLength = lhttpc_lib:header_value("content-length", Hdrs),
+            {fixed_length, list_to_integer(ContentLength)};
+        {"chunked", _Ignore} -> chunked;
+        {"undefined", undefined} -> infinite
     end.
 
 %%------------------------------------------------------------------------------
