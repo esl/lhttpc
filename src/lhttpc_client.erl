@@ -530,7 +530,7 @@ has_body(_, _, _) ->
 %% @private
 %% @doc  Find out how to read the entity body from the request.
 % * If Transfer-Encoding is set to chunked, we should read one chunk at
-%   the time
+%   the time, ignoring a Content-Length header if it is present in error
 % * If we have a Content-Length, just use that and read the complete
 %   entity.
 % * If neither of this is true, we need to read until the socket is
@@ -785,7 +785,7 @@ read_trailers(Socket, Ssl, Trailers, Hdrs) ->
         {ok, http_eoh} ->
             {Trailers, Hdrs};
         {ok, {http_header, _, Name, _, Value}} ->
-            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
+            Header = lhttpc_lib:canonical_header({Name, Value}),
             read_trailers(Socket, Ssl, [Header | Trailers], [Header | Hdrs]);
         {error, {http_error, Data}} ->
             erlang:error({bad_trailer, Data})

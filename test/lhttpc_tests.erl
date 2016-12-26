@@ -142,6 +142,7 @@ tcp_test_() ->
                 ?_test(connection_timeout()),
                 ?_test(suspended_manager()),
                 ?_test(chunked_encoding()),
+                ?_test(chunked_encoding_with_content_length()),
                 ?_test(partial_upload_identity()),
                 ?_test(partial_upload_identity_iolist()),
                 ?_test(partial_upload_chunked()),
@@ -482,6 +483,14 @@ suspended_manager() ->
 
 chunked_encoding() ->
     Port = start(gen_tcp, [fun chunked_response/5, fun chunked_response_t/5]),
+    chunked_encoding(Port).
+
+chunked_encoding_with_content_length() ->
+    Port = start(gen_tcp, [fun chunked_response_with_content_length/5,
+                           fun chunked_response_t_with_content_length/5]),
+    chunked_encoding(Port).
+
+chunked_encoding(Port) ->
     URL = url(Port, "/chunked"),
     {ok, FirstResponse} = lhttpc:request(URL, get, [], 50),
     ?assertEqual({200, "OK"}, status(FirstResponse)),
@@ -1072,6 +1081,40 @@ chunked_response_t(Module, Socket, _, _, _) ->
         Socket,
         "HTTP/1.1 200 OK\r\n"
         "Content-type: text/plain\r\nTransfer-Encoding: ChUnKeD\r\n\r\n"
+        "7\r\n"
+        "Again, \r\n"
+        "E\r\n"
+        "great success!\r\n"
+        "0\r\n"
+        "Trailer-1: 1\r\n"
+        "Trailer-2: 2\r\n"
+        "\r\n"
+    ).
+
+chunked_response_with_content_length(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\n"
+        "Content-Length: 14\r\n"
+        "Transfer-Encoding: chunked\r\n\r\n"
+        "5\r\n"
+        "Great\r\n"
+        "1\r\n"
+        " \r\n"
+        "8\r\n"
+        "success!\r\n"
+        "0\r\n"
+        "\r\n"
+    ).
+
+chunked_response_t_with_content_length(Module, Socket, _, _, _) ->
+    Module:send(
+        Socket,
+        "HTTP/1.1 200 OK\r\n"
+        "Content-type: text/plain\r\n"
+        "Content-Length: 21\r\n"
+        "Transfer-Encoding: ChUnKeD\r\n\r\n"
         "7\r\n"
         "Again, \r\n"
         "E\r\n"
