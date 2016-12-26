@@ -96,7 +96,7 @@ request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
             {response, self(), {error, Reason}};
         error:closed ->
             {response, self(), {error, connection_closed}};
-        error:Reason ->
+        Class:Reason when Class == error; Class == exit ->
             Stack = erlang:get_stacktrace(),
             {response, self(), {error, {Reason, Stack}}}
     end,
@@ -119,7 +119,7 @@ request(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
 %% socket used is new, it also makes the pool gen_server its controlling process.
 %% @end
 %%------------------------------------------------------------------------------
-execute(From, Host, Port, Ssl, Path, Method, Hdrs0, Body, Options) ->
+execute(From, Host, Port, Ssl, Path, Method, Hdrs, Body, Options) ->
     UploadWindowSize = proplists:get_value(partial_upload, Options),
     PartialUpload = proplists:is_defined(partial_upload, Options),
     PartialDownload = proplists:is_defined(partial_download, Options),
@@ -135,7 +135,6 @@ execute(From, Host, Port, Ssl, Path, Method, Hdrs0, Body, Options) ->
         ProxyUrl when is_list(ProxyUrl) ->
             lhttpc_lib:parse_url(ProxyUrl)
     end,
-    Hdrs = lhttpc_lib:canonical_headers(Hdrs0),
     {ChunkedUpload, Request} = lhttpc_lib:format_request(Path, NormalizedMethod,
         Hdrs, Host, Port, Body, PartialUpload),
     %SocketRequest = {socket, self(), Host, Port, Ssl},
@@ -433,7 +432,7 @@ read_response(State, Vsn, {StatusCode, _} = Status, Hdrs) ->
             NewStatus = {NewStatusCode, Reason},
             read_response(State, NewVsn, NewStatus, Hdrs);
         {ok, {http_header, _, Name, _, Value}} ->
-            Header = lhttpc_lib:canonical_header({Name, Value}),
+            Header = {lhttpc_lib:maybe_atom_to_list(Name), Value},
             read_response(State, Vsn, Status, [Header | Hdrs]);
         {ok, http_eoh} when StatusCode >= 100, StatusCode =< 199 ->
             % RFC 2616, section 10.1:
@@ -529,27 +528,23 @@ has_body(_, _, _) ->
 %%------------------------------------------------------------------------------
 %% @private
 %% @doc  Find out how to read the entity body from the request.
+% * If Transfer-Encoding is set to chunked, we should read one chunk at
+%   the time, ignoring a Content-Length header if it is present in error
 % * If we have a Content-Length, just use that and read the complete
 %   entity.
-% * If Transfer-Encoding is set to chunked, we should read one chunk at
-%   the time
 % * If neither of this is true, we need to read until the socket is
 %   closed (AFAIK, this was common in versions before 1.1).
 %% @end
 %%------------------------------------------------------------------------------
 -spec body_type(headers()) -> 'chunked' | 'infinite' | {fixed_length, integer()}.
 body_type(Hdrs) ->
-    case lhttpc_lib:header_value("content-length", Hdrs) of
-        undefined ->
-            TransferEncoding = string:to_lower(
-                lhttpc_lib:header_value("transfer-encoding", Hdrs, "undefined")
-            ),
-            case TransferEncoding of
-                "chunked" -> chunked;
-                _         -> infinite
-            end;
-        ContentLength ->
-            {fixed_length, list_to_integer(ContentLength)}
+    TransferEncoding = string:tokens(string:to_lower(lhttpc_lib:header_value(
+        "transfer-encoding", Hdrs, "identity")), ", "),
+    ContentLength = lhttpc_lib:header_value("content-length", Hdrs),
+    case {lists:member("chunked", TransferEncoding), ContentLength} of
+        {true, _} -> chunked;
+        {false, undefined} -> infinite;
+        {false, _} -> {fixed_length, list_to_integer(ContentLength)}
     end.
 
 %%------------------------------------------------------------------------------
