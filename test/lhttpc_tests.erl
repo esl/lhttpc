@@ -100,11 +100,8 @@ test_no(N, Tests) ->
 %%% Eunit setup stuff
 
 start_app() ->
-    application:start(crypto),
-    application:start(asn1),
-    application:start(public_key),
-    ok = application:start(ssl),
-    ok = lhttpc:start().
+    {ok, _} = application:ensure_all_started(lhttpc),
+    ok.
 
 stop_app(_) ->
     ok = lhttpc:stop(),
@@ -728,11 +725,16 @@ ssl_get() ->
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
 ssl_get_ipv6() ->
-    Port = start(ssl, [fun simple_response/5], inet6),
-    URL = ssl_url(inet6, Port, "/simple"),
-    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
-    ?assertEqual({200, "OK"}, status(Response)),
-    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+    case start(ssl, [fun simple_response/5], inet6) of
+        {error, family_not_supported} ->
+            % Localhost has no IPv6 support - not a big issue.
+            ?debugMsg("WARNING: impossible to test IPv6 support~n");
+        Port when is_number(Port) ->
+            URL = ssl_url(inet6, Port, "/simple"),
+            {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+            ?assertEqual({200, "OK"}, status(Response)),
+            ?assertEqual(<<?DEFAULT_STRING>>, body(Response))
+    end.
 
 ssl_post() ->
     Port = start(ssl, [fun copy_body/5]),
