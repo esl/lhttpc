@@ -724,11 +724,16 @@ ssl_get() ->
     ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
 
 ssl_get_ipv6() ->
-    Port = start(ssl, [fun simple_response/5], inet6),
-    URL = ssl_url(inet6, Port, "/simple"),
-    {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
-    ?assertEqual({200, "OK"}, status(Response)),
-    ?assertEqual(<<?DEFAULT_STRING>>, body(Response)).
+    case start(ssl, [fun simple_response/5], inet6) of
+        {error, family_not_supported} ->
+            % Localhost has no IPv6 support - not a big issue.
+            ?debugMsg("WARNING: impossible to test IPv6 support~n");
+        Port when is_number(Port) ->
+            URL = ssl_url(inet6, Port, "/simple"),
+            {ok, Response} = lhttpc:request(URL, "GET", [], 1000),
+            ?assertEqual({200, "OK"}, status(Response)),
+            ?assertEqual(<<?DEFAULT_STRING>>, body(Response))
+    end.
 
 ssl_post() ->
     Port = start(ssl, [fun copy_body/5]),
