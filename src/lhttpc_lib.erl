@@ -75,7 +75,7 @@ header_value(Hdr, Hdrs) ->
 %% @doc
 %% Returns the value associated with the `Header' in `Headers'.
 %% `Header' must be a lowercase string, since every header is mangled to
-%% check the match.  `Headres' must be canonical.
+%% check the match.  `Headers' must be canonical.
 %% If no match is found, `Default' is returned.
 %% @end
 %%------------------------------------------------------------------------------
