@@ -870,7 +870,7 @@ simple_response(Module, Socket, _Request, _Headers, Body) ->
         Socket,
         [
             "HTTP/1.1 200 OK\r\n"
-            "Content-type: text/plain\r\nContent-length: 14\r\n"
+            "Content-type: text/plain\r\nContent-Length: 14\r\n"
             "X-Test-Orig-Body: ", Body, "\r\n\r\n"
             ?DEFAULT_STRING
         ]
@@ -884,7 +884,7 @@ large_response(Module, Socket, _, _, _) ->
         [
             "HTTP/1.1 200 OK\r\n"
             "Content-type: text/plain\r\n"
-            "Content-length: ", integer_to_list(ContentLength), "\r\n\r\n"
+            "Content-Length: ", integer_to_list(ContentLength), "\r\n\r\n"
         ]
     ),
     Module:send(Socket, BodyPart),
@@ -959,7 +959,7 @@ empty_body(Module, Socket, _, _, _) ->
     Module:send(
         Socket,
         "HTTP/1.1 200 OK\r\n"
-        "Content-type: text/plain\r\nContent-length: 0\r\n\r\n"
+        "Content-type: text/plain\r\nContent-Length: 0\r\n\r\n"
     ).
 
 copy_body(Module, Socket, _, _, Body) ->
@@ -967,7 +967,7 @@ copy_body(Module, Socket, _, _, Body) ->
         Socket,
         [
             "HTTP/1.1 200 OK\r\n"
-            "Content-type: text/plain\r\nContent-length: "
+            "Content-type: text/plain\r\nContent-Length: "
             ++ integer_to_list(size(Body)) ++ "\r\n\r\n",
             Body
         ]
@@ -979,7 +979,7 @@ copy_body_100_continue(Module, Socket, _, _, Body) ->
         [
             "HTTP/1.1 100 Continue\r\n\r\n"
             "HTTP/1.1 200 OK\r\n"
-            "Content-type: text/plain\r\nContent-length: "
+            "Content-type: text/plain\r\nContent-Length: "
             ++ integer_to_list(size(Body)) ++ "\r\n\r\n",
             Body
         ]
@@ -991,7 +991,7 @@ respond_and_close(Module, Socket, _, _, Body) ->
         Socket,
         "HTTP/1.1 200 OK\r\n"
         "Connection: close\r\n"
-        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+        "Content-type: text/plain\r\nContent-Length: 14\r\n\r\n"
         ?DEFAULT_STRING
     ),
     {error, closed} = Module:recv(Socket, 0),
@@ -1003,7 +1003,7 @@ respond_and_wait(Module, Socket, _, _, Body) ->
     Module:send(
         Socket,
         "HTTP/1.1 200 OK\r\n"
-        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+        "Content-type: text/plain\r\nContent-Length: 14\r\n\r\n"
         ?DEFAULT_STRING
     ),
     % We didn't signal a connection close, but we want the client to do that
@@ -1017,7 +1017,7 @@ pre_1_1_server(Module, Socket, _, _, Body) ->
     Module:send(
         Socket,
         "HTTP/1.0 200 OK\r\n"
-        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+        "Content-type: text/plain\r\nContent-Length: 14\r\n\r\n"
         ?DEFAULT_STRING
     ),
     % We didn't signal a connection close, but we want the client to do that
@@ -1032,7 +1032,7 @@ pre_1_1_server_keep_alive(Module, Socket, _, _, _) ->
         "HTTP/1.0 200 OK\r\n"
         "Content-type: text/plain\r\n"
         "Connection: Keep-Alive\r\n"
-        "Content-length: 14\r\n\r\n"
+        "Content-Length: 14\r\n\r\n"
         ?DEFAULT_STRING
     ).
 
@@ -1041,7 +1041,7 @@ very_slow_response(Module, Socket, _, _, _) ->
     Module:send(
         Socket,
         "HTTP/1.1 200 OK\r\n"
-        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+        "Content-type: text/plain\r\nContent-Length: 14\r\n\r\n"
         ?DEFAULT_STRING
     ).
 
@@ -1129,7 +1129,7 @@ close_connection(Module, Socket, _, _, _) ->
     Module:send(
         Socket,
         "HTTP/1.1 200 OK\r\n"
-        "Content-type: text/plain\r\nContent-length: 14\r\n\r\n"
+        "Content-type: text/plain\r\nContent-Length: 14\r\n\r\n"
     ),
     Module:close(Socket).
 
@@ -1144,7 +1144,7 @@ not_modified_response(Module, Socket, _Request, _Headers, _Body) ->
 
 basic_auth_responder(User, Passwd) ->
     fun(Module, Socket, _Request, Headers, _Body) ->
-        case proplists:get_value("Authorization", Headers) of
+        case lhttpc_lib:header_value("Authorization", Headers) of
             undefined ->
                 Module:send(
                     Socket,
