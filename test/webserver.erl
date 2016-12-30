@@ -79,11 +79,8 @@ read_chunks(Module, Socket, Acc) ->
 
 read_trailers(Module, Socket, Hdrs) ->
     case Module:recv(Socket, 0) of
-        {ok, {http_header, _, Name, _, Value}} when is_atom(Name) ->
-            Trailer = {atom_to_list(Name), Value},
-            read_trailers(Module, Socket, [Trailer | Hdrs]);
-        {ok, {http_header, _, Name, _, Value}} when is_list(Name) ->
-            Trailer = {Name, Value},
+        {ok, {http_header, _, Name, _, Value}} ->
+            Trailer = lhttpc_lib:canonical_header({Name, Value}),
             read_trailers(Module, Socket, [Trailer | Hdrs]);
         {ok, http_eoh} -> Hdrs
     end.
@@ -94,14 +91,11 @@ server_loop(Module, Socket, Request, Headers, Responders) ->
     case Module:recv(Socket, 0) of
         {ok, {http_request, _, _, _} = NewRequest} ->
             server_loop(Module, Socket, NewRequest, Headers, Responders);
-        {ok, {http_header, _, Field, _, Value}} when is_atom(Field) ->
-            NewHeaders = [{atom_to_list(Field), Value} | Headers],
-            server_loop(Module, Socket, Request, NewHeaders, Responders);
-        {ok, {http_header, _, Field, _, Value}} when is_list(Field) ->
-            NewHeaders = [{Field, Value} | Headers],
+        {ok, {http_header, _, Field, _, Value}} ->
+            NewHeaders = [lhttpc_lib:canonical_header({Field,Value}) | Headers],
             server_loop(Module, Socket, Request, NewHeaders, Responders);
         {ok, http_eoh} ->
-            RequestBody = case proplists:get_value("Content-Length", Headers) of
+            RequestBody = case lhttpc_lib:header_value("Content-Length", Headers) of
                 undefined ->
                     <<>>;
                 "0" ->
